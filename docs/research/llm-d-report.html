@@ -1044,31 +1044,70 @@ type IndexConfig struct {
         <table>
           <thead>
             <tr>
-              <th>功能</th>
-              <th>llm-d</th>
-              <th>vLLM</th>
-              <th>SGLang</th>
-              <th>Ray Serve</th>
+              <th>产品</th>
+              <th>定位</th>
+              <th>核心特性</th>
+              <th>适用场景</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>定位层次</td>
-              <td>编排层 + 调度层</td>
-              <td>引擎层</td>
-              <td>服务框架</td>
-              <td>通用框架</td>
+              <td><strong>llm-d</strong></td>
+              <td>编排层</td>
+              <td>K8s原生、P/D分解、KV缓存感知</td>
+              <td>企业级、多租户</td>
             </tr>
+            <tr>
+              <td><strong>vLLM</strong></td>
+              <td>引擎层</td>
+              <td>PagedAttention、200+模型、连续批处理</td>
+              <td>极致性能、单模型</td>
+            </tr>
+            <tr>
+              <td><strong>SGLang</strong></td>
+              <td>服务框架</td>
+              <td>RadixAttention、RL训练后端</td>
+              <td>高吞吐、多模态</td>
+            </tr>
+            <tr>
+              <td><strong>TensorRT-LLM</strong></td>
+              <td>推理引擎</td>
+              <td>NVIDIA深度优化、编译优化</td>
+              <td>NVIDIA硬件、极致延迟</td>
+            </tr>
+            <tr>
+              <td><strong>Ray Serve</strong></td>
+              <td>通用框架</td>
+              <td>分布式、多模型</td>
+              <td>多模型服务</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 style="margin: 2rem 0 1rem; color: var(--text);">能力矩阵对比</h4>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>功能</th>
+              <th>llm-d</th>
+              <th>vLLM</th>
+              <th>SGLang</th>
+              <th>TensorRT-LLM</th>
+            </tr>
+          </thead>
+          <tbody>
             <tr>
               <td>P/D 分解</td>
-              <td class="check">✓ 完整方案</td>
-              <td class="partial">△ 实验性</td>
+              <td class="check">✓ 完整</td>
+              <td class="partial">△ 实验</td>
               <td class="cross">✗</td>
-              <td class="cross">✗</td>
+              <td class="partial">△ 有限</td>
             </tr>
             <tr>
-              <td>KV-Cache 调度</td>
-              <td class="check">✓ 精确评分</td>
+              <td>KV-Cache 感知调度</td>
+              <td class="check">✓ 精确</td>
               <td class="partial">△ 基础</td>
               <td class="cross">✗</td>
               <td class="cross">✗</td>
@@ -1081,11 +1120,11 @@ type IndexConfig struct {
               <td class="cross">✗</td>
             </tr>
             <tr>
-              <td>插件扩展</td>
-              <td class="check">✓ 完整框架</td>
+              <td>Kubernetes 集成</td>
+              <td class="check">✓ 原生</td>
               <td class="cross">✗</td>
               <td class="cross">✗</td>
-              <td class="partial">△ 有限</td>
+              <td class="cross">✗</td>
             </tr>
             <tr>
               <td>多租户</td>
@@ -1096,17 +1135,10 @@ type IndexConfig struct {
             </tr>
             <tr>
               <td>多加速器</td>
-              <td class="check">✓ 完整</td>
-              <td class="partial">△ 主要 NVIDIA</td>
-              <td class="partial">△ 主要 NVIDIA</td>
-              <td class="check">✓</td>
-            </tr>
-            <tr>
-              <td>学习曲线</td>
-              <td>较陡</td>
-              <td>中等</td>
-              <td>较简单</td>
-              <td>中等</td>
+              <td class="check">✓ NVIDIA/AMD/TPU</td>
+              <td class="partial">△ 主要NVIDIA</td>
+              <td class="partial">△ 主要NVIDIA</td>
+              <td class="cross">✗ NVIDIA专用</td>
             </tr>
           </tbody>
         </table>
