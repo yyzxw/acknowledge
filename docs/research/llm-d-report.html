@@ -612,6 +612,10 @@
           <div class="stat-value">Go</div>
           <div class="stat-label">主要语言</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-value">~3.1k</div>
+          <div class="stat-label">tok/s per B200</div>
+        </div>
       </div>
 
       <div class="quote-block">
@@ -1147,13 +1151,21 @@ type IndexConfig struct {
         </div>
 
         <div class="feature-item">
-          <h4><span class="num">2</span> 技术差异化根因</h4>
-          <p><strong>优势历史根源:</strong> Kubernetes 原生源于团队云厂商背景；P/D 分解成熟源于与 vLLM 深度合作并直接贡献上游；多加速器支持源于最初设计就考虑硬件多样性；企业级功能(多租户、SLO保障)源于生产环境真实需求。</p>
+          <h4><span class="num">2</span> 版本演进时间线</h4>
+          <p><strong>v0.1-v0.2 (2024):</strong> 奠基阶段，建立多仓库架构和 Kubernetes 集成</p>
+          <p style="margin-top: 0.5rem;"><strong>v0.3 (2025):</strong> 智能推理调度器发布，前缀缓存感知路由</p>
+          <p style="margin-top: 0.5rem;"><strong>v0.4 (2025-12):</strong> 多加速器扩展，DeepSeek V3.1 on H200 40% 延迟降低</p>
+          <p style="margin-top: 0.5rem;"><strong>v0.5 (2026-02):</strong> 生产就绪，分层 KV 卸载、Active-Active HA、Scale-to-Zero</p>
         </div>
 
         <div class="feature-item">
-          <h4><span class="num">3</span> 未来推演</h4>
-          <p><strong>最可能剧本:</strong> llm-d 在企业级市场站稳脚跟，特别是金融、医疗、政府等对安全和合规有严格要求的场景。RouteLLM 在成本敏感的应用开发者中流行。</p>
+          <h4><span class="num">3</span> SIG 组织架构</h4>
+          <p>llm-d 采用 SIG 模式组织开发：SIG Inference Scheduler (调度框架)、SIG KV-Cache (缓存索引)、SIG Accelerators (多硬件支持)、SIG Observability (监控追踪)</p>
+        </div>
+
+        <div class="feature-item">
+          <h4><span class="num">4</span> 未来推演</h4>
+          <p><strong>最可能剧本:</strong> llm-d 在企业级市场站稳脚跟，特别是金融、医疗、政府等对安全和合规有严格要求的场景。</p>
           <p style="margin-top: 0.5rem;"><strong>最危险剧本:</strong> llm-d 过度工程化，复杂性导致采用门槛过高；或者 vLLM 内置更完善的调度能力削弱差异化。</p>
           <p style="margin-top: 0.5rem;"><strong>最乐观剧本:</strong> llm-d 的调度框架成为行业标准，Gateway API Inference Extension 全面采纳其设计。</p>
         </div>
