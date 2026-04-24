@@ -722,7 +722,13 @@
 
         <div class="feature-item">
           <h4><span class="num">2</span> P/D 分解 (Prefill/Decode Disaggregation)</h4>
-          <p>将 LLM 推理分为预填充(Prefill)和解码(Decode)两阶段，在独立实例执行。Prefill 处理输入 prompt 生成首个 token (计算密集型)，Decode 逐个生成输出 token (内存带宽密集型)。优势包括 TTFT 降低、TPOT 更稳定、支持异构并行度配置。典型部署: 4xTP=1 Prefill Workers + 1xTP=4 Decode Worker。</p>
+          <p>将 LLM 推理分为预填充(Prefill)和解码(Decode)两阶段，在独立实例执行。Prefill 处理输入 prompt 生成首个 token (计算密集型)，Decode 逐个生成输出 token (内存带宽密集型)。优势包括 TTFT 降低、TPOT 更稳定、支持异构并行度配置。</p>
+          <div class="code-block" style="margin-top: 1rem;">
+<code>典型部署配置:
+Prefill Workers: TP=1, 多副本
+Decode Worker:  TP=5, 单副本
+传输: NIXL RDMA (dynamic lazy 连接)</code>
+          </div>
         </div>
 
         <div class="feature-item">
@@ -859,6 +865,57 @@ const (
           </tbody>
         </table>
       </div>
+
+      <h4 style="margin: 1.5rem 0 1rem; color: var(--text);">Scorer 插件详细</h4>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>插件</th>
+              <th>功能</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>queue-scorer</td>
+              <td>基于队列深度的负载均衡</td>
+            </tr>
+            <tr>
+              <td>kv-cache-utilization-scorer</td>
+              <td>KV-cache 利用率评分</td>
+            </tr>
+            <tr>
+              <td>prefix-cache-scorer</td>
+              <td>前缀缓存匹配评分</td>
+            </tr>
+            <tr>
+              <td>slo-scorer</td>
+              <td>SLO 感知评分</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 style="margin: 1.5rem 0 1rem; color: var(--text);">EPP 请求处理流程</h4>
+      <div class="diagram">
+        <div class="flow-diagram" style="min-width: 450px;">
+          <div class="flow-row">
+            <div class="flow-box cyan">Incoming Request</div>
+          </div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-row">
+            <div class="flow-box purple">Parser</div>
+          </div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-row">
+            <div class="flow-box green">FlowControl</div>
+          </div>
+          <div class="flow-arrow">↓</div>
+          <div class="flow-row">
+            <div class="flow-box orange">Admit → Schedule → Endpoint</div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- KV-Cache -->
@@ -928,6 +985,47 @@ type IndexConfig struct {
            3. 计算从 block 0 开始的最长连续前缀长度<br>
            4. 考虑介质权重 (GPU:1.0, CPU:0.6, Storage:0.3)<br>
            5. 综合评分 = Σ(前缀长度 × 介质权重)</p>
+      </div>
+
+      <h4 style="margin: 1.5rem 0 1rem; color: var(--text);">具体技术参数</h4>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>参数</th>
+              <th>数值</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Block Size</td>
+              <td>64 tokens/block</td>
+              <td>每个 KV-cache block 包含的 token 数量</td>
+            </tr>
+            <tr>
+              <td>Max Prefix Blocks</td>
+              <td>256</td>
+              <td>最大前缀匹配 block 数</td>
+            </tr>
+            <tr>
+              <td>LRU Capacity</td>
+              <td>31,250 blocks/server</td>
+              <td>每个服务器的 LRU 缓存容量</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="code-block">
+<code>plugins:
+- type: prefix-cache-scorer
+  parameters:
+    blockSizeTokens: 64
+    maxPrefixBlocksToMatch: 256
+    lruCapacityPerServer: 31250
+- type: kv-cache-utilization-scorer
+- type: queue-depth-scorer</code>
       </div>
     </section>
 
