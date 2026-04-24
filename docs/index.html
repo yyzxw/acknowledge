@@ -21,6 +21,7 @@
       --green: #35e6bd;
       --gold: #f6bd4b;
       --purple: #a98cff;
+      --red: #ff7070;
       --radius-xl: 26px;
       --radius-lg: 18px;
       --radius-md: 12px;
@@ -156,6 +157,10 @@
       box-shadow: var(--shadow-soft), var(--shadow-cyan);
     }
     .card.gold-glow:hover { box-shadow: var(--shadow-soft), var(--shadow-gold); }
+    .card.red-glow::before {
+      background: linear-gradient(140deg, rgba(255, 112, 112, 0.08), transparent 45%);
+    }
+    .card.red-glow:hover { box-shadow: var(--shadow-soft), 0 0 36px rgba(255, 112, 112, 0.2); }
     .card:hover::before { opacity: 1; }
 
     .card-icon {
@@ -169,6 +174,7 @@
     .card-icon.copilot { background: rgba(169, 140, 255, 0.14); color: var(--purple); }
     .card-icon.maas { background: rgba(53, 230, 189, 0.14); color: var(--green); }
     .card-icon.dash { background: rgba(246, 189, 75, 0.14); color: var(--gold); }
+    .card-icon.research { background: rgba(255, 112, 112, 0.14); color: #ff7070; }
 
     .card-tag {
       display: inline-flex;
@@ -187,6 +193,7 @@
     .card-tag.purple { background: rgba(169, 140, 255, 0.14); color: var(--purple); }
     .card-tag.green { background: rgba(53, 230, 189, 0.14); color: var(--green); }
     .card-tag.gold { background: rgba(246, 189, 75, 0.14); color: var(--gold); }
+    .card-tag.red { background: rgba(255, 112, 112, 0.14); color: var(--red); }
 
     .card h2 {
       margin: 0 0 8px;
@@ -408,6 +415,26 @@
         </div>
         <div class="card-footer">
           <span class="path">dashboard/token-factory-dashboard.html</span>
+          <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+        </div>
+      </a>
+
+      <a class="card red-glow" href="./research/deepseek-v4-report.html">
+        <div class="card-icon research">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+        </div>
+        <span class="card-tag red">Research</span>
+        <h2>DeepSeek V4 深度调研报告</h2>
+        <p>全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势，附详细Benchmark对比分析。</p>
+        <div class="card-meta">
+          <span class="meta-pill">MoE 架构</span>
+          <span class="meta-pill">模型评测</span>
+          <span class="meta-pill">成本分析</span>
+        </div>
+        <div class="card-footer">
+          <span class="path">research/deepseek-v4-report.html</span>
           <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
         </div>
       </a>

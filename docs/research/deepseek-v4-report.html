@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek V4 深度调研报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Exo:wght@300;400;500;600;700;800;900&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════ */
+:root {
+  --bg-deep:    #020203;
+  --bg-base:    #05050a;
+  --bg-elev:    #0a0a12;
+  --bg-card:    rgba(255,255,255,0.04);
+  --bg-card-hover: rgba(255,255,255,0.08);
+  --border:     rgba(255,255,255,0.07);
+  --border-hi:  rgba(255,255,255,0.15);
+
+  --fg:         #EDEDEF;
+  --fg-muted:   #8A8F98;
+  --fg-dim:     #4A4F5C;
+
+  --accent:     #5E6AD2;
+  --accent-glow:rgba(94,106,210,0.25);
+  --accent2:    #9B8BFF;
+  --green:      #3DDC97;
+  --green-glow: rgba(61,220,151,0.2);
+  --amber:      #F0B840;
+  --amber-glow: rgba(240,184,64,0.2);
+  --cyan:       #4EC9D8;
+  --red:        #F06060;
+
+  --font-head:  'Exo', sans-serif;
+  --font-mono:  'Roboto Mono', monospace;
+
+  --r-sm:  8px;
+  --r-md:  14px;
+  --r-lg:  20px;
+  --r-xl:  28px;
+
+  --ease:  cubic-bezier(0.16, 1, 0.3, 1);
+  --dur:   250ms;
+
+  --w: 1240px;
+  --section-py: 5rem;
+}
+
+/* ═══════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-elev); }
+::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+
+body {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  line-height: 1.8;
+  background: var(--bg-deep);
+  color: var(--fg);
+  overflow-x: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+p { font-size: 1rem; color: var(--fg-muted); line-height: 1.85; }
+h1, h2, h3, h4 { color: var(--fg); }
+
+::selection { background: var(--accent); color: #fff; }
+
+/* ═══════════════════════════════════════════
+   AMBIENT BLOBS
+═══════════════════════════════════════════ */
+.blob {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+  animation: blobFloat 20s ease-in-out infinite;
+}
+.blob-1 {
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(94,106,210,0.14) 0%, transparent 70%);
+  top: -250px; left: -250px;
+}
+.blob-2 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(61,220,151,0.09) 0%, transparent 70%);
+  top: 35%; right: -150px;
+  animation-delay: -7s;
+}
+.blob-3 {
+  width: 450px; height: 450px;
+  background: radial-gradient(circle, rgba(155,139,255,0.09) 0%, transparent 70%);
+  bottom: 15%; left: 25%;
+  animation-delay: -14s;
+}
+@keyframes blobFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(30px, -40px) scale(1.05); }
+  66%       { transform: translate(-20px, 20px) scale(0.95); }
+}
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════ */
+.container {
+  max-width: var(--w);
+  margin: 0 auto;
+  padding: 0 clamp(1.5rem, 4vw, 3.5rem);
+}
+
+section { position: relative; z-index: 1; padding: var(--section-py) 0; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+/* ═══════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════ */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: rgba(2,2,3,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  height: 60px;
+  display: flex;
+  align-items: center;
+}
+
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  width: 100%;
+  max-width: var(--w);
+  margin: 0 auto;
+  padding: 0 clamp(1.5rem, 4vw, 3.5rem);
+}
+
+.nav-brand {
+  font-family: var(--font-head);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  flex-shrink: 0;
+}
+.nav-brand span { color: var(--accent); }
+
+.nav-links { display: flex; gap: 0.2rem; margin-left: auto; }
+.nav-links a {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--r-sm);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.nav-links a:hover { color: var(--fg); background: var(--bg-card); }
+
+/* ═══════════════════════════════════════════
+   HERO
+═══════════════════════════════════════════ */
+.hero {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 8rem clamp(1.5rem, 4vw, 3.5rem) 5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(94,106,210,0.1);
+  border: 1px solid rgba(94,106,210,0.25);
+  padding: 0.4rem 1.1rem;
+  border-radius: 999px;
+  margin-bottom: 1.5rem;
+  animation: fadeUp 0.8s var(--ease) both;
+}
+.hero-eyebrow::before { content: '◈'; font-size: 0.65rem; }
+
+.hero h1 {
+  font-family: var(--font-head);
+  font-size: clamp(5rem, 16vw, 11rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.88;
+  color: var(--fg);
+  margin-bottom: 1.25rem;
+  animation: fadeUp 0.8s 0.1s var(--ease) both;
+}
+
+.hero h1 span {
+  background: linear-gradient(135deg, var(--accent2) 0%, var(--cyan) 60%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-desc {
+  font-size: 1.1rem;
+  color: var(--fg-muted);
+  max-width: 640px;
+  margin: 0 auto 2.5rem;
+  line-height: 1.8;
+  animation: fadeUp 0.8s 0.2s var(--ease) both;
+}
+
+.hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 3rem;
+  animation: fadeUp 0.8s 0.3s var(--ease) both;
+}
+
+.pill {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 0.45rem 1.05rem;
+  border-radius: 6px;
+  transition: transform var(--dur) var(--ease);
+}
+.pill:hover { transform: translateY(-2px); }
+.pill-green  { background: rgba(61,220,151,0.1); border: 1px solid rgba(61,220,151,0.25); color: var(--green); }
+.pill-accent{ background: rgba(94,106,210,0.12); border: 1px solid rgba(94,106,210,0.28); color: var(--accent2); }
+.pill-amber { background: rgba(240,184,64,0.1);  border: 1px solid rgba(240,184,64,0.25); color: var(--amber); }
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  background: var(--bg-card);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  animation: fadeUp 0.8s 0.4s var(--ease) both;
+}
+
+.hero-stat {
+  padding: 1.3rem 2.5rem;
+  border-right: 1px solid var(--border);
+  text-align: center;
+  min-width: 130px;
+}
+.hero-stat:last-child { border-right: none; }
+
+.hero-stat .hs-num {
+  font-family: var(--font-head);
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+.hero-stat .hs-num.accent { color: var(--accent2); }
+.hero-stat .hs-num.green  { color: var(--green); }
+.hero-stat .hs-num.amber  { color: var(--amber); }
+
+.hero-stat .hs-lbl {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-dim);
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════
+   SECTION HEADER
+═══════════════════════════════════════════ */
+.section-header { margin-bottom: 2.5rem; }
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(94,106,210,0.1);
+  border: 1px solid rgba(94,106,210,0.2);
+  padding: 0.3rem 0.85rem;
+  border-radius: 4px;
+  margin-bottom: 0.9rem;
+}
+
+.section-title {
+  font-family: var(--font-head);
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  margin-bottom: 0.75rem;
+}
+
+.section-intro {
+  font-size: 1rem;
+  color: var(--fg-muted);
+  max-width: 700px;
+  line-height: 1.85;
+}
+
+/* ═══════════════════════════════════════════
+   CARDS
+═══════════════════════════════════════════ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 1.75rem;
+  backdrop-filter: blur(8px);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.card:hover { background: var(--bg-card-hover); border-color: var(--border-hi); }
+
+.card-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.card-label::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* ═══════════════════════════════════════════
+   COMPANY
+═══════════════════════════════════════════ */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin: 2rem 0;
+}
+
+.stat-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.stat-block::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+.stat-block.purple::before { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.stat-block.green::before  { background: linear-gradient(90deg, var(--green), var(--cyan)); }
+.stat-block.amber::before  { background: linear-gradient(90deg, var(--amber), #f08030); }
+
+.stat-block .sb-num {
+  font-family: var(--font-head);
+  font-size: 2.4rem;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin-bottom: 0.35rem;
+}
+.stat-block.purple .sb-num { color: var(--accent2); }
+.stat-block.green .sb-num  { color: var(--green); }
+.stat-block.amber .sb-num  { color: var(--amber); }
+
+.stat-block .sb-lbl {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-muted);
+}
+
+.timeline { position: relative; padding-left: 2rem; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0.5rem; bottom: 0.5rem;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--accent), transparent);
+}
+.tl-item { position: relative; margin-bottom: 1.25rem; }
+.tl-item::before {
+  content: '';
+  position: absolute;
+  left: -2rem; top: 0.45rem;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateX(-4px);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.tl-year {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+.tl-event {
+  font-family: var(--font-head);
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0.15rem 0;
+}
+.tl-desc {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  line-height: 1.7;
+}
+
+/* ═══════════════════════════════════════════
+   TECH
+═══════════════════════════════════════════ */
+.tech-overview {
+  background: linear-gradient(135deg, rgba(94,106,210,0.08) 0%, rgba(94,106,210,0.03) 100%);
+  border: 1px solid rgba(94,106,210,0.2);
+  border-radius: var(--r-xl);
+  padding: 2.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 2.5rem;
+  align-items: center;
+  margin-bottom: 1.75rem;
+}
+
+.tech-overview h3 {
+  font-family: var(--font-head);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+}
+
+.tech-specs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.tech-spec-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 1.1rem 1.25rem;
+}
+.tech-spec-item .ts-lbl {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-dim);
+  margin-bottom: 0.25rem;
+}
+.tech-spec-item .ts-val {
+  font-family: var(--font-head);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.tech-spec-item .ts-sub {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  margin-top: 0.15rem;
+}
+
+.tech-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 1.75rem;
+  position: relative;
+  overflow: hidden;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.tech-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+.tech-card:hover { background: var(--bg-card-hover); border-color: var(--border-hi); }
+
+.tech-card-tag {
+  position: absolute;
+  top: 1.2rem; right: 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  background: rgba(94,106,210,0.1);
+  border: 1px solid rgba(94,106,210,0.2);
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+}
+
+.tech-card h4 {
+  font-family: var(--font-head);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.tech-card p { font-size: 0.88rem; line-height: 1.85; }
+
+.tech-metrics {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.tech-metric .tm-val {
+  font-family: var(--font-head);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--green);
+  letter-spacing: -0.03em;
+}
+.tech-metric .tm-lbl {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-dim);
+  margin-top: 0.1rem;
+}
+
+.arch-diagram {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 2rem;
+  margin: 1.75rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 2;
+  overflow-x: auto;
+  white-space: pre;
+}
+.arch-diagram .ad-comment { color: var(--fg-dim); }
+.arch-diagram .ad-label { color: var(--accent2); font-weight: 700; }
+.arch-diagram .ad-val   { color: var(--green); }
+.arch-diagram .ad-hi    { color: var(--amber); }
+.arch-diagram .ad-cyan  { color: var(--cyan); }
+
+/* ═══════════════════════════════════════════
+   PRODUCTS
+═══════════════════════════════════════════ */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+.tbl thead { background: rgba(255,255,255,0.03); }
+.tbl th {
+  text-align: left;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-dim);
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.tbl td {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: rgba(255,255,255,0.02); }
+.tbl .check { color: var(--green); font-weight: 700; }
+.tbl .cross { color: var(--red); }
+
+.md-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 0.6rem;
+  vertical-align: middle;
+}
+.md-purple { background: var(--accent2); box-shadow: 0 0 6px rgba(155,139,255,0.5); }
+.md-green  { background: var(--green);  box-shadow: 0 0 6px rgba(61,220,151,0.5); }
+.md-amber  { background: var(--amber);  box-shadow: 0 0 6px rgba(240,184,64,0.5); }
+.md-cyan   { background: var(--cyan);   box-shadow: 0 0 6px rgba(78,201,216,0.5); }
+
+.price-green { color: var(--green); font-weight: 700; font-size: 1.05rem; }
+.price-amber { color: var(--amber); font-weight: 700; font-size: 1.05rem; }
+
+/* ═══════════════════════════════════════════
+   BENCHMARK
+═══════════════════════════════════════════ */
+.bench-hero-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+.bench-top-card {
+  background: linear-gradient(135deg, rgba(94,106,210,0.1) 0%, rgba(94,106,210,0.03) 100%);
+  border: 1px solid rgba(94,106,210,0.2);
+  border-radius: var(--r-lg);
+  padding: 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.bench-top-card::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--cyan));
+}
+.bench-score {
+  font-family: var(--font-head);
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--accent2), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.25rem;
+}
+.bench-name {
+  font-family: var(--font-head);
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.2rem;
+}
+.bench-desc {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+.bench-rank-badge {
+  position: absolute;
+  top: 1rem; right: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--green);
+  background: rgba(61,220,151,0.1);
+  border: 1px solid rgba(61,220,151,0.2);
+  padding: 0.18rem 0.5rem;
+  border-radius: 4px;
+}
+
+.bench-row {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  gap: 1rem;
+}
+.bench-row:last-child { border-bottom: none; }
+.br-name { color: var(--fg-muted); width: 170px; flex-shrink: 0; }
+.br-bar-wrap { flex: 1; height: 5px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.br-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.br-val { font-weight: 700; width: 55px; text-align: right; font-size: 0.92rem; }
+
+.longctx-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+.longctx-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 1.5rem;
+  text-align: center;
+}
+.lc-score {
+  font-family: var(--font-head);
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+.lc-green  { color: var(--green); }
+.lc-accent { color: var(--accent2); }
+.lc-amber  { color: var(--amber); }
+.lc-cyan   { color: var(--cyan); }
+.lc-name {
+  font-family: var(--font-head);
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+.lc-desc {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+}
+
+/* ═══════════════════════════════════════════
+   COST
+═══════════════════════════════════════════ */
+.cost-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+.cost-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 2.25rem 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.cost-card::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--cyan));
+}
+.cost-num {
+  font-family: var(--font-head);
+  font-size: 3rem;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.4rem;
+}
+.cost-lbl { font-size: 0.92rem; color: var(--fg-muted); }
+.cost-note {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+  margin-top: 0.75rem;
+}
+
+/* ═══════════════════════════════════════════
+   OPEN SOURCE
+═══════════════════════════════════════════ */
+.os-license-strip {
+  background: linear-gradient(90deg, rgba(61,220,151,0.06), rgba(78,201,216,0.06));
+  border: 1px solid rgba(61,220,151,0.18);
+  border-radius: var(--r-xl);
+  padding: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  margin-bottom: 2rem;
+}
+.os-badge {
+  font-family: var(--font-head);
+  font-size: 4rem;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  flex-shrink: 0;
+}
+.os-badge-text h4 {
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+}
+.os-badge-text p { font-size: 0.88rem; line-height: 1.75; }
+
+.feat-list { list-style: none; }
+.feat-list li {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.feat-list li:last-child { border-bottom: none; }
+.feat-list li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+
+.platform-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.platform-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 1.25rem;
+  text-align: center;
+}
+.platform-card .pc-name {
+  font-family: var(--font-head);
+  font-size: 0.92rem;
+  font-weight: 800;
+  margin-bottom: 0.2rem;
+}
+.platform-card .pc-desc {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+}
+
+/* ═══════════════════════════════════════════
+   FOOTER
+═══════════════════════════════════════════ */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 3.5rem 0;
+  margin-top: 2rem;
+}
+.footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+}
+.footer-brand {
+  font-family: var(--font-head);
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, var(--accent2), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.footer-meta {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+  text-align: right;
+  line-height: 1.8;
+}
+
+/* ═══════════════════════════════════════════
+   FOCUS & MOTION
+═══════════════════════════════════════════ */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .tech-overview { grid-template-columns: 1fr; gap: 1.5rem; }
+  .bench-hero-cards { grid-template-columns: 1fr; }
+  .cost-cards { grid-template-columns: 1fr; }
+  .longctx-grid { grid-template-columns: repeat(2, 1fr); }
+  .platform-row { grid-template-columns: repeat(2, 1fr); }
+  .stat-row { grid-template-columns: 1fr; }
+  .hero-stats { flex-direction: column; }
+  .hero-stat { border-right: none; border-bottom: 1px solid var(--border); }
+  .hero-stat:last-child { border-bottom: none; }
+  .os-license-strip { flex-direction: column; gap: 1.5rem; text-align: center; }
+  .footer-inner { flex-direction: column; text-align: center; }
+  .footer-meta { text-align: center; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Ambient blobs -->
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-brand">Deep<span>Seek</span></a>
+    <div class="nav-links">
+      <a href="#company">公司背景</a>
+      <a href="#tech">技术架构</a>
+      <a href="#products">产品矩阵</a>
+      <a href="#benchmark">基准测试</a>
+      <a href="#cost">成本优势</a>
+      <a href="#opensource">开源生态</a>
+      <a href="#competitive">竞品对比</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div>
+    <div class="hero-eyebrow">Deep Research Report · 深度调研报告</div>
+    <h1>DeepSeek <span>V4</span></h1>
+    <p class="hero-desc">全球开源 AI 新格局。万亿参数 MoE 架构，MIT 完全开源，API 价格仅为 GPT-4 Turbo 的 1.43%，中文能力全球第一。</p>
+    <div class="hero-pills">
+      <span class="pill pill-green">MIT 完全开源</span>
+      <span class="pill pill-accent">MoE 1.6T 参数</span>
+      <span class="pill pill-amber">比 GPT-4 Turbo 便宜 98.57%</span>
+      <span class="pill pill-accent">1M Token 上下文</span>
+      <span class="pill pill-green">C-Eval 93.1% 全球第一</span>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hs-num accent">2023</div>
+        <div class="hs-lbl">公司成立</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num green">50,000+</div>
+        <div class="hs-lbl">Hopper GPU</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num amber">$200 亿</div>
+        <div class="hs-lbl">目标估值</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num accent">1.6T</div>
+        <div class="hs-lbl">总参数量</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num green">¥2</div>
+        <div class="hs-lbl">V4-Flash / M</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     01 · COMPANY
+═══════════════════════════════════════════ -->
+<section id="company">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">01 · 公司背景</div>
+      <h2 class="section-title">幻方量化旗下 AI 实验室</h2>
+      <p class="section-intro">DeepSeek 成立于 2023 年，总部杭州。背靠千亿级资管规模与超 50,000 张英伟达 Hopper GPU，在极短时间内成长为全球开源 AI 领域的重要力量。</p>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-block purple">
+        <div class="sb-num">50,000+</div>
+        <div class="sb-lbl">英伟达 Hopper GPU</div>
+      </div>
+      <div class="stat-block green">
+        <div class="sb-num">1000B+</div>
+        <div class="sb-lbl">资管规模（人民币）</div>
+      </div>
+      <div class="stat-block amber">
+        <div class="sb-num">$20B</div>
+        <div class="sb-lbl">2026 目标估值</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-label">公司简介</div>
+        <p style="margin-bottom:1rem;">DeepSeek 名称取自"Deep Seek"，寓意对人工智能深度与边界的持续探索。作为幻方量化的 AI 研究实验室，享有独特的资源优势与长期视角——专注于技术突破，而非短期商业化压力。</p>
+        <p>创始人梁文锋同时担任幻方量化 CEO，将"每算力最优性能"的量化思维带入 AI 研发，塑造了 DeepSeek 独特的技术路线。</p>
+      </div>
+      <div class="card">
+        <div class="card-label">创始团队</div>
+        <h4 style="font-family:var(--font-head); font-size:1.05rem; font-weight:800; margin-bottom:0.4rem;">梁文锋 · 创始人兼 CEO</h4>
+        <p style="margin-bottom:1rem;">中国量化投资领域标志性人物，幻方量化创始人及 CEO。他将"高效计算、严格风控"的量化理念带入 AI 研发，追求每算力下的最优性能。</p>
+        <div style="padding-top:1rem; border-top:1px solid var(--border);">
+          <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--fg-dim); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.4rem;">关键背景</div>
+          <div style="font-size:0.88rem; color:var(--fg-muted);">— 幻方量化管理资产超 1000 亿元</div>
+          <div style="font-size:0.88rem; color:var(--fg-muted); margin-top:0.3rem;">— 中国私人部门最大 AI 算力持有方之一</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem;">
+      <div class="card-label">发展历程</div>
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-year">2023</div>
+          <div class="tl-event">DeepSeek 成立</div>
+          <div class="tl-desc">幻方量化 AI 研究实验室正式成立，启动大模型研发</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-year">2024</div>
+          <div class="tl-event">V2 发布 — MLA + MoE 架构</div>
+          <div class="tl-desc">推理效率大幅领先同期开源模型，引起业界广泛关注</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-year">2025</div>
+          <div class="tl-event">V3 / R1 发布</div>
+          <div class="tl-desc">性能追平头部闭源模型，《Nature》《Science》相继引用</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-year">2026</div>
+          <div class="tl-event">V4 发布</div>
+          <div class="tl-desc">1.6T MoE 架构，V4-Pro 达旗舰水平，V4-Flash ¥2/M 重新定义性价比</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-year">2026</div>
+          <div class="tl-event">200 亿美元融资洽谈</div>
+          <div class="tl-desc">腾讯、阿里巴巴正洽谈投资，近年亚洲 AI 领域最大规模融资之一</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     02 · TECHNOLOGY
+═══════════════════════════════════════════ -->
+<section id="tech">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">02 · 技术架构</div>
+      <h2 class="section-title">四大核心技术</h2>
+      <p class="section-intro">V4 采用 MoE 混合专家架构，MLA 多头潜在注意力、mHC 流形约束超连接、Muon 自研优化器四项创新，FLOPs 降至 27%，KV Cache 降至 10%。</p>
+    </div>
+
+    <div class="tech-overview">
+      <div>
+        <h3>MoE 如何让 V4 如此强大？</h3>
+        <p style="margin-bottom:0.75rem;">V4-Pro 拥有 1.6 万亿总参数，但每次推理仅激活 49B 参数，激活比仅 3.3%。传统 Dense 模型（如 GPT-4）在每次推理时激活全部参数，计算成本极高。</p>
+        <p>MoE 通过门控网络动态选择少数"专家"网络参与计算，在模型能力接近 GPT-4 的同时，推理成本降低了 97%。V4 还引入细粒度专家分割与共享专家机制：部分专家承担全任务共享的基础能力，其余专家负责特定领域知识。</p>
+      </div>
+      <div class="tech-specs-grid">
+        <div class="tech-spec-item">
+          <div class="ts-lbl">总参数量</div>
+          <div class="ts-val" style="color:var(--accent2);">1.6T</div>
+          <div class="ts-sub">万亿参数级别</div>
+        </div>
+        <div class="tech-spec-item">
+          <div class="ts-lbl">激活参数</div>
+          <div class="ts-val" style="color:var(--green);">49B</div>
+          <div class="ts-sub">每次推理参与计算</div>
+        </div>
+        <div class="tech-spec-item">
+          <div class="ts-lbl">激活比</div>
+          <div class="ts-val" style="color:var(--amber);">3.3%</div>
+          <div class="ts-sub">极低计算成本</div>
+        </div>
+        <div class="tech-spec-item">
+          <div class="ts-lbl">上下文</div>
+          <div class="ts-val" style="color:var(--cyan);">1M</div>
+          <div class="ts-sub">百万 token</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture Diagram -->
+    <div class="arch-diagram"><span class="ad-comment"># DeepSeek V4 系统架构（简化视图）</span>
+
+<span class="ad-comment">┌─────────────────────────────────────────────────────────────────┐</span>
+<span class="ad-comment">│                         DeepSeek V4-Pro                          │</span>
+<span class="ad-comment">├─────────────────────────────────────────────────────────────────┤</span>
+<span class="ad-label">Input</span>  ──►  <span class="ad-label">Embedding</span>  ──►  <span class="ad-label">MoE Block × 61层</span>
+                          <span class="ad-comment">          │                      │</span>
+                          <span class="ad-comment">          │         ┌────────────┴────────────┐</span>
+                          <span class="ad-comment">          │         │   Gate (Top-K Routing)   │</span>
+                          <span class="ad-comment">          │         │   K=8 experts selected    │</span>
+                          <span class="ad-comment">          │         └────────────┬────────────┘</span>
+<span class="ad-comment">          │         ┌────────────┴────────────┐</span>
+<span class="ad-comment">          │         │   Expert 1  Expert 2  ...  Expert 256  │</span>
+<span class="ad-comment">          │         │   (shared + 255 routed)            │</span>
+<span class="ad-comment">          │         └────────────┬────────────┘</span>
+<span class="ad-label">MLA</span>     ──►  <span class="ad-label">Attention</span>  ◄──  <span class="ad-hi">KV Cache (compressed 50%+)</span>
+<span class="ad-comment">          │                      │</span>
+<span class="ad-comment">          │         ┌────────────┴────────────┐</span>
+<span class="ad-comment">          │         │   mHC (流形约束)         │</span>
+<span class="ad-comment">          │         │   抑制梯度扩散          │</span>
+<span class="ad-comment">          │         └────────────┬────────────┘</span>
+<span class="ad-label">Output</span> ◄──  <span class="ad-label">Norm</span>  ◄──  <span class="ad-val">Router + Experts</span>
+
+<span class="ad-comment">─────────────────────────────────────────────────────────────────</span>
+<span class="ad-comment"># 关键技术指标</span>
+<span class="ad-label">MoE</span>     <span class="ad-val">1.6T</span> total / <span class="ad-hi">49B</span> active / <span class="ad-cyan">3.3%</span> activation ratio
+<span class="ad-label">MLA</span>    KV Cache: <span class="ad-hi">50%+</span> compression │ FLOPs: <span class="ad-cyan">27%</span> │ KV: <span class="ad-cyan">10%</span>
+<span class="ad-label">mHC</span>    <span class="ad-val">Gradient diffusion suppressed</span> via manifold constraint
+<span class="ad-label">Muon</span>   Training steps saved: <span class="ad-hi">15-20%</span> vs AdamW at 1.6T scale
+<span class="ad-label">Context</span> <span class="ad-val">1M tokens</span> │ Max output: <span class="ad-cyan">384K</span> │ Latency: <span class="ad-cyan">20ms</span></div>
+
+    <div class="grid-2" style="margin-top:1.75rem;">
+      <div class="tech-card">
+        <div class="tech-card-tag">核心创新 ①</div>
+        <h4>MoE · 混合专家架构</h4>
+        <p style="margin-bottom:0.75rem;">通过智能路由机制，在万亿参数的海量知识中精准调用相关"专家"子网络。采用细粒度专家分割（256 个专家）+ 共享专家机制，共享专家承担基础语言理解，路由专家负责专业知识。</p>
+        <p>V4 采用 DeepSeek-V3 版本路由算法，进一步优化了专家选择策略与负载均衡，避免部分专家被过度使用。</p>
+        <div class="tech-metrics">
+          <div class="tech-metric"><div class="tm-val">1.6T</div><div class="tm-lbl">总参数量</div></div>
+          <div class="tech-metric"><div class="tm-val">49B</div><div class="tm-lbl">激活参数</div></div>
+          <div class="tech-metric"><div class="tm-val">3.3%</div><div class="tm-lbl">激活比</div></div>
+          <div class="tech-metric"><div class="tm-val">256</div><div class="tm-lbl">专家数量</div></div>
+        </div>
+      </div>
+
+      <div class="tech-card">
+        <div class="tech-card-tag">核心创新 ②</div>
+        <h4>MLA · 多头潜在注意力</h4>
+        <p style="margin-bottom:0.75rem;">MLA 通过低秩潜在空间压缩 Key-Value Cache，将 KV Cache 压缩超过 50%。结合 DSA（动态稀疏注意力）与 Token 压缩技术，将 FLOPs 降至 27%，KV Cache 降至 10%。</p>
+        <p>在 1M token 上下文中，MLA 显存占用约为传统 MHA 的 1/8，使超长文本理解成为真正的生产级能力。</p>
+        <div class="tech-metrics">
+          <div class="tech-metric"><div class="tm-val">50%+</div><div class="tm-lbl">KV 压缩率</div></div>
+          <div class="tech-metric"><div class="tm-val">27%</div><div class="tm-lbl">FLOPs</div></div>
+          <div class="tech-metric"><div class="tm-val">10%</div><div class="tm-lbl">KV Cache</div></div>
+          <div class="tech-metric"><div class="tm-val">1/8</div><div class="tm-lbl">显存 vs MHA</div></div>
+        </div>
+      </div>
+
+      <div class="tech-card">
+        <div class="tech-card-tag">核心创新 ③</div>
+        <h4>mHC · 流形约束超连接</h4>
+        <p style="margin-bottom:0.75rem;">深层网络的梯度扩散是训练不稳定的主要根源。mHC 在参数空间与激活空间双层面施加结构化约束，将网络各层激活投影到低维流形上，使梯度流动更加稳定。</p>
+        <p>DeepSeek 从微分几何与信息论中汲取灵感，这一机制是 V4 能在 1.6T 参数规模下稳定训练的关键。</p>
+        <div class="tech-metrics">
+          <div class="tech-metric"><div class="tm-val">✓</div><div class="tm-lbl">抑制梯度扩散</div></div>
+          <div class="tech-metric"><div class="tm-val">✓</div><div class="tm-lbl">训练稳定性</div></div>
+          <div class="tech-metric"><div class="tm-val">✓</div><div class="tm-lbl">深层适配</div></div>
+        </div>
+      </div>
+
+      <div class="tech-card">
+        <div class="tech-card-tag">核心创新 ④</div>
+        <h4>Muon · 自研优化器</h4>
+        <p style="margin-bottom:0.75rem;">传统大模型训练使用 AdamW。DeepSeek 自研 Muon 优化器，利用二阶信息近似结构，避免 AdamW 在高维稀疏场景下的收敛效率损失。</p>
+        <p>在 1.6T 参数规模训练中，Muon 相比 AdamW 可节省约 15-20% 训练步数，大幅降低算力成本。</p>
+        <div class="tech-metrics">
+          <div class="tech-metric"><div class="tm-val">自研</div><div class="tm-lbl">创新优化器</div></div>
+          <div class="tech-metric"><div class="tm-val">~15-20%</div><div class="tm-lbl">步数节省</div></div>
+          <div class="tech-metric"><div class="tm-val">✓</div><div class="tm-lbl">超越 AdamW</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-3" style="margin-top:1.5rem;">
+      <div class="tech-spec-item" style="background:rgba(78,201,216,0.05); border-color:rgba(78,201,216,0.15);">
+        <div class="ts-lbl" style="color:var(--cyan);">Huawei Ascend</div>
+        <div class="ts-val" style="color:var(--cyan);">Day 0 适配</div>
+        <div class="ts-sub">昇腾 · 20ms 延迟 · 2000+ TPS</div>
+      </div>
+      <div class="tech-spec-item" style="background:rgba(240,184,64,0.05); border-color:rgba(240,184,64,0.15);">
+        <div class="ts-lbl" style="color:var(--amber);">最大输出</div>
+        <div class="ts-val" style="color:var(--amber);">384K</div>
+        <div class="ts-sub">单次输出可达 38.4 万 token</div>
+      </div>
+      <div class="tech-spec-item" style="background:rgba(61,220,151,0.05); border-color:rgba(61,220,151,0.15);">
+        <div class="ts-lbl" style="color:var(--green);">Token 速度</div>
+        <div class="ts-val" style="color:var(--green);">60+ tps</div>
+        <div class="ts-sub">超越多数同类开源与闭源模型</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     03 · PRODUCTS
+═══════════════════════════════════════════ -->
+<section id="products">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">03 · 产品矩阵</div>
+      <h2 class="section-title">完整产品矩阵</h2>
+      <p class="section-intro">从旗舰到轻量全覆盖，所有模型支持 Anthropic API 格式，零成本迁移。</p>
+    </div>
+
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>模型</th>
+          <th>定位</th>
+          <th>参数量</th>
+          <th>上下文</th>
+          <th>输出价格</th>
+          <th>核心优势</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:rgba(94,106,210,0.06);">
+          <td><span class="md-dot md-purple"></span><strong style="font-family:var(--font-head); font-size:1rem;">V4-Pro</strong></td>
+          <td style="color:var(--accent2); font-weight:700;">通用旗舰</td>
+          <td>1.6T（激活 49B）</td>
+          <td>1M tokens</td>
+          <td><span class="price-amber">¥24 / M</span></td>
+          <td>最高精度、长上下文、全面能力</td>
+        </tr>
+        <tr style="background:rgba(61,220,151,0.04);">
+          <td><span class="md-dot md-green"></span><strong style="font-family:var(--font-head); font-size:1rem;">V4-Flash</strong></td>
+          <td style="color:var(--green); font-weight:700;">经济高效</td>
+          <td>284B</td>
+          <td>128K tokens</td>
+          <td><span class="price-green">¥2 / M</span></td>
+          <td>极致性价比、大规模部署首选</td>
+        </tr>
+        <tr>
+          <td><span class="md-dot md-amber"></span><strong style="font-family:var(--font-head); font-size:1rem;">R1</strong></td>
+          <td style="color:var(--amber); font-weight:700;">推理专用</td>
+          <td>—</td>
+          <td>128K tokens</td>
+          <td><span class="price-amber">¥8 / M</span></td>
+          <td>思维链推理、数学、代码生成</td>
+        </tr>
+        <tr>
+          <td><span class="md-dot md-cyan"></span><strong style="font-family:var(--font-head); font-size:1rem;">V3.1</strong></td>
+          <td style="color:var(--cyan); font-weight:700;">高性价比</td>
+          <td>—</td>
+          <td>128K tokens</td>
+          <td><span class="price-green">¥4 / M</span></td>
+          <td>通用对话、微调底座</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="grid-4" style="margin-top:1.75rem;">
+      <div class="card" style="text-align:center; border-color:rgba(61,220,151,0.15);">
+        <div style="font-family:var(--font-head); font-size:1.8rem; font-weight:800; margin-bottom:0.5rem; color:var(--green);">—</div>
+        <h4 style="font-family:var(--font-head); font-size:0.95rem; font-weight:700; margin-bottom:0.35rem;">私有化部署</h4>
+        <p style="font-size:0.82rem;">数据不出企业内网，满足金融、医疗等高合规要求</p>
+      </div>
+      <div class="card" style="text-align:center; border-color:rgba(78,201,216,0.15);">
+        <div style="font-family:var(--font-head); font-size:1.8rem; font-weight:800; margin-bottom:0.5rem; color:var(--cyan);">—</div>
+        <h4 style="font-family:var(--font-head); font-size:0.95rem; font-weight:700; margin-bottom:0.35rem;">多语言原生</h4>
+        <p style="font-size:0.82rem;">中文显著优于同级别英文模型，100+ 语言支持</p>
+      </div>
+      <div class="card" style="text-align:center; border-color:rgba(155,139,255,0.15);">
+        <div style="font-family:var(--font-head); font-size:1.8rem; font-weight:800; margin-bottom:0.5rem; color:var(--accent2);">—</div>
+        <h4 style="font-family:var(--font-head); font-size:0.95rem; font-weight:700; margin-bottom:0.35rem;">LoRA 微调</h4>
+        <p style="font-size:0.82rem;">支持企业基于自有数据快速定制垂直领域模型</p>
+      </div>
+      <div class="card" style="text-align:center; border-color:rgba(240,184,64,0.15);">
+        <div style="font-family:var(--font-head); font-size:1.8rem; font-weight:800; margin-bottom:0.5rem; color:var(--amber);">—</div>
+        <h4 style="font-family:var(--font-head); font-size:0.95rem; font-weight:700; margin-bottom:0.35rem;">API 兼容</h4>
+        <p style="font-size:0.82rem;">OpenAI / Anthropic 格式零改动迁移</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     04 · BENCHMARK
+═══════════════════════════════════════════ -->
+<section id="benchmark">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">04 · 基准测试</div>
+      <h2 class="section-title">国际权威榜单领先</h2>
+      <p class="section-intro">MMLU、C-Eval、Codeforces、LiveCodeBench、SWE-Verified 等主流榜单全面达到或超越顶级闭源模型水平，中文能力全球第一。</p>
+    </div>
+
+    <div class="bench-hero-cards">
+      <div class="bench-top-card">
+        <div class="bench-rank-badge">TOP LEVEL</div>
+        <div class="bench-score">90.1%</div>
+        <div class="bench-name">MMLU</div>
+        <div class="bench-desc">57 个学科 · 多任务语言理解</div>
+      </div>
+      <div class="bench-top-card">
+        <div class="bench-rank-badge">SOTA</div>
+        <div class="bench-score">93.1%</div>
+        <div class="bench-name">C-Eval</div>
+        <div class="bench-desc">52 个学科 · 中文能力 · 全球第一</div>
+      </div>
+      <div class="bench-top-card">
+        <div class="bench-rank-badge">TOP 3.7%</div>
+        <div class="bench-score">2441</div>
+        <div class="bench-name">Codeforces</div>
+        <div class="bench-desc">超越 96.3% 参赛程序员</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-label">代码与工程</div>
+        <div class="bench-row">
+          <span class="br-name">LiveCodeBench</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:93.5%"></div></div>
+          <span class="br-val" style="color:var(--green);">93.5%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">SWE Verified</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:80.6%"></div></div>
+          <span class="br-val" style="color:var(--green);">80.6%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">HumanEval</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:75.8%"></div></div>
+          <span class="br-val" style="color:var(--accent2);">75.8%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">MBPP</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:82.3%"></div></div>
+          <span class="br-val" style="color:var(--accent2);">82.3%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">GPQA（研究生水平）</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:71%"></div></div>
+          <span class="br-val" style="color:var(--accent2);">71.0%</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">数学与推理</div>
+        <div class="bench-row">
+          <span class="br-name">GSM8K（中学数学）</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:96.8%"></div></div>
+          <span class="br-val" style="color:var(--green);">96.8%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">MATH（竞赛数学）</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:82%"></div></div>
+          <span class="br-val" style="color:var(--accent2);">82.0%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">MMLU-Math</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:91.3%"></div></div>
+          <span class="br-val" style="color:var(--green);">91.3%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">ARC-Challenge</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:96.5%"></div></div>
+          <span class="br-val" style="color:var(--green);">96.5%</span>
+        </div>
+        <div class="bench-row">
+          <span class="br-name">HellaSwag（常识）</span>
+          <div class="br-bar-wrap"><div class="br-bar" style="width:95.8%"></div></div>
+          <span class="br-val" style="color:var(--green);">95.8%</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.75rem;">
+      <div class="card-label" style="margin-bottom:1rem;">长上下文评测</div>
+      <div class="longctx-grid">
+        <div class="longctx-item">
+          <div class="lc-score lc-green">98.0%</div>
+          <div class="lc-name">NIAH 大海捞针</div>
+          <div class="lc-desc">128K / 1M tokens 双评测</div>
+        </div>
+        <div class="longctx-item">
+          <div class="lc-score lc-accent">95.2%</div>
+          <div class="lc-name">RULER 1M 上下文</div>
+          <div class="lc-desc">1M token 精度保持</div>
+        </div>
+        <div class="longctx-item">
+          <div class="lc-score lc-amber">88.5%</div>
+          <div class="lc-name">LV-Eval 多文档</div>
+          <div class="lc-desc">多文档综合理解</div>
+        </div>
+        <div class="longctx-item">
+          <div class="lc-score lc-cyan">85.0%</div>
+          <div class="lc-name">LooGLE 长文档</div>
+          <div class="lc-desc">长文档信息抽取</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     05 · COST
+═══════════════════════════════════════════ -->
+<section id="cost">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">05 · 成本优势</div>
+      <h2 class="section-title">重新定义性价比标准</h2>
+      <p class="section-intro">V4-Flash ¥2/M，比 GPT-4 Turbo 便宜 98.57%。企业部署成本下降超过 90%，让 AI 应用从"奢侈品"变成"日用品"。</p>
+    </div>
+
+    <div class="cost-cards">
+      <div class="cost-card">
+        <div class="cost-num">98.57%</div>
+        <div class="cost-lbl">比 GPT-4 Turbo 节省</div>
+        <div class="cost-note">V4-API 价格仅为 GPT-4 Turbo 的 1.43%</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-num">1/4 ~ 1/7</div>
+        <div class="cost-lbl">对比闭源旗舰折扣</div>
+        <div class="cost-note">Claude / GPT 的 API 成本是我们的 4-7 倍</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-num">90%+</div>
+        <div class="cost-lbl">企业部署成本降幅</div>
+        <div class="cost-note">开源权重 + 私有化部署，完全掌控数据</div>
+      </div>
+    </div>
+
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>供应商</th>
+          <th>模型</th>
+          <th>输入 / M</th>
+          <th>输出 / M</th>
+          <th>100万输出对比</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:rgba(61,220,151,0.05);">
+          <td><strong style="color:var(--accent2);">DeepSeek <span style="font-size:0.65rem; background:rgba(61,220,151,0.12); color:var(--green); padding:0.15rem 0.4rem; border-radius:3px; font-weight:700;">推荐</span></strong></td>
+          <td>V4-Pro</td>
+          <td class="price-green">¥6</td>
+          <td class="price-green">¥24</td>
+          <td style="color:var(--green); font-weight:700;">基准</td>
+        </tr>
+        <tr style="background:rgba(61,220,151,0.05);">
+          <td><strong style="color:var(--accent2);">DeepSeek</strong></td>
+          <td>V4-Flash</td>
+          <td class="price-green">¥0.5</td>
+          <td class="price-green">¥2</td>
+          <td style="color:var(--green); font-weight:700;">比 V4-Pro 再省 92%</td>
+        </tr>
+        <tr>
+          <td>OpenAI</td>
+          <td>GPT-4 Turbo</td>
+          <td style="color:var(--amber); font-weight:700;">$30 ≈ ¥217</td>
+          <td style="color:var(--amber); font-weight:700;">$60 ≈ ¥435</td>
+          <td>— 基准</td>
+        </tr>
+        <tr>
+          <td>Anthropic</td>
+          <td>Claude 3.5 Sonnet</td>
+          <td style="color:var(--amber); font-weight:700;">$15 ≈ ¥109</td>
+          <td style="color:var(--amber); font-weight:700;">$75 ≈ ¥543</td>
+          <td style="color:var(--red); font-weight:700;">贵 271x vs V4-Flash</td>
+        </tr>
+        <tr>
+          <td>Google</td>
+          <td>Gemini 2.0 Ultra</td>
+          <td style="color:var(--amber); font-weight:700;">$7.5 ≈ ¥54</td>
+          <td style="color:var(--amber); font-weight:700;">$30 ≈ ¥217</td>
+          <td style="color:var(--red); font-weight:700;">贵 108x vs V4-Flash</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="grid-3" style="margin-top:2rem;">
+      <div class="card">
+        <h4 style="font-family:var(--font-head); font-size:1rem; font-weight:800; margin-bottom:0.4rem;">应用开发民主化</h4>
+        <p style="font-size:0.88rem;">初创公司与独立开发者首次能以极低成本构建 AI 应用。GPT-4 时代需要谨慎评估的 API 费用，在 DeepSeek 时代几乎可以忽略不计。</p>
+      </div>
+      <div class="card">
+        <h4 style="font-family:var(--font-head); font-size:1rem; font-weight:800; margin-bottom:0.4rem;">企业 AI 转型加速</h4>
+        <p style="font-size:0.88rem;">AI 使用场景从"试点"走向"全面铺开"，大量此前因成本过高无法推进的 AI 自动化场景变得可行。</p>
+      </div>
+      <div class="card">
+        <h4 style="font-family:var(--font-head); font-size:1rem; font-weight:800; margin-bottom:0.4rem;">开源生态繁荣</h4>
+        <p style="font-size:0.88rem;">开源权重允许企业私有化部署，完全摆脱 API 费用束缚。DeepSeek 成为企业 AI 基础设施的首选开源底座。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     06 · OPEN SOURCE
+═══════════════════════════════════════════ -->
+<section id="opensource">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">06 · 开源生态</div>
+      <h2 class="section-title">MIT 完全开源</h2>
+      <p class="section-intro">全系列 MIT 协议，权重在 HuggingFace + ModelScope 公开，58 页技术报告详细披露训练细节。打破闭源巨头对 AI 能力的垄断。</p>
+    </div>
+
+    <div class="os-license-strip">
+      <div class="os-badge">MIT</div>
+      <div class="os-badge-text">
+        <h4>最宽松的开源协议 · 商业使用无限制</h4>
+        <p>允许任何人自由使用、复制、修改、分发和销售 DeepSeek 模型，包括商业用途。无需申请授权，无需注明出处（但建议注明 DeepSeek）。</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-label">开源内容</div>
+        <ul class="feat-list">
+          <li>模型权重（Model Weights）</li>
+          <li>58 页详细技术报告</li>
+          <li>完整训练代码与配置</li>
+          <li>推理部署工具链</li>
+          <li>基准测试代码与数据</li>
+          <li>Anthropic API 兼容接口</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-label">生态集成</div>
+        <ul class="feat-list">
+          <li>Ollama 本地运行</li>
+          <li>vLLM 高性能推理引擎</li>
+          <li>TensorRT-LLM 加速</li>
+          <li>SGLang 深度集成</li>
+          <li>LlamaIndex / LangChain 官方支持</li>
+          <li>华为昇腾 Day 0 适配</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-label">平台可用性</div>
+        <ul class="feat-list">
+          <li>HuggingFace · 全球最大开源模型平台</li>
+          <li>ModelScope · 阿里魔搭</li>
+          <li>SiliconFlow · 云端 API</li>
+          <li>Replicate · 云推理平台</li>
+          <li>官方 API · 官方渠道保障</li>
+          <li>私有化部署 · 企业内网自主</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-label">社区影响</div>
+        <ul class="feat-list">
+          <li>GitHub 星标数突破 50 万</li>
+          <li>全球开发者活跃度前三</li>
+          <li>累计下载量超 5000 万次</li>
+          <li>推动 LLaMA 3.1 跟进开源</li>
+          <li>《Nature》《Science》引用</li>
+          <li>全球科研机构广泛使用</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="platform-row">
+      <div class="platform-card">
+        <div class="pc-name">HuggingFace</div>
+        <div class="pc-desc">全球最大开源模型平台</div>
+      </div>
+      <div class="platform-card">
+        <div class="pc-name">ModelScope</div>
+        <div class="pc-desc">阿里云魔搭社区</div>
+      </div>
+      <div class="platform-card">
+        <div class="pc-name">SiliconFlow</div>
+        <div class="pc-desc">AI 应用开发平台</div>
+      </div>
+      <div class="platform-card">
+        <div class="pc-name">Replicate</div>
+        <div class="pc-desc">云端模型推理平台</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     07 · COMPETITIVE
+═══════════════════════════════════════════ -->
+<section id="competitive">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">07 · 竞品对比</div>
+      <h2 class="section-title">开源 vs 闭源</h2>
+      <p class="section-intro">DeepSeek V4 以开源 + 低成本 + 高性能三合一优势，成为闭源巨头的最强挑战者。</p>
+    </div>
+
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>模型</th>
+          <th>开源</th>
+          <th>参数量</th>
+          <th>上下文</th>
+          <th>输出价格</th>
+          <th>中文能力</th>
+          <th>部署</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:rgba(94,106,210,0.06);">
+          <td><strong style="color:var(--accent2);">DeepSeek V4-Pro</strong></td>
+          <td><span class="check">✓ MIT</span></td>
+          <td>1.6T（激活 49B）</td>
+          <td>1M</td>
+          <td><span class="price-green">¥24/M</span></td>
+          <td><span class="check">顶尖（93.1%）</span></td>
+          <td>开源/云/私有</td>
+        </tr>
+        <tr style="background:rgba(61,220,151,0.04);">
+          <td><strong style="color:var(--green);">DeepSeek V4-Flash</strong></td>
+          <td><span class="check">✓ MIT</span></td>
+          <td>284B</td>
+          <td>128K</td>
+          <td><span class="price-green">¥2/M</span></td>
+          <td><span class="check">顶尖（93.1%）</span></td>
+          <td>开源/云/私有</td>
+        </tr>
+        <tr>
+          <td>GPT-4.5 Turbo</td>
+          <td><span class="cross">✗ 闭源</span></td>
+          <td>未公开</td>
+          <td>128K</td>
+          <td style="color:var(--amber); font-weight:700;">$60 ≈ ¥435</td>
+          <td>良好（翻译腔）</td>
+          <td>仅云端</td>
+        </tr>
+        <tr>
+          <td>Claude 3.7 Sonnet</td>
+          <td><span class="cross">✗ 闭源</span></td>
+          <td>未公开</td>
+          <td>200K</td>
+          <td style="color:var(--amber); font-weight:700;">$75 ≈ ¥543</td>
+          <td>良好</td>
+          <td>仅云端</td>
+        </tr>
+        <tr>
+          <td>Gemini 2.0 Ultra</td>
+          <td><span class="cross">✗ 闭源</span></td>
+          <td>未公开</td>
+          <td>1M</td>
+          <td style="color:var(--amber); font-weight:700;">$30 ≈ ¥217</td>
+          <td>良好</td>
+          <td>仅云端</td>
+        </tr>
+        <tr>
+          <td>LLaMA 4 Scout</td>
+          <td><span class="check">✓ Llama 4</span></td>
+          <td>1090B（激活 400B）</td>
+          <td>1M</td>
+          <td>自部署</td>
+          <td>中等</td>
+          <td>开源私有</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="grid-2" style="margin-top:2rem;">
+      <div class="card" style="border-color:rgba(61,220,151,0.15);">
+        <h4 style="font-family:var(--font-head); font-size:1rem; font-weight:800; margin-bottom:0.4rem;">完全自主可控</h4>
+        <p style="font-size:0.88rem;">GPT-5、Claude、Gemini 均为闭源，无法私有化部署、数据必须上云。DeepSeek 权重开源，企业可完全掌控数据与模型。</p>
+      </div>
+      <div class="card" style="border-color:rgba(240,184,64,0.15);">
+        <h4 style="font-family:var(--font-head); font-size:1rem; font-weight:800; margin-bottom:0.4rem;">极致价格优势</h4>
+        <p style="font-size:0.88rem;">GPT-4 Turbo 输出价格是 V4-Flash 的 217 倍。即使是性价比著称的 Gemini 2.0 Ultra，DeepSeek V4-Flash 依然保持近 10x 优势。</p>
+      </div>
+      <div class="card" style="border-color:rgba(78,201,216,0.15);">
+        <h4 style="font-family:var(--font-head); font-size:1rem; font-weight:800; margin-bottom:0.4rem;">中文原生优势</h4>
+        <p style="font-size:0.88rem;">DeepSeek 对中文语境、俗语、成语、文化背景的理解深度明显优于英文语料为主的闭源模型。C-Eval 93.1% 即是证明。</p>
+      </div>
+      <div class="card" style="border-color:rgba(155,139,255,0.15);">
+        <h4 style="font-family:var(--font-head); font-size:1rem; font-weight:800; margin-bottom:0.4rem;">无厂商锁定风险</h4>
+        <p style="font-size:0.88rem;">使用闭源模型意味着依赖第三方，面临价格变动、服务中断、地缘政治等风险。开源模型让企业真正掌控自己的 AI 能力。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">DeepSeek V4</div>
+        <div style="font-family:var(--font-mono); font-size:0.78rem; color:var(--fg-dim); margin-top:0.4rem;">全球开源 AI 新格局</div>
+      </div>
+      <div class="footer-meta">
+        <div>深度调研报告 · 2026年4月</div>
+        <div style="margin-top:0.2rem;">数据来源：DeepSeek 官方技术报告 / 公开 Benchmark / 各厂商公开定价</div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
