@@ -1,0 +1,1960 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vLLM Semantic Router 深度研究报告</title>
+    <style>
+        :root {
+            --color-primary: #2563EB;
+            --color-secondary: #3B82F6;
+            --color-accent: #F97316;
+            --color-background: #0F172A;
+            --color-surface: #1E293B;
+            --color-surface-hover: #334155;
+            --color-foreground: #F8FAFC;
+            --color-foreground-muted: #94A3B8;
+            --color-border: #334155;
+            --color-success: #22C55E;
+            --color-warning: #EAB308;
+            --color-danger: #EF4444;
+            --color-code-bg: #0D1321;
+            --font-heading: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            --font-body: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            --font-mono: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", "Source Code Pro", monospace;
+            --shadow-glow: 0 0 20px rgba(37, 99, 235, 0.3);
+            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--color-background);
+            color: var(--color-foreground);
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--color-border);
+            padding: 0 24px;
+        }
+
+        .nav-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .nav-brand {
+            font-family: var(--font-heading);
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--color-foreground);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+
+        }
+
+        /* CSS Animations - lightweight alternative to JS */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .card, .stat-card, .algo-card {
+            animation: fadeInUp 0.5s ease forwards;
+        }
+
+        .card:nth-child(1), .stat-card:nth-child(1), .algo-card:nth-child(1) { animation-delay: 0.05s; }
+        .card:nth-child(2), .stat-card:nth-child(2), .algo-card:nth-child(2) { animation-delay: 0.1s; }
+        .card:nth-child(3), .stat-card:nth-child(3), .algo-card:nth-child(3) { animation-delay: 0.15s; }
+        .card:nth-child(4), .stat-card:nth-child(4), .algo-card:nth-child(4) { animation-delay: 0.2s; }
+        .card:nth-child(5), .stat-card:nth-child(5), .algo-card:nth-child(5) { animation-delay: 0.25s; }
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--color-foreground-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--color-primary);
+        }
+
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 120px 24px 80px;
+            background: linear-gradient(180deg, rgba(37, 99, 235, 0.1) 0%, transparent 50%);
+            position: relative;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 13px;
+            color: var(--color-foreground-muted);
+            margin-bottom: 24px;
+        }
+
+        .hero-badge .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--color-success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .hero h1 {
+            font-family: var(--font-heading);
+            font-size: clamp(36px, 6vw, 72px);
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--color-foreground) 0%, var(--color-primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(16px, 2vw, 20px);
+            color: var(--color-foreground-muted);
+            max-width: 800px;
+            margin: 0 auto 40px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        .section {
+            padding: 100px 0;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+
+        .section-label {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: var(--color-primary);
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-family: var(--font-heading);
+            font-size: clamp(28px, 4vw, 48px);
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .section-desc {
+            color: var(--color-foreground-muted);
+            max-width: 700px;
+            margin: 0 auto;
+            font-size: 18px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+        }
+
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .card-icon svg {
+            width: 24px;
+            height: 24px;
+            color: white;
+        }
+
+        .card h3 {
+            font-family: var(--font-heading);
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .card p {
+            color: var(--color-foreground-muted);
+            font-size: 15px;
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 20px;
+        }
+
+        @media (max-width: 1024px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: var(--font-heading);
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--color-primary);
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--color-foreground-muted);
+        }
+
+        /* Code Blocks */
+        .code-block {
+            background: var(--color-code-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: 20px 24px;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.7;
+            margin: 16px 0;
+        }
+
+        .code-block code {
+            color: var(--color-foreground);
+            white-space: pre;
+            display: block;
+            font-family: var(--font-mono);
+        }
+
+        .code-comment { color: #6B7280; }
+        .code-keyword { color: #C084FC; }
+        .code-string { color: #22C55E; }
+        .code-function { color: #60A5FA; }
+        .code-type { color: #F472B6; }
+        .code-number { color: #FBBF24; }
+
+        .code-title {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--color-foreground-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        /* Architecture Diagram */
+        .arch-diagram {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            overflow-x: auto;
+        }
+
+        .arch-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            min-width: 900px;
+        }
+
+        .arch-layer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .arch-layer-label {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--color-primary);
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .arch-box {
+            background: var(--color-background);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: 14px 20px;
+            text-align: center;
+            min-width: 120px;
+            transition: all 0.2s;
+        }
+
+        .arch-box:hover {
+            border-color: var(--color-primary);
+            transform: translateY(-2px);
+        }
+
+        .arch-box.primary {
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow-glow);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), transparent);
+        }
+
+        .arch-box h4 {
+            font-family: var(--font-heading);
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .arch-box span {
+            font-size: 11px;
+            color: var(--color-foreground-muted);
+        }
+
+        .arch-arrow {
+            text-align: center;
+            color: var(--color-primary);
+            font-size: 24px;
+            padding: 8px 0;
+        }
+
+        .arch-or {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--color-foreground-muted);
+            padding: 0 12px;
+        }
+
+        /* Data Flow */
+        .data-flow {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            margin: 32px 0;
+        }
+
+        .flow-step {
+            display: flex;
+            gap: 20px;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .flow-step:last-child {
+            border-bottom: none;
+        }
+
+        .flow-num {
+            width: 32px;
+            height: 32px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-heading);
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .flow-content h4 {
+            font-family: var(--font-heading);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .flow-content p {
+            font-size: 14px;
+            color: var(--color-foreground-muted);
+        }
+
+        /* Tables */
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border);
+            margin: 24px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        th {
+            font-family: var(--font-heading);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--color-foreground-muted);
+            background: var(--color-surface);
+        }
+
+        td {
+            font-size: 14px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: rgba(37, 99, 235, 0.05);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .tag-primary { background: rgba(37, 99, 235, 0.2); color: var(--color-primary); }
+        .tag-success { background: rgba(34, 197, 94, 0.2); color: var(--color-success); }
+        .tag-warning { background: rgba(234, 179, 8, 0.2); color: var(--color-warning); }
+        .tag-danger { background: rgba(239, 68, 68, 0.2); color: var(--color-danger); }
+
+        /* Signal Grid */
+        .signal-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .signal-item {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .signal-icon {
+            width: 36px;
+            height: 36px;
+            background: rgba(37, 99, 235, 0.2);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--color-primary);
+        }
+
+        .signal-item h4 {
+            font-family: var(--font-heading);
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .signal-item p {
+            font-size: 12px;
+            color: var(--color-foreground-muted);
+        }
+
+        /* Algorithm Cards */
+        .algo-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .algo-card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+        }
+
+        .algo-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .algo-card h4 {
+            font-family: var(--font-heading);
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .algo-tier {
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .tier-supported { background: rgba(34, 197, 94, 0.2); color: var(--color-success); }
+        .tier-experimental { background: rgba(234, 179, 8, 0.2); color: var(--color-warning); }
+
+        .algo-card p {
+            font-size: 14px;
+            color: var(--color-foreground-muted);
+            margin-bottom: 12px;
+        }
+
+        .algo-ref {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--color-primary);
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--color-border);
+            transform: translateX(-50%);
+        }
+
+        @media (max-width: 768px) {
+            .timeline::before {
+                left: 24px;
+            }
+        }
+
+        .timeline-item {
+            position: relative;
+            padding: 0 0 48px 0;
+            display: flex;
+            gap: 48px;
+        }
+
+        .timeline-item:nth-child(odd) {
+            flex-direction: row-reverse;
+        }
+
+        @media (max-width: 768px) {
+            .timeline-item,
+            .timeline-item:nth-child(odd) {
+                flex-direction: row;
+                padding-left: 64px;
+            }
+        }
+
+        .timeline-dot {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 14px;
+            height: 14px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 0 4px var(--color-background), 0 0 0 6px var(--color-primary);
+        }
+
+        @media (max-width: 768px) {
+            .timeline-dot {
+                left: 24px;
+            }
+        }
+
+        .timeline-content {
+            flex: 1;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 20px 24px;
+            max-width: 420px;
+        }
+
+        .timeline-date {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--color-primary);
+            margin-bottom: 6px;
+        }
+
+        .timeline-title {
+            font-family: var(--font-heading);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .timeline-desc {
+            font-size: 13px;
+            color: var(--color-foreground-muted);
+        }
+
+        /* Config Schema */
+        .config-example {
+            background: var(--color-code-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin: 24px 0;
+        }
+
+        .config-line {
+            display: flex;
+            gap: 16px;
+            padding: 4px 0;
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        .config-line-num {
+            color: var(--color-foreground-muted);
+            min-width: 24px;
+            text-align: right;
+            user-select: none;
+        }
+
+        .config-line-content {
+            flex: 1;
+        }
+
+        .indent-1 { padding-left: 24px; }
+        .indent-2 { padding-left: 48px; }
+        .indent-3 { padding-left: 72px; }
+
+        /* Feature List */
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list svg {
+            width: 18px;
+            height: 18px;
+            color: var(--color-success);
+            flex-shrink: 0;
+            margin-top: 3px;
+        }
+
+        /* Two Column */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+        }
+
+        @media (max-width: 1024px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Highlight Box */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(59, 130, 246, 0.05));
+            border: 1px solid var(--color-primary);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            font-family: var(--font-heading);
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--color-primary);
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            color: var(--color-foreground-muted);
+            font-size: 15px;
+        }
+
+        /* Quote */
+        .quote {
+            background: var(--color-surface);
+            border-left: 4px solid var(--color-primary);
+            padding: 24px 32px;
+            margin: 40px 0;
+            border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        }
+
+        .quote p {
+            font-size: 18px;
+            font-style: italic;
+            color: var(--color-foreground);
+            margin-bottom: 12px;
+        }
+
+        .quote cite {
+            font-size: 14px;
+            color: var(--color-foreground-muted);
+            font-style: normal;
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--color-surface);
+            border-top: 1px solid var(--color-border);
+            padding: 48px 24px;
+            text-align: center;
+        }
+
+        .footer p {
+            color: var(--color-foreground-muted);
+            font-size: 14px;
+        }
+
+        /* Utilities */
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mb-6 { margin-bottom: 24px; }
+        .mb-8 { margin-bottom: 32px; }
+        .mt-4 { margin-top: 16px; }
+        .mt-6 { margin-top: 24px; }
+        .mt-8 { margin-top: 32px; }
+        .text-center { text-align: center; }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .section { padding: 60px 0; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a href="#" class="nav-brand">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                vLLM Semantic Router
+            </a>
+            <ul class="nav-links">
+                <li><a href="#overview">概述</a></li>
+                <li><a href="#architecture">架构</a></li>
+                <li><a href="#signals">信号系统</a></li>
+                <li><a href="#decision">决策引擎</a></li>
+                <li><a href="#selection">模型选择</a></li>
+                <li><a href="#api">API</a></li>
+                <li><a href="#config">配置</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div>
+            <div class="hero-badge">
+                <span class="dot"></span>
+                深度技术分析 · 211k+ 行 Go 代码 · 50+ 贡献者
+            </div>
+            <h1>vLLM Semantic Router<br>深度研究报告</h1>
+            <p class="hero-subtitle">
+                系统级智能路由器 · 信号驱动决策引擎 · 10+ 种模型选择算法<br>
+                面向云、数据中心和边缘环境的 Mixture-of-Models 架构
+            </p>
+        </div>
+    </section>
+
+    <!-- Overview Section -->
+    <section class="section" id="overview">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Project Overview</p>
+                <h2 class="section-title">项目概述</h2>
+                <p class="section-desc">vLLM Semantic Router 是一个基于 Go 语言开发的企业级智能路由系统，核心代码超过 21 万行。</p>
+            </div>
+
+            <!-- Core Stats -->
+            <div class="stats-grid mb-8">
+                <div class="stat-card">
+                    <div class="stat-value">211k+</div>
+                    <div class="stat-label">Go 代码行数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">3.8k</div>
+                    <div class="stat-label">GitHub Stars</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">600+</div>
+                    <div class="stat-label">合并 PRs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">15+</div>
+                    <div class="stat-label">信号类型</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">10+</div>
+                    <div class="stat-label">选择算法</div>
+                </div>
+            </div>
+
+            <!-- Three Value Props -->
+            <div class="card-grid mb-8">
+                <div class="card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                        </svg>
+                    </div>
+                    <h3>Token 经济</h3>
+                    <p>智能模型选择 + 语义缓存，减少 token 浪费，最大化每 token 的价值输出。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <h3>LLM 安全</h3>
+                    <p>TruthLens 幻觉检测、PII 泄露防护、Jailbreak 攻击检测，三层安全体系。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6"/>
+                        </svg>
+                    </div>
+                    <h3>Fullmesh 智能</h3>
+                    <p>云-边-端协同，本地私有模型与前沿模型动态编排，跨域协调。</p>
+                </div>
+            </div>
+
+            <!-- Core Components -->
+            <h3 class="section-title mb-4">核心组件</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模块</th>
+                            <th>路径</th>
+                            <th>功能</th>
+                            <th>关键实现</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>决策引擎</strong></td>
+                            <td><code>pkg/decision/</code></td>
+                            <td>布尔表达式树求值</td>
+                            <td>AND/OR/NOT 逻辑，15+ 信号类型</td>
+                        </tr>
+                        <tr>
+                            <td><strong>分类器</strong></td>
+                            <td><code>pkg/classification/</code></td>
+                            <td>意图/安全/复杂多分类</td>
+                            <td>60+ Go 文件，多分类器协同</td>
+                        </tr>
+                        <tr>
+                            <td><strong>模型选择</strong></td>
+                            <td><code>pkg/selection/</code></td>
+                            <td>路由算法实现</td>
+                            <td>Elo/AutoMix/RouterDC/Hybrid 等</td>
+                        </tr>
+                        <tr>
+                            <td><strong>语义缓存</strong></td>
+                            <td><code>pkg/cache/</code></td>
+                            <td>响应缓存 + 命名空间隔离</td>
+                            <td>HMAC 用户隔离，CLS 优化</td>
+                        </tr>
+                        <tr>
+                            <td><strong>向量存储</strong></td>
+                            <td><code>pkg/vectorstore/</code></td>
+                            <td>Embedding 存储与检索</td>
+                            <td>Memory/Milvus/Valkey/LlamaStack</td>
+                        </tr>
+                        <tr>
+                            <td><strong>API 服务器</strong></td>
+                            <td><code>pkg/apiserver/</code></td>
+                            <td>REST/gRPC 接口</td>
+                            <td>OpenAI 兼容，/v1/chat/completions</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section class="section" id="architecture">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Technical Architecture</p>
+                <h2 class="section-title">技术架构</h2>
+                <p class="section-desc">信号驱动决策流程，模块化插件架构，支持热更新和动态配置。</p>
+            </div>
+
+            <!-- Architecture Flow -->
+            <div class="arch-diagram mb-8">
+                <div class="code-title">请求处理数据流</div>
+                <div class="arch-flow">
+                    <!-- Layer 1: Input -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-label">输入层</div>
+                    </div>
+                    <div class="arch-layer">
+                        <div class="arch-box primary">
+                            <h4>HTTP/gRPC</h4>
+                            <span>OpenAI 兼容 API</span>
+                        </div>
+                    </div>
+
+                    <div class="arch-arrow">↓</div>
+
+                    <!-- Layer 2: Signal Extraction -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-label">信号提取层</div>
+                    </div>
+                    <div class="arch-layer">
+                        <div class="arch-box"><h4>Keyword</h4><span>关键词匹配</span></div>
+                        <div class="arch-box"><h4>Embedding</h4><span>向量相似度</span></div>
+                        <div class="arch-box"><h4>Domain</h4><span>MMLU 分类</span></div>
+                        <div class="arch-box"><h4>Language</h4><span>语言检测</span></div>
+                        <div class="arch-box"><h4>Complexity</h4><span>复杂度分析</span></div>
+                        <div class="arch-box"><h4>Structure</h4><span>请求结构</span></div>
+                    </div>
+                    <div class="arch-layer">
+                        <div class="arch-box"><h4>Jailbreak</h4><span>越狱检测</span></div>
+                        <div class="arch-box"><h4>PII</h4><span>敏感信息</span></div>
+                        <div class="arch-box"><h4>FactCheck</h4><span>事实核查</span></div>
+                        <div class="arch-box"><h4>Authz</h4><span>授权验证</span></div>
+                        <div class="arch-box"><h4>Context</h4><span>上下文</span></div>
+                        <div class="arch-box"><h4>Feedback</h4><span>用户反馈</span></div>
+                    </div>
+
+                    <div class="arch-arrow">↓</div>
+
+                    <!-- Layer 3: Decision -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-label">决策层</div>
+                    </div>
+                    <div class="arch-layer">
+                        <div class="arch-box primary">
+                            <h4>DecisionEngine</h4>
+                            <span>布尔表达式树求值</span>
+                        </div>
+                    </div>
+
+                    <div class="arch-arrow">↓</div>
+
+                    <!-- Layer 4: Selection -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-label">选择层</div>
+                    </div>
+                    <div class="arch-layer">
+                        <div class="arch-box primary">
+                            <h4>Selector</h4>
+                            <span>Elo/AutoMix/RouterDC/Hybrid...</span>
+                        </div>
+                    </div>
+
+                    <div class="arch-arrow">↓</div>
+
+                    <!-- Layer 5: Model Pool -->
+                    <div class="arch-layer">
+                        <div class="arch-layer-label">模型池</div>
+                    </div>
+                    <div class="arch-layer">
+                        <div class="arch-box"><h4>GPT-4</h4><span>云端</span></div>
+                        <div class="arch-box"><h4>Claude</h4><span>云端</span></div>
+                        <div class="arch-box"><h4>Llama</h4><span>私有</span></div>
+                        <div class="arch-box"><h4>Qwen</h4><span>中文</span></div>
+                        <div class="arch-box"><h4>Mixtral</h4><span>MoE</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Code: Decision Engine -->
+            <div class="two-col">
+                <div>
+                    <h3 class="section-title mb-4">决策引擎实现</h3>
+                    <p class="mb-4" style="color: var(--color-foreground-muted);">
+                        决策引擎基于布尔表达式树，支持 AND/OR/NOT 逻辑运算。核心数据结构是 <code>RuleNode</code>，支持递归求值。
+                    </p>
+                    <div class="code-block">
+                        <div class="code-title">pkg/decision/engine.go</div>
+                        <code><span class="code-comment">// SignalMatches 包含所有匹配的信号</span>
+<span class="code-keyword">type</span> <span class="code-type">SignalMatches</span> <span class="code-keyword">struct</span> {
+    KeywordRules      []<span class="code-type">string</span>
+    EmbeddingRules    []<span class="code-type">string</span>
+    DomainRules       []<span class="code-type">string</span>
+    FactCheckRules    []<span class="code-type">string</span>
+    JailbreakRules    []<span class="code-type">string</span>
+    PIIRules          []<span class="code-type">string</span>
+    <span class="code-comment">// ... 15+ 信号类型</span>
+}
+
+<span class="code-comment">// 布尔表达式树节点</span>
+<span class="code-keyword">type</span> <span class="code-type">RuleNode</span> <span class="code-keyword">struct</span> {
+    Type       <span class="code-type">string</span>     <span class="code-comment">// 信号类型</span>
+    Name       <span class="code-type">string</span>     <span class="code-comment">// 规则名称</span>
+    Operator   <span class="code-type">string</span>     <span class="code-comment">// AND/OR/NOT</span>
+    Conditions []<span class="code-type">RuleNode</span> <span class="code-comment">// 子节点</span>
+}
+
+<span class="code-comment">// 递归求值入口</span>
+<span class="code-keyword">func</span> <span class="code-function">(e *DecisionEngine)</span> <span class="code-function">evalNode</span>(
+    node <span class="code-type">RuleNode</span>,
+    signals *<span class="code-type">SignalMatches</span>,
+) (matched <span class="code-type">bool</span>, confidence <span class="code-type">float64</span>) {
+    <span class="code-keyword">if</span> node.IsLeaf() {
+        <span class="code-keyword">return</span> e.<span class="code-function">evalLeaf</span>(node.Type, node.Name, signals)
+    }
+    <span class="code-keyword">switch</span> node.Operator {
+    <span class="code-keyword">case</span> <span class="code-string">"AND"</span>: <span class="code-keyword">return</span> e.<span class="code-function">evalAND</span>(...)
+    <span class="code-keyword">case</span> <span class="code-string">"OR"</span>:  <span class="code-keyword">return</span> e.<span class="code-function">evalOR</span>(...)
+    <span class="code-keyword">case</span> <span class="code-string">"NOT"</span>: <span class="code-keyword">return</span> e.<span class="code-function">evalNOT</span>(...)
+    }
+}</code>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="section-title mb-4">Registry 依赖注入</h3>
+                    <p class="mb-4" style="color: var(--color-foreground-muted);">
+                        系统使用 Registry 模式管理运行时依赖，支持配置热更新和组件动态替换。
+                    </p>
+                    <div class="code-block">
+                        <div class="code-title">pkg/routerruntime/registry.go</div>
+                        <code><span class="code-comment">// Registry 是运行时依赖共享的窄接口</span>
+<span class="code-keyword">type</span> <span class="code-type">Registry</span> <span class="code-keyword">struct</span> {
+    mu                    <span class="code-type">sync.RWMutex</span>
+    config                *<span class="code-type">config.RouterConfig</span>
+    classificationService *<span class="code-type">services.ClassificationService</span>
+    memoryStore           <span class="code-type">memory.Store</span>
+    vectorStore           *<span class="code-type">VectorStoreRuntime</span>
+}
+
+<span class="code-comment">// 线程安全的配置更新</span>
+<span class="code-keyword">func</span> <span class="code-function">(r *Registry)</span> <span class="code-function">UpdateConfig</span>(
+    cfg *<span class="code-type">config.RouterConfig</span>,
+) {
+    r.mu.<span class="code-function">Lock</span>()
+    <span class="code-keyword">defer</span> r.mu.<span class="code-function">Unlock</span>()
+    r.config = cfg
+}
+
+<span class="code-comment">// 刷新运行时配置</span>
+<span class="code-keyword">func</span> <span class="code-function">(r *Registry)</span> <span class="code-function">RefreshRuntimeConfig</span>(
+    newCfg *<span class="code-type">config.RouterConfig</span>,
+) {
+    r.<span class="code-function">UpdateConfig</span>(newCfg)
+    <span class="code-keyword">if</span> service := r.<span class="code-function">ClassificationService</span>();
+        service != <span class="code-keyword">nil</span> {
+        service.<span class="code-function">RefreshRuntimeConfig</span>(newCfg)
+    }
+}</code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vector Store -->
+            <h3 class="section-title mt-8 mb-4">向量存储后端</h3>
+            <div class="card-grid">
+                <div class="card">
+                    <h3>Memory</h3>
+                    <p>轻量级内存存储，适用开发和测试。最多 100,000 条目。</p>
+                    <div class="code-block" style="margin-top: 12px;">
+                        <code>backendType: <span class="code-string">memory</span>
+maxEntriesPerStore: <span class="code-number">100000</span></code>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Milvus</h3>
+                    <p>分布式向量数据库，适合大规模生产部署。</p>
+                    <div class="code-block" style="margin-top: 12px;">
+                        <code>backendType: <span class="code-string">milvus</span>
+connection:
+  host: <span class="code-string">"localhost"</span>
+  port: <span class="code-number">19530</span></code>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Valkey</h3>
+                    <p>内存数据库 + 向量索引，低延迟场景。</p>
+                    <div class="code-block" style="margin-top: 12px;">
+                        <code>backendType: <span class="code-string">valkey</span>
+metricType: <span class="code-string">"COSINE"</span>
+indexM: <span class="code-number">100</span>
+indexEf: <span class="code-number">256</span></code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Signals Section -->
+    <section class="section" id="signals">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Signal Classification System</p>
+                <h2 class="section-title">信号分类系统</h2>
+                <p class="section-desc">15+ 种信号类型支撑灵活路由决策，每种信号针对特定场景优化。</p>
+            </div>
+
+            <!-- Signal Grid -->
+            <div class="signal-grid mb-8">
+                <div class="signal-item">
+                    <div class="signal-icon">KW</div>
+                    <div>
+                        <h4>Keyword</h4>
+                        <p>关键词精确匹配</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">EM</div>
+                    <div>
+                        <h4>Embedding</h4>
+                        <p>语义向量相似度</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">DM</div>
+                    <div>
+                        <h4>Domain</h4>
+                        <p>MMLU 领域分类</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">FC</div>
+                    <div>
+                        <h4>FactCheck</h4>
+                        <p>事实核查信号</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">JB</div>
+                    <div>
+                        <h4>Jailbreak</h4>
+                        <p>越狱攻击检测</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">PI</div>
+                    <div>
+                        <h4>PII</h4>
+                        <p>个人身份信息</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">LG</div>
+                    <div>
+                        <h4>Language</h4>
+                        <p>语言识别</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">CX</div>
+                    <div>
+                        <h4>Context</h4>
+                        <p>Token 数量上下文</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">ST</div>
+                    <div>
+                        <h4>Structure</h4>
+                        <p>请求结构分析</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">CM</div>
+                    <div>
+                        <h4>Complexity</h4>
+                        <p>复杂度评估</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">MD</div>
+                    <div>
+                        <h4>Modality</h4>
+                        <p>模态分类</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">AZ</div>
+                    <div>
+                        <h4>Authz</h4>
+                        <p>用户级授权</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">FB</div>
+                    <div>
+                        <h4>Feedback</h4>
+                        <p>用户反馈信号</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">PR</div>
+                    <div>
+                        <h4>Preference</h4>
+                        <p>外部 LLM 偏好</p>
+                    </div>
+                </div>
+                <div class="signal-item">
+                    <div class="signal-icon">RE</div>
+                    <div>
+                        <h4>Reask</h4>
+                        <p>重问检测</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Classifier Implementation -->
+            <h3 class="section-title mb-4">统一分类器实现</h3>
+            <div class="code-block mb-6">
+                <div class="code-title">pkg/classification/classifier.go</div>
+                <code><span class="code-comment">// Classifier 统一分类器，整合多种分类能力</span>
+<span class="code-keyword">type</span> <span class="code-type">Classifier</span> <span class="code-keyword">struct</span> {
+    <span class="comment">// 内部分类器</span>
+    categoryInitializer   <span class="code-type">CategoryInitializer</span>
+    jailbreakInitializer <span class="code-type">JailbreakInitializer</span>
+    piiInitializer       <span class="code-type">PIIInitializer</span>
+    keywordClassifier    *<span class="code-type">KeywordClassifier</span>
+    embeddingClassifier   *<span class="code-type">EmbeddingClassifier</span>
+
+    <span class="comment">// 安全相关</span>
+    factCheckClassifier   *<span class="code-type">FactCheckClassifier</span>
+    hallucinationDetector *<span class="code-type">HallucinationDetector</span>
+    feedbackDetector      *<span class="code-type">FeedbackDetector</span>
+
+    <span class="comment">// 高级分类器</span>
+    languageClassifier    *<span class="code-type">LanguageClassifier</span>
+    complexityClassifier  *<span class="code-type">ComplexityClassifier</span>
+    structureClassifier   *<span class="code-type">StructureClassifier</span>
+    authzClassifier       *<span class="code-type">AuthzClassifier</span>
+
+    <span class="comment">// 配置映射</span>
+    CategoryMapping  *<span class="code-type">CategoryMapping</span>
+    PIIMapping       *<span class="code-type">PIIMapping</span>
+    JailbreakMapping *<span class="code-type">JailbreakMapping</span>
+}</code>
+            </div>
+
+            <!-- TruthLens -->
+            <div class="highlight-box">
+                <h4>TruthLens 幻觉检测框架</h4>
+                <p>集成在推理网关层，提供三层缓解模式：</p>
+                <ul class="feature-list" style="margin-top: 12px;">
+                    <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        <div><strong>Lightweight</strong> — 单轮检测 + 警告注入，低延迟</div>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        <div><strong>Standard</strong> — 迭代自 refinement（同一模型）</div>
+                    </li>
+                    <li>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        <div><strong>Premium</strong> — 多模型交叉验证 + 协作修正</div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Decision Engine Section -->
+    <section class="section" id="decision">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Decision Engine</p>
+                <h2 class="section-title">决策引擎</h2>
+                <p class="section-desc">基于布尔表达式树的规则引擎，支持复杂的信号组合逻辑。</p>
+            </div>
+
+            <!-- Decision Flow -->
+            <div class="data-flow">
+                <h3 class="mb-4">决策流程</h3>
+                <div class="flow-step">
+                    <div class="flow-num">1</div>
+                    <div class="flow-content">
+                        <h4>收集信号 (Collect Signals)</h4>
+                        <p>从请求中提取 15+ 种信号，构建 SignalMatches 结构体</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-num">2</div>
+                    <div class="flow-content">
+                        <h4>规则匹配 (Rule Matching)</h4>
+                        <p>遍历配置的决策规则，对每个规则的布尔表达式树求值</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-num">3</div>
+                    <div class="flow-content">
+                        <h4>置信度计算 (Confidence Calculation)</h4>
+                        <p>根据匹配的信号计算决策置信度 (0.0-1.0)</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-num">4</div>
+                    <div class="flow-content">
+                        <h4>策略选择 (Strategy Selection)</h4>
+                        <p>根据配置策略 (priority/confidence/tiered) 选择最优决策</p>
+                    </div>
+                </div>
+                <div class="flow-step">
+                    <div class="flow-num">5</div>
+                    <div class="flow-content">
+                        <h4>模型路由 (Model Routing)</h4>
+                        <p>将决策结果传递给选择层，选择具体模型执行</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Decision Config -->
+            <h3 class="section-title mb-4">决策配置结构</h3>
+            <div class="config-example">
+                <div class="code-title">YAML 配置示例</div>
+                <div class="config-line"><span class="config-line-num">1</span><span class="config-line-content"><span class="code-keyword">decisions</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">2</span><span class="config-line-content indent-1">- <span class="code-keyword">name</span>: <span class="code-string">"math_routing"</span></span></div>
+                <div class="config-line"><span class="config-line-num">3</span><span class="config-line-content indent-2"><span class="code-keyword">priority</span>: <span class="code-number">10</span></span></div>
+                <div class="config-line"><span class="config-line-num">4</span><span class="config-line-content indent-2"><span class="code-keyword">tier</span>: <span class="code-number">1</span></span></div>
+                <div class="config-line"><span class="config-line-num">5</span><span class="config-line-content indent-2"><span class="code-keyword">rules</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">6</span><span class="config-line-content indent-3"><span class="code-keyword">operator</span>: <span class="code-string">"AND"</span></span></div>
+                <div class="config-line"><span class="config-line-num">7</span><span class="config-line-content indent-3"><span class="code-keyword">conditions</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">8</span><span class="config-line-content indent-3">  - <span class="code-keyword">type</span>: <span class="code-string">"embedding"</span></span></div>
+                <div class="config-line"><span class="config-line-num">9</span><span class="config-line-content indent-3">    <span class="code-keyword">name</span>: <span class="code-string">"math_category"</span></span></div>
+                <div class="config-line"><span class="config-line-num">10</span><span class="config-line-content indent-3">  - <span class="code-keyword">type</span>: <span class="code-string">"domain"</span></span></div>
+                <div class="config-line"><span class="config-line-num">11</span><span class="config-line-content indent-3">    <span class="code-keyword">name</span>: <span class="code-string">"mathematics"</span></span></div>
+                <div class="config-line"><span class="config-line-num">12</span><span class="config-line-content indent-1"><span class="code-keyword">modelRefs</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">13</span><span class="config-line-content indent-2">- <span class="code-keyword">model</span>: <span class="code-string">"qwen-math"</span></span></div>
+                <div class="config-line"><span class="config-line-num">14</span><span class="config-line-content indent-2">  <span class="code-keyword">weight</span>: <span class="code-number">0.9</span></span></div>
+            </div>
+
+            <!-- Selection Strategies -->
+            <h3 class="section-title mb-4">选择策略</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>策略</th>
+                            <th>行为</th>
+                            <th>适用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>priority</strong></td>
+                            <td>按 priority 字段降序，然后 confidence 降序</td>
+                            <td>确定性强的业务规则</td>
+                        </tr>
+                        <tr>
+                            <td><strong>confidence</strong></td>
+                            <td>按 confidence 降序，然后 priority 降序</td>
+                            <td>需要参考置信度的场景</td>
+                        </tr>
+                        <tr>
+                            <td><strong>tiered</strong></td>
+                            <td>先按 tier 升序（1 &lt; 2 &lt; 3），同 tier 内按 confidence</td>
+                            <td>分层部署，按模型能力分级</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Model Selection Section -->
+    <section class="section" id="selection">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Model Selection Algorithms</p>
+                <h2 class="section-title">模型选择算法</h2>
+                <p class="section-desc">从生产级到实验级，10+ 种算法满足不同场景需求。</p>
+            </div>
+
+            <!-- Production Algorithms -->
+            <h3 class="mb-4">生产级算法</h3>
+            <div class="algo-cards mb-8">
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>Elo</h4>
+                        <span class="algo-tier tier-supported">GA</span>
+                    </div>
+                    <p>基于 Bradley-Terry 模型的 Elo 评分系统，通过成对比较学习模型性能。</p>
+                    <div class="algo-ref">参考: RouteLLM (arXiv:2406.18665)</div>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>RouterDC</h4>
+                        <span class="algo-tier tier-supported">GA</span>
+                    </div>
+                    <p>双重对比学习路由，学习查询嵌入与特定模型能力的匹配。</p>
+                    <div class="algo-ref">参考: arXiv:2409.19886</div>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>AutoMix</h4>
+                        <span class="algo-tier tier-supported">GA</span>
+                    </div>
+                    <p>POMDP 级联路由，先用小模型，置信度低时自动升级到大模型。</p>
+                    <div class="algo-ref">参考: arXiv:2310.12963</div>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>Hybrid</h4>
+                        <span class="algo-tier tier-supported">GA</span>
+                    </div>
+                    <p>多算法混合，支持配置 Elo + embedding + cost 的权重组合。</p>
+                    <div class="algo-ref">参考: arXiv:2404.14618</div>
+                </div>
+            </div>
+
+            <!-- Experimental Algorithms -->
+            <h3 class="mb-4">实验级算法</h3>
+            <div class="algo-cards mb-8">
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>KNN</h4>
+                        <span class="algo-tier tier-experimental">Exp</span>
+                    </div>
+                    <p>K 近邻算法，找相似历史查询，质量加权投票。</p>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>KMeans</h4>
+                        <span class="algo-tier tier-experimental">Exp</span>
+                    </div>
+                    <p>K 均值聚类，按质量和延迟分数分配模型。</p>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>MLP</h4>
+                        <span class="algo-tier tier-experimental">Exp</span>
+                    </div>
+                    <p>多层感知机分类器，使用 Candle GPU 加速推理。</p>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>RLDriven</h4>
+                        <span class="algo-tier tier-experimental">Exp</span>
+                    </div>
+                    <p>强化学习路由，实现 Router-R1 奖励结构。</p>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>GMTRouter</h4>
+                        <span class="algo-tier tier-experimental">Exp</span>
+                    </div>
+                    <p>异构图学习，从多轮交互中学习用户偏好。</p>
+                </div>
+                <div class="algo-card">
+                    <div class="algo-card-header">
+                        <h4>LatencyAware</h4>
+                        <span class="algo-tier tier-experimental">Exp</span>
+                    </div>
+                    <p>基于 TPOT/TTFT 百分位数据的延迟感知选择。</p>
+                </div>
+            </div>
+
+            <!-- AutoMix Detail -->
+            <h3 class="section-title mb-4">AutoMix 详解</h3>
+            <div class="two-col">
+                <div>
+                    <div class="code-block">
+                        <div class="code-title">AutoMixConfig</div>
+                        <code><span class="code-keyword">type</span> <span class="code-type">AutoMixConfig</span> <span class="code-keyword">struct</span> {
+    <span class="comment">// 置信度阈值，低于此值触发升级</span>
+    VerificationThreshold <span class="code-type">float64</span> <span class="code-string">`yaml:"verification_threshold"`</span>
+
+    <span class="comment">// 最大升级次数</span>
+    MaxEscalations <span class="code-type">int</span> <span class="code-string">`yaml:"max_escalations"`</span>
+
+    <span class="comment">// POMDP 折扣因子</span>
+    DiscountFactor <span class="code-type">float64</span> <span class="code-string">`yaml:"discount_factor"`</span>
+
+    <span class="comment">// 启用自验证</span>
+    EnableSelfVerification <span class="code-type">bool</span> <span class="code-string">`yaml:"enable_self_verification"`</span>
+
+    <span class="comment">// 信念粒子数</span>
+    BeliefParticles <span class="code-type">int</span> <span class="code-string">`yaml:"belief_particles"`</span>
+}</code>
+                    </div>
+                </div>
+                <div>
+                    <div class="data-flow" style="margin: 0;">
+                        <h4 class="mb-4">三级联路由流程</h4>
+                        <div class="flow-step">
+                            <div class="flow-num">1</div>
+                            <div class="flow-content">
+                                <h4>Generate</h4>
+                                <p>从最小/最便宜的模型开始生成答案</p>
+                            </div>
+                        </div>
+                        <div class="flow-step">
+                            <div class="flow-num">2</div>
+                            <div class="flow-content">
+                                <h4>Self-Verify</h4>
+                                <p>同一模型通过蕴含检查验证答案正确性</p>
+                            </div>
+                        </div>
+                        <div class="flow-step">
+                            <div class="flow-num">3</div>
+                            <div class="flow-content">
+                                <h4>Route</h4>
+                                <p>置信度低于阈值时自动升级到更大模型</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- API Section -->
+    <section class="section" id="api">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">API Specification</p>
+                <h2 class="section-title">API 规范</h2>
+                <p class="section-desc">OpenAI 兼容 REST API，支持流式输出和路由元数据。</p>
+            </div>
+
+            <!-- API Endpoints -->
+            <div class="table-wrapper mb-8">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>端点</th>
+                            <th>方法</th>
+                            <th>描述</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>/v1/chat/completions</code></td>
+                            <td><span class="tag tag-primary">POST</span></td>
+                            <td>聊天补全，model="MoM" 启用智能路由</td>
+                        </tr>
+                        <tr>
+                            <td><code>/v1/models</code></td>
+                            <td><span class="tag tag-primary">GET</span></td>
+                            <td>列出可用模型</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/v1/classify/intent</code></td>
+                            <td><span class="tag tag-primary">POST</span></td>
+                            <td>意图分类</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/v1/classify/security</code></td>
+                            <td><span class="tag tag-primary">POST</span></td>
+                            <td>安全检测</td>
+                        </tr>
+                        <tr>
+                            <td><code>/api/v1/feedback</code></td>
+                            <td><span class="tag tag-primary">POST</span></td>
+                            <td>提交反馈</td>
+                        </tr>
+                        <tr>
+                            <td><code>/metrics/classification</code></td>
+                            <td><span class="tag tag-success">GET</span></td>
+                            <td>分类指标</td>
+                        </tr>
+                        <tr>
+                            <td><code>/health</code></td>
+                            <td><span class="tag tag-success">GET</span></td>
+                            <td>健康检查</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- API Example -->
+            <h3 class="section-title mb-4">请求示例</h3>
+            <div class="two-col">
+                <div>
+                    <div class="code-block">
+                        <div class="code-title">聊天完成请求</div>
+                        <code>{
+  <span class="code-string">"model"</span>: <span class="code-string">"MoM"</span>,
+  <span class="code-string">"messages"</span>: [
+    {<span class="code-string">"role"</span>: <span class="code-string">"user"</span>, <span class="code-string">"content"</span>: <span class="code-string">"求导: y = x^2 + 3x - 7"</span>}
+  ],
+  <span class="code-string">"max_tokens"</span>: <span class="code-number">150</span>
+}</code>
+                    </div>
+                </div>
+                <div>
+                    <div class="code-block">
+                        <div class="code-title">路由响应</div>
+                        <code>{
+  <span class="code-string">"routing_metadata"</span>: {
+    <span class="code-string">"selected_model"</span>: <span class="code-string">"qwen-math"</span>,
+    <span class="code-string">"confidence"</span>: <span class="code-number">0.96</span>,
+    <span class="code-string">"processing_time_ms"</span>: <span class="code-number">15</span>,
+    <span class="code-string">"cache_hit"</span>: <span class="code-keyword">false</span>,
+    <span class="code-string">"security_checks"</span>: {
+      <span class="code-string">"pii_detected"</span>: <span class="code-keyword">false</span>,
+      <span class="code-string">"jailbreak_detected"</span>: <span class="code-keyword">false</span>
+    }
+  }
+}</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Config Section -->
+    <section class="section" id="config">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Configuration Schema</p>
+                <h2 class="section-title">配置架构</h2>
+                <p class="section-desc">YAML 格式配置，支持模型定义、信号配置、决策规则和向量存储。</p>
+            </div>
+
+            <!-- Full Config Example -->
+            <div class="config-example">
+                <div class="code-title">完整配置示例</div>
+                <div class="config-line"><span class="config-line-num">1</span><span class="config-line-content"><span class="code-comment"># 路由器配置</span></span></div>
+                <div class="config-line"><span class="config-line-num">2</span><span class="config-line-content"><span class="code-keyword">router</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">3</span><span class="config-line-content indent-1"><span class="code-comment"># 模型定义</span></span></div>
+                <div class="config-line"><span class="config-line-num">4</span><span class="config-line-content indent-1"><span class="code-keyword">models</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">5</span><span class="config-line-content indent-2">- <span class="code-keyword">name</span>: <span class="code-string">"gpt-4o-mini"</span></span></div>
+                <div class="config-line"><span class="config-line-num">6</span><span class="config-line-content indent-3"><span class="code-keyword">endpoint</span>: <span class="code-string">"https://api.openai.com"</span></span></div>
+                <div class="config-line"><span class="config-line-num">7</span><span class="config-line-content indent-3"><span class="code-keyword">strategy</span>: <span class="code-string">"chat"</span></span></div>
+                <div class="config-line"><span class="config-line-num">8</span><span class="config-line-content indent-1 indent-2">- <span class="code-keyword">name</span>: <span class="code-string">"qwen-math"</span></span></div>
+                <div class="config-line"><span class="config-line-num">9</span><span class="config-line-content indent-3"><span class="code-keyword">endpoint</span>: <span class="code-string">"https://api.example.com"</span></span></div>
+                <div class="config-line"><span class="config-line-num">10</span><span class="config-line-content indent-3"><span class="code-keyword">capabilities</span>: [<span class="code-string">"math"</span>, <span class="code-string">"reasoning"</span>]</span></div>
+                <div class="config-line"><span class="config-line-num">11</span><span class="config-line-content indent-1"><span class="code-comment"># 信号配置</span></span></div>
+                <div class="config-line"><span class="config-line-num">12</span><span class="config-line-content indent-1"><span class="code-keyword">signals</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">13</span><span class="config-line-content indent-2"><span class="code-keyword">embedding</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">14</span><span class="config-line-content indent-3"><span class="code-keyword">model</span>: <span class="code-string">"BAAI/bge-small-en-v1.5"</span></span></div>
+                <div class="config-line"><span class="config-line-num">15</span><span class="config-line-content indent-3"><span class="code-keyword">dimension</span>: <span class="code-number">512</span></span></div>
+                <div class="config-line"><span class="config-line-num">16</span><span class="config-line-content indent-1"><span class="code-comment"># 向量存储</span></span></div>
+                <div class="config-line"><span class="config-line-num">17</span><span class="config-line-content indent-1"><span class="code-keyword">vectorStore</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">18</span><span class="config-line-content indent-2"><span class="code-keyword">backendType</span>: <span class="code-string">"memory"</span></span></div>
+                <div class="config-line"><span class="config-line-num">19</span><span class="config-line-content indent-2"><span class="code-keyword">embeddingModel</span>: <span class="code-string">"BAAI/bge-small-en-v1.5"</span></span></div>
+                <div class="config-line"><span class="config-line-num">20</span><span class="config-line-content indent-2"><span class="code-keyword">embeddingDimension</span>: <span class="code-number">512</span></span></div>
+                <div class="config-line"><span class="config-line-num">21</span><span class="config-line-content indent-1"><span class="code-comment"># 算法选择</span></span></div>
+                <div class="config-line"><span class="config-line-num">22</span><span class="config-line-content indent-1"><span class="code-keyword">algorithm</span>:</span></div>
+                <div class="config-line"><span class="config-line-num">23</span><span class="config-line-content indent-2"><span class="code-keyword">type</span>: <span class="code-string">"automix"</span></span></div>
+                <div class="config-line"><span class="config-line-num">24</span><span class="config-line-content indent-2"><span class="code-keyword">verificationThreshold</span>: <span class="code-number">0.7</span></span></div>
+                <div class="config-line"><span class="config-line-num">25</span><span class="config-line-content indent-2"><span class="code-keyword">maxEscalations</span>: <span class="code-number">2</span></span></div>
+            </div>
+
+            <!-- Cache Config -->
+            <h3 class="section-title mb-4">语义缓存</h3>
+            <div class="code-block">
+                <div class="code-title">pkg/cache/cache.go</div>
+                <code><span class="code-comment">// 用户级命名空间隔离，防止跨用户缓存污染</span>
+<span class="code-keyword">const</span> scopeNamespaceRepeat = <span class="code-number">3</span>
+
+<span class="code-keyword">func</span> <span class="code-function">ScopeQueryToUser</span>(query <span class="code-type">string</span>, userID <span class="code-type">string</span>) <span class="code-type">string</span> {
+    <span class="code-keyword">if</span> userID == <span class="code-string">""</span> || query == <span class="code-string">""</span> {
+        <span class="code-keyword">return</span> query
+    }
+    <span class="code-comment">// HMAC-SHA256 保护用户 ID 不被暴露</span>
+    namespace := <span class="code-function">userScopeNamespace</span>(userID)
+    tokens := <span class="code-function">make</span>([]<span class="code-type">string</span>, scopeNamespaceRepeat)
+    <span class="code-keyword">for</span> i := <span class="code-keyword">range</span> tokens {
+        tokens[i] = namespace
+    }
+    <span class="code-keyword">return</span> <span class="code-function">fmt.Sprintf</span>(<span class="code-string">"cache-scope %s %s"</span>,
+        <span class="code-function">strings.Join</span>(tokens, <span class="code-string">" "</span>), query)
+}</code>
+            </div>
+        </div>
+    </section>
+
+    <!-- Timeline Section -->
+    <section class="section">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Development Timeline</p>
+                <h2 class="section-title">发展历程</h2>
+                <p class="section-desc">从 2025 年 9 月到 2026 年 3 月，快速迭代中。</p>
+            </div>
+
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2025/09/01</div>
+                        <div class="timeline-title">项目正式发布</div>
+                        <div class="timeline-desc">vLLM Semantic Router: Next Phase in LLM inference</div>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2025/10/12</div>
+                        <div class="timeline-title">论文被接受</div>
+                        <div class="timeline-desc">When to Reason: Semantic Router for vLLM</div>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2025/11/03</div>
+                        <div class="timeline-title">论文发表</div>
+                        <div class="timeline-desc">Category-Aware Semantic Caching for Heterogeneous LLM Workloads</div>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2025/12/16</div>
+                        <div class="timeline-title">AMD 合作</div>
+                        <div class="timeline-desc">GPU 资源和 ROCm 软件支持</div>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2026/01/05</div>
+                        <div class="timeline-title">v0.1 Iris 发布</div>
+                        <div class="timeline-desc">首个重要版本，50+ 工程师贡献</div>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2026/02/27</div>
+                        <div class="timeline-title">白皮书发布</div>
+                        <div class="timeline-desc">Signal Driven Decision Routing for Mixture-of-Modality Models</div>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2026/03/10</div>
+                        <div class="timeline-title">v0.2 Athena 发布</div>
+                        <div class="timeline-desc">第二个重要版本，重构模型栈</div>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">2026/03/24</div>
+                        <div class="timeline-title">愿景论文发布</div>
+                        <div class="timeline-desc">The Workload-Router-Pool Architecture for LLM Inference Optimization</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Conclusion -->
+    <section class="section">
+        <div class="container">
+            <div class="section-header">
+                <p class="section-label">Key Findings</p>
+                <h2 class="section-title">关键结论</h2>
+            </div>
+
+            <div class="card-grid mb-8">
+                <div class="card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        </svg>
+                    </div>
+                    <h3>系统级定位最高</h3>
+                    <p>面向 AI 基础设施层，支持云-边-端混合部署，是目前定位最高的开源语义路由项目。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                        </svg>
+                    </div>
+                    <h3>信号驱动架构</h3>
+                    <p>15+ 种信号类型支撑灵活决策，布尔表达式树支持复杂规则组合和动态更新。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10"/>
+                            <line x1="12" y1="20" x2="12" y2="4"/>
+                            <line x1="6" y1="20" x2="6" y2="14"/>
+                        </svg>
+                    </div>
+                    <h3>算法丰富</h3>
+                    <p>10+ 种选择算法，从生产级 Elo/AutoMix 到实验级 RLDriven，覆盖各类场景。</p>
+                </div>
+                <div class="card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                    </div>
+                    <h3>安全内置</h3>
+                    <p>TruthLens 幻觉检测、PII/Jailbreak 防护，三层安全体系满足企业合规需求。</p>
+                </div>
+            </div>
+
+            <div class="quote">
+                <p>"vLLM Semantic Router 是一个信号驱动的智能路由器，位于用户和模型之间，从请求、响应和上下文捕获信号，做出智能路由决策。"</p>
+                <cite>— 官方项目描述</cite>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>vLLM Semantic Router 深度技术研究报告 · 2026 · 基于 v0.2 Athena 版本分析</p>
+    </footer>
+
+    <script>
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
