@@ -1,5 +1,5 @@
-site_name: AI Docs Template
-site_description: 本地 AI 生成内容，发布到公网的模板项目
+site_name: AI Docs Center
+site_description: 多项目文档中心 - 本地 AI 生成，发布到公网
 site_url: https://yyzxw.github.io/acknowledge/
 
 theme:
@@ -26,14 +26,13 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Documents:
-      - Getting Started: getting-started.md
-      - Examples: examples.md
-  - About: about.md
+  - Projects:
+      - Project A: project-a/index.md
+      - Project B: project-b/index.md
+      - Project C: project-c/index.md
 
 repo_name: yyzxw/acknowledge
 repo_url: https://github.com/yyzxw/acknowledge
-edit_uri: blob/main/docs/
 
 plugins:
   - search
