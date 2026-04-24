@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Docs Portal</title>
+  <title>DaoCloud Token Factory · 项目入口</title>
   <style>
     :root {
       --bg-0: #060a12;
@@ -29,11 +29,9 @@
       --shadow-gold: 0 0 42px rgba(246, 189, 75, 0.14);
     }
 
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      margin: 0;
-      padding: 0;
       min-height: 100%;
       font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       color: var(--text);
@@ -66,10 +64,7 @@
       padding: 64px 40px 80px;
     }
 
-    header.hero {
-      text-align: center;
-      margin-bottom: 56px;
-    }
+    header.hero { text-align: center; margin-bottom: 56px; }
 
     .brand-chip {
       display: inline-flex;
@@ -85,13 +80,16 @@
       text-transform: uppercase;
       box-shadow: var(--shadow-soft);
     }
-
     .brand-chip .dot {
-      width: 8px;
-      height: 8px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       background: var(--cyan);
       box-shadow: 0 0 12px var(--cyan);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.3); }
     }
 
     h1.title {
@@ -134,7 +132,6 @@
       overflow: hidden;
       transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
     }
-
     .card::before {
       content: "";
       position: absolute;
@@ -144,13 +141,34 @@
       transition: opacity 0.25s ease;
       pointer-events: none;
     }
-
+    .card.gold-glow::before {
+      background: linear-gradient(140deg, rgba(246, 189, 75, 0.08), transparent 45%);
+    }
+    .card.purple-glow::before {
+      background: linear-gradient(140deg, rgba(169, 140, 255, 0.08), transparent 45%);
+    }
+    .card.green-glow::before {
+      background: linear-gradient(140deg, rgba(53, 230, 189, 0.08), transparent 45%);
+    }
     .card:hover {
       transform: translateY(-4px);
       border-color: var(--line-strong);
       box-shadow: var(--shadow-soft), var(--shadow-cyan);
     }
+    .card.gold-glow:hover { box-shadow: var(--shadow-soft), var(--shadow-gold); }
     .card:hover::before { opacity: 1; }
+
+    .card-icon {
+      width: 44px; height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+    }
+    .card-icon.arch { background: rgba(35, 215, 255, 0.12); color: var(--cyan); }
+    .card-icon.copilot { background: rgba(169, 140, 255, 0.14); color: var(--purple); }
+    .card-icon.maas { background: rgba(53, 230, 189, 0.14); color: var(--green); }
+    .card-icon.dash { background: rgba(246, 189, 75, 0.14); color: var(--gold); }
 
     .card-tag {
       display: inline-flex;
@@ -158,20 +176,20 @@
       gap: 8px;
       padding: 4px 12px;
       border-radius: 999px;
-      background: rgba(35, 215, 255, 0.12);
-      color: var(--cyan);
       font-size: 12px;
       font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       width: fit-content;
+      margin-bottom: 12px;
     }
-    .card-tag.gold { background: rgba(246, 189, 75, 0.14); color: var(--gold); }
+    .card-tag.cyan { background: rgba(35, 215, 255, 0.12); color: var(--cyan); }
     .card-tag.purple { background: rgba(169, 140, 255, 0.14); color: var(--purple); }
     .card-tag.green { background: rgba(53, 230, 189, 0.14); color: var(--green); }
+    .card-tag.gold { background: rgba(246, 189, 75, 0.14); color: var(--gold); }
 
     .card h2 {
-      margin: 16px 0 8px;
+      margin: 0 0 8px;
       font-size: 22px;
       font-weight: 700;
       letter-spacing: 0.01em;
@@ -211,7 +229,6 @@
       color: var(--muted);
       font-size: 13px;
     }
-
     .card-footer .path {
       font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
       color: var(--soft);
@@ -274,8 +291,7 @@
       transform: translateX(2px);
     }
     .doc-item .icon {
-      width: 28px;
-      height: 28px;
+      width: 28px; height: 28px;
       flex-shrink: 0;
       display: grid;
       place-items: center;
@@ -283,6 +299,7 @@
       background: rgba(91, 141, 255, 0.14);
       color: var(--blue);
       font-size: 14px;
+      font-weight: 600;
     }
     .doc-item .name { color: var(--text); font-weight: 500; }
     .doc-item .name small { color: var(--muted); font-weight: 400; margin-left: 6px; font-size: 12px; }
@@ -304,123 +321,136 @@
 <body>
   <main class="page">
     <header class="hero">
-      <span class="brand-chip"><span class="dot"></span>AI Docs Portal</span>
-      <h1 class="title">AI 文档中心</h1>
+      <span class="brand-chip"><span class="dot"></span>DaoCloud &middot; Token Factory</span>
+      <h1 class="title">Token Factory 项目导航</h1>
       <p class="subtitle">
-        本地 AI 生成内容，发布到公网的模板项目。支持 Markdown 与 HTML，
-        点击下方卡片进入对应项目文档。
+        这里汇集了 Token Factory 的产品架构、MaaS 前台、经营驾驶系统与相关文档，
+        点击下方卡片进入对应页面。
       </p>
     </header>
 
     <section class="grid">
-      <a class='card' href='./project-a/'>
-        <span class="card-tag">Project A</span>
-        <h2>Project A 文档</h2>
-        <p>
-          这是 Project A 的文档页面。展示 AI 生成的技术文档内容，
-          支持 Markdown 和 HTML 混合编写。
-        </p>
+      <a class="card" href="./architecture/token-factory-architecture.html">
+        <div class="card-icon arch">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </div>
+        <span class="card-tag cyan">Architecture</span>
+        <h2>Token Factory 运营架构蓝图</h2>
+        <p>从底层算力、模型托管到上层智能体与商业化的端到端架构视图，展示 Token Factory 的产品形态与运营逻辑。</p>
         <div class="card-meta">
-          <span class="meta-pill">技术文档</span>
-          <span class="meta-pill">AI 生成</span>
-          <span class="meta-pill">示例</span>
+          <span class="meta-pill">架构图</span>
+          <span class="meta-pill">运营蓝图</span>
+          <span class="meta-pill">中文</span>
         </div>
         <div class="card-footer">
-          <span class="path">project-a/index.html</span>
-          <span class="open-arrow">
-            打开
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
-          </span>
+          <span class="path">architecture/token-factory-architecture.html</span>
+          <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
         </div>
       </a>
 
-      <a class='card' href='./project-b/'>
-        <span class="card-tag green">Project B</span>
-        <h2>Project B 文档</h2>
-        <p>
-          这是 Project B 的文档页面。展示另一个项目的文档内容，
-          可以放置任何 AI 生成的技术文档或说明。
-        </p>
+      <a class="card purple-glow" href="./copilot/copilot-mockup.html">
+        <div class="card-icon copilot">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          </svg>
+        </div>
+        <span class="card-tag purple">Copilot</span>
+        <h2>DaoCloud Token Factory Copilot</h2>
+        <p>面向运营、治理、FinOps、安全与容量规划的智能工作台，支持模型选择、对话 / Plan 双模式、多入口协同与建议闭环。</p>
         <div class="card-meta">
-          <span class="meta-pill">技术文档</span>
-          <span class="meta-pill">AI 生成</span>
-          <span class="meta-pill">示例</span>
+          <span class="meta-pill">智能工作台</span>
+          <span class="meta-pill">Plan 模式</span>
+          <span class="meta-pill">多入口</span>
         </div>
         <div class="card-footer">
-          <span class="path">project-b/index.html</span>
-          <span class="open-arrow">
-            打开
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
-          </span>
+          <span class="path">copilot/copilot-mockup.html</span>
+          <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
         </div>
       </a>
 
-      <a class='card' href='./project-c/'>
-        <span class="card-tag gold">Project C</span>
-        <h2>Project C 文档</h2>
-        <p>
-          这是 Project C 的文档页面。第三个示例项目，
-          用于展示多项目文档的组织结构。
-        </p>
+      <a class="card green-glow" href="./maas/index.html">
+        <div class="card-icon maas">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <span class="card-tag green">MaaS</span>
+        <h2>DaoCloud Token Factory MaaS</h2>
+        <p>面向普通用户与应用开发者的 MaaS 前台入口，覆盖模型广场、服务目录、Playground、API 接入与用量套餐等核心场景。</p>
         <div class="card-meta">
-          <span class="meta-pill">技术文档</span>
-          <span class="meta-pill">AI 生成</span>
-          <span class="meta-pill">示例</span>
+          <span class="meta-pill">模型广场</span>
+          <span class="meta-pill">Playground</span>
+          <span class="meta-pill">API 接入</span>
         </div>
         <div class="card-footer">
-          <span class="path">project-c/index.html</span>
-          <span class="open-arrow">
-            打开
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
-          </span>
+          <span class="path">maas/index.html</span>
+          <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
         </div>
       </a>
 
-      <a class='card' href='./getting-started/'>
-        <span class="card-tag purple">Guide</span>
-        <h2>快速入门指南</h2>
-        <p>
-          了解如何添加新项目、编写内容、部署上线。
-          简单几步，让你的 AI 生成内容公网可见。
-        </p>
+      <a class="card gold-glow" href="./dashboard/token-factory-dashboard.html">
+        <div class="card-icon dash">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+          </svg>
+        </div>
+        <span class="card-tag gold">Dashboard</span>
+        <h2>Token Factory Dashboard</h2>
+        <p>聚合经营、运营、FinOps、安全治理与基础设施容量等视角，提供面向管理者的指标驾驶舱与全局态势总览。</p>
         <div class="card-meta">
-          <span class="meta-pill">教程</span>
-          <span class="meta-pill">快速入门</span>
-          <span class="meta-pill">部署</span>
+          <span class="meta-pill">经营分析</span>
+          <span class="meta-pill">FinOps</span>
+          <span class="meta-pill">容量视图</span>
         </div>
         <div class="card-footer">
-          <span class="path">getting-started/index.html</span>
-          <span class="open-arrow">
-            打开
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
-          </span>
+          <span class="path">dashboard/token-factory-dashboard.html</span>
+          <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
         </div>
       </a>
-
     </section>
 
     <div class="section-title">相关文档</div>
     <div class="docs-list">
-      <a class="doc-item" href="./project-a/">
+      <a class="doc-item" href="#">
         <span class="icon">MD</span>
-        <span class="name">Project A 文档 <small>AI 生成</small></span>
+        <span class="name">Token Factory 2026 Product Definition</span>
       </a>
-      <a class="doc-item" href="./project-b/">
+      <a class="doc-item" href="#">
         <span class="icon">MD</span>
-        <span class="name">Project B 文档 <small>AI 生成</small></span>
+        <span class="name">中国 Token Factory 市场规模研究</span>
       </a>
-      <a class="doc-item" href="./project-c/">
+      <a class="doc-item" href="#">
         <span class="icon">MD</span>
-        <span class="name">Project C 文档 <small>AI 生成</small></span>
+        <span class="name">DaoCloud 未来 5-10 年产品计划 <small>内部讨论稿</small></span>
       </a>
-      <a class="doc-item" href="./getting-started/">
+      <a class="doc-item" href="#">
         <span class="icon">MD</span>
-        <span class="name">快速入门 <small>教程</small></span>
+        <span class="name">从 Linux 到 Kubernetes 再到 AI Factory OS</span>
+      </a>
+      <a class="doc-item" href="#">
+        <span class="icon">MD</span>
+        <span class="name">关于 DaoCloud Token Factory 的讨论邀请</span>
+      </a>
+      <a class="doc-item" href="#">
+        <span class="icon">MD</span>
+        <span class="name">P1 讨论材料</span>
+      </a>
+      <a class="doc-item" href="#">
+        <span class="icon">MD</span>
+        <span class="name">P2 讨论材料</span>
+      </a>
+      <a class="doc-item" href="#">
+        <span class="icon">MD</span>
+        <span class="name">README</span>
       </a>
     </div>
 
     <footer class="foot">
-      AI Docs Portal · MkDocs + GitHub Pages
+      &copy; DaoCloud &middot; Token Factory Mockup
     </footer>
   </main>
 </body>
