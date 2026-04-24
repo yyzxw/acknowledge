@@ -18,6 +18,7 @@
       --cyan: #23d7ff;
       --green: #35e6bd;
       --red: #ff7070;
+      --blue: #4a9eff;
       --radius-xl: 26px;
       --radius-md: 12px;
       --shadow-soft: 0 22px 80px rgba(0, 0, 0, 0.34);
@@ -101,6 +102,7 @@
     }
     .card.red:hover { box-shadow: 0 0 36px rgba(255, 112, 112, 0.2); }
     .card.green:hover { box-shadow: 0 0 36px rgba(53, 230, 189, 0.2); }
+    .card.blue:hover { box-shadow: 0 0 36px rgba(74, 158, 255, 0.2); }
 
     .card-tag {
       display: inline-flex;
@@ -115,6 +117,7 @@
     }
     .card-tag.red { background: rgba(255, 112, 112, 0.14); color: var(--red); }
     .card-tag.green { background: rgba(53, 230, 189, 0.14); color: var(--green); }
+    .card-tag.blue { background: rgba(74, 158, 255, 0.14); color: var(--blue); }
 
     .card h2 {
       font-size: 1.25rem;
@@ -178,6 +181,17 @@
         <div class="card-meta">
           <span class="pill">技术架构</span>
           <span class="pill">组件分析</span>
+        </div>
+      </a>
+
+      <a class="card blue" href="./semantic-router-research.html">
+        <span class="card-tag blue">Research</span>
+        <h2>vLLM Semantic Router 深度研究报告</h2>
+        <p>系统级智能路由器，信号驱动决策引擎，10+ 种模型选择算法，面向云、数据中心和边缘环境。</p>
+        <div class="card-meta">
+          <span class="pill">LLM 路由</span>
+          <span class="pill">信号驱动</span>
+          <span class="pill">架构分析</span>
         </div>
       </a>
     </div>
