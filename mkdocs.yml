@@ -1,6 +1,6 @@
 site_name: AI Docs Template
 site_description: 本地 AI 生成内容，发布到公网的模板项目
-site_url: https://yyzxw.github.io/ai-docs-template/
+site_url: https://yyzxw.github.io/acknowledge/
 
 theme:
   name: material
@@ -31,8 +31,8 @@ nav:
       - Examples: examples.md
   - About: about.md
 
-repo_name: yyzxw/ai-docs-template
-repo_url: https://github.com/yyzxw/ai-docs-template
+repo_name: yyzxw/acknowledge
+repo_url: https://github.com/yyzxw/acknowledge
 edit_uri: blob/main/docs/
 
 plugins:
