@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Token Factory Dashboard</title>
+  <style>
+    :root {
+      --bg-0: #060a12; --bg-1: #08111f; --bg-2: #0d1728;
+      --panel: rgba(13, 25, 43, 0.92); --line: rgba(135, 163, 199, 0.24);
+      --line-strong: rgba(143, 199, 255, 0.46);
+      --text: #eef7ff; --muted: #9eb4ca; --soft: #c9d9ea;
+      --cyan: #23d7ff; --blue: #5b8dff; --green: #35e6bd;
+      --gold: #f6bd4b; --purple: #a98cff; --red: #ff6b6b;
+      --radius-xl: 26px; --radius-md: 12px;
+      --shadow-soft: 0 22px 80px rgba(0, 0, 0, 0.34);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      min-height: 100%;
+      font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1200px; margin: 0 auto; padding: 48px 32px 64px; }
+    .back {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--muted); text-decoration: none; font-size: 14px;
+      padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--panel); transition: border-color 0.2s, color 0.2s;
+    }
+    .back:hover { border-color: var(--line-strong); color: var(--gold); }
+    h1 {
+      margin: 32px 0 12px; font-size: 36px; font-weight: 700;
+      background: linear-gradient(135deg, #fff, var(--gold));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .desc { color: var(--muted); font-size: 15px; line-height: 1.8; margin-bottom: 28px; max-width: 720px; }
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .kpi {
+      padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+      background: var(--panel); box-shadow: var(--shadow-soft);
+    }
+    .kpi .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+    .kpi .value { font-size: 28px; font-weight: 700; }
+    .kpi .value.cyan { color: var(--cyan); }
+    .kpi .value.green { color: var(--green); }
+    .kpi .value.gold { color: var(--gold); }
+    .kpi .value.purple { color: var(--purple); }
+    .kpi .change { font-size: 12px; margin-top: 4px; }
+    .kpi .change.up { color: var(--green); }
+    .kpi .change.down { color: var(--red); }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-card {
+      padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+      background: var(--panel); box-shadow: var(--shadow-soft);
+    }
+    .chart-card h3 { font-size: 15px; margin-bottom: 16px; color: var(--soft); }
+    .bar-chart { display: flex; flex-direction: column; gap: 10px; }
+    .bar-row { display: flex; align-items: center; gap: 12px; }
+    .bar-row .bar-label { width: 80px; font-size: 12px; color: var(--muted); text-align: right; }
+    .bar-row .bar { flex: 1; height: 24px; border-radius: 6px; background: rgba(255,255,255,0.04); overflow: hidden; }
+    .bar-row .bar .fill { height: 100%; border-radius: 6px; }
+    .bar-row .bar .fill.cyan { background: linear-gradient(90deg, var(--cyan), rgba(35,215,255,0.4)); }
+    .bar-row .bar .fill.green { background: linear-gradient(90deg, var(--green), rgba(53,230,189,0.4)); }
+    .bar-row .bar .fill.gold { background: linear-gradient(90deg, var(--gold), rgba(246,189,75,0.4)); }
+    .bar-row .bar .fill.purple { background: linear-gradient(90deg, var(--purple), rgba(169,140,255,0.4)); }
+    .bar-row .bar .fill.blue { background: linear-gradient(90deg, var(--blue), rgba(91,141,255,0.4)); }
+    .bar-row .val { width: 60px; font-size: 12px; color: var(--soft); font-family: "SF Mono", Menlo, monospace; }
+    .alerts {
+      padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-xl);
+      background: var(--panel); box-shadow: var(--shadow-soft);
+    }
+    .alerts h3 { font-size: 15px; margin-bottom: 16px; color: var(--soft); }
+    .alert-list { display: flex; flex-direction: column; gap: 10px; }
+    .alert-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-radius: var(--radius-md);
+      border: 1px solid var(--line); font-size: 13px;
+    }
+    .alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .alert-dot.warn { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+    .alert-dot.info { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+    .alert-dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .alert-item .msg { color: var(--soft); flex: 1; }
+    .alert-item .time { color: var(--muted); font-size: 12px; font-family: "SF Mono", Menlo, monospace; }
+    footer.foot { margin-top: 56px; text-align: center; color: var(--muted); font-size: 12px; }
+    @media (max-width: 720px) {
+      .charts { grid-template-columns: 1fr; }
+      .kpi-row { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <a class="back" href="../index.html">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
+      返回首页
+    </a>
+    <h1>Token Factory Dashboard</h1>
+    <p class="desc">聚合经营、运营、FinOps、安全治理与基础设施容量等视角，提供面向管理者的指标驾驶舱与全局态势总览。</p>
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="label">今日 Token 消耗</div>
+        <div class="value cyan">2.8B</div>
+        <div class="change up">&uarr; 12.4% vs 昨日</div>
+      </div>
+      <div class="kpi">
+        <div class="label">活跃用户</div>
+        <div class="value green">1,847</div>
+        <div class="change up">&uarr; 5.2%</div>
+      </div>
+      <div class="kpi">
+        <div class="label">今日收入</div>
+        <div class="value gold">&yen;128.6K</div>
+        <div class="change up">&uarr; 8.7%</div>
+      </div>
+      <div class="kpi">
+        <div class="label">API 调用次数</div>
+        <div class="value purple">3.2M</div>
+        <div class="change up">&uarr; 15.1%</div>
+      </div>
+    </div>
+    <div class="charts">
+      <div class="chart-card">
+        <h3>模型 Token 消耗分布</h3>
+        <div class="bar-chart">
+          <div class="bar-row"><span class="bar-label">GPT-4o</span><div class="bar"><div class="fill cyan" style="width:78%"></div></div><span class="val">1.2B</span></div>
+          <div class="bar-row"><span class="bar-label">Claude 3.5</span><div class="bar"><div class="fill purple" style="width:56%"></div></div><span class="val">860M</span></div>
+          <div class="bar-row"><span class="bar-label">Qwen-72B</span><div class="bar"><div class="fill green" style="width:32%"></div></div><span class="val">420M</span></div>
+          <div class="bar-row"><span class="bar-label">DeepSeek</span><div class="bar"><div class="fill gold" style="width:24%"></div></div><span class="val">310M</span></div>
+          <div class="bar-row"><span class="bar-label">Llama 3</span><div class="bar"><div class="fill blue" style="width:18%"></div></div><span class="val">180M</span></div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3>GPU 集群利用率</h3>
+        <div class="bar-chart">
+          <div class="bar-row"><span class="bar-label">A100 集群</span><div class="bar"><div class="fill cyan" style="width:87%"></div></div><span class="val">87%</span></div>
+          <div class="bar-row"><span class="bar-label">H100 集群</span><div class="bar"><div class="fill green" style="width:72%"></div></div><span class="val">72%</span></div>
+          <div class="bar-row"><span class="bar-label">A800 集群</span><div class="bar"><div class="fill purple" style="width:65%"></div></div><span class="val">65%</span></div>
+          <div class="bar-row"><span class="bar-label">推理节点</span><div class="bar"><div class="fill gold" style="width:91%"></div></div><span class="val">91%</span></div>
+          <div class="bar-row"><span class="bar-label">训练节点</span><div class="bar"><div class="fill blue" style="width:45%"></div></div><span class="val">45%</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="alerts">
+      <h3>近期告警</h3>
+      <div class="alert-list">
+        <div class="alert-item">
+          <span class="alert-dot warn"></span>
+          <span class="msg">DeepSeek-V2 模型延迟升高，P99 达到 2.8s</span>
+          <span class="time">10 min ago</span>
+        </div>
+        <div class="alert-item">
+          <span class="alert-dot info"></span>
+          <span class="msg">H100 集群新增 8 节点，正在预热</span>
+          <span class="time">32 min ago</span>
+        </div>
+        <div class="alert-item">
+          <span class="alert-dot ok"></span>
+          <span class="msg">安全合规扫描完成，未发现异常</span>
+          <span class="time">1 hr ago</span>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">&copy; DaoCloud &middot; Token Factory Mockup</footer>
+  </main>
+</body>
+</html>

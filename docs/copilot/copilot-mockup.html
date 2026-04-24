@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Token Factory Copilot</title>
+  <style>
+    :root {
+      --bg-0: #060a12; --bg-1: #08111f; --bg-2: #0d1728;
+      --panel: rgba(13, 25, 43, 0.92); --line: rgba(135, 163, 199, 0.24);
+      --line-strong: rgba(143, 199, 255, 0.46);
+      --text: #eef7ff; --muted: #9eb4ca; --soft: #c9d9ea;
+      --cyan: #23d7ff; --blue: #5b8dff; --green: #35e6bd;
+      --gold: #f6bd4b; --purple: #a98cff;
+      --radius-xl: 26px; --radius-md: 12px;
+      --shadow-soft: 0 22px 80px rgba(0, 0, 0, 0.34);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      min-height: 100%;
+      font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 1080px; margin: 0 auto; padding: 48px 32px 64px; }
+    .back {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--muted); text-decoration: none; font-size: 14px;
+      padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--panel); transition: border-color 0.2s, color 0.2s;
+    }
+    .back:hover { border-color: var(--line-strong); color: var(--purple); }
+    h1 {
+      margin: 32px 0 12px; font-size: 36px; font-weight: 700;
+      background: linear-gradient(135deg, #fff, var(--purple));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .desc { color: var(--muted); font-size: 15px; line-height: 1.8; margin-bottom: 32px; max-width: 720px; }
+    .copilot-ui {
+      display: grid; grid-template-columns: 260px 1fr; gap: 0;
+      border: 1px solid var(--line); border-radius: var(--radius-xl); overflow: hidden;
+      background: var(--panel); box-shadow: var(--shadow-soft); min-height: 480px;
+    }
+    .sidebar { border-right: 1px solid var(--line); padding: 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .sidebar h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+    .mode-btn {
+      padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--line);
+      background: transparent; color: var(--soft); font-size: 13px; cursor: pointer;
+      text-align: left; transition: all 0.2s;
+    }
+    .mode-btn:hover { border-color: var(--line-strong); background: rgba(255,255,255,0.03); }
+    .mode-btn.active { border-color: var(--purple); background: rgba(169,140,255,0.1); color: var(--purple); }
+    .sidebar-divider { height: 1px; background: var(--line); margin: 4px 0; }
+    .sidebar-links { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+    .sidebar-links a { color: var(--muted); text-decoration: none; font-size: 12.5px; padding: 6px 10px; border-radius: 8px; transition: color 0.2s; }
+    .sidebar-links a:hover { color: var(--soft); }
+    .chat { display: flex; flex-direction: column; }
+    .chat-header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+    .chat-header .status { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .chat-header span { font-size: 14px; color: var(--soft); }
+    .chat-header .model-tag { margin-left: auto; padding: 4px 10px; border-radius: 999px; background: rgba(169,140,255,0.12); color: var(--purple); font-size: 12px; }
+    .messages { flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+    .msg { max-width: 80%; padding: 12px 16px; border-radius: 14px; font-size: 13.5px; line-height: 1.7; }
+    .msg.user { align-self: flex-end; background: rgba(169,140,255,0.15); border: 1px solid rgba(169,140,255,0.25); color: var(--soft); }
+    .msg.bot { align-self: flex-start; background: rgba(255,255,255,0.04); border: 1px solid var(--line); color: var(--muted); }
+    .msg.bot strong { color: var(--text); }
+    .chat-input { padding: 16px 24px; border-top: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+    .chat-input input {
+      flex: 1; padding: 12px 16px; border-radius: var(--radius-md);
+      border: 1px solid var(--line); background: rgba(255,255,255,0.04);
+      color: var(--text); font-size: 14px; outline: none;
+    }
+    .chat-input input::placeholder { color: var(--muted); }
+    .chat-input input:focus { border-color: var(--line-strong); }
+    .send-btn {
+      padding: 10px 20px; border-radius: var(--radius-md); border: none;
+      background: var(--purple); color: #fff; font-size: 14px; cursor: pointer;
+      font-weight: 600; transition: opacity 0.2s;
+    }
+    .send-btn:hover { opacity: 0.85; }
+    footer.foot { margin-top: 56px; text-align: center; color: var(--muted); font-size: 12px; }
+    @media (max-width: 720px) {
+      .copilot-ui { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <a class="back" href="../index.html">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
+      返回首页
+    </a>
+    <h1>Token Factory Copilot</h1>
+    <p class="desc">面向运营、治理、FinOps、安全与容量规划的智能工作台，支持模型选择、对话 / Plan 双模式、多入口协同与建议闭环。</p>
+    <div class="copilot-ui">
+      <div class="sidebar">
+        <h3>交互模式</h3>
+        <button class="mode-btn active">对话模式</button>
+        <button class="mode-btn">Plan 模式</button>
+        <div class="sidebar-divider"></div>
+        <h3>快捷入口</h3>
+        <button class="mode-btn">经营分析</button>
+        <button class="mode-btn">安全治理</button>
+        <button class="mode-btn">FinOps</button>
+        <button class="mode-btn">容量规划</button>
+        <div class="sidebar-links">
+          <a href="#">历史记录</a>
+          <a href="#">常用指令</a>
+          <a href="#">系统设置</a>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="chat-header">
+          <span class="status"></span>
+          <span>Copilot 就绪</span>
+          <span class="model-tag">GPT-4o</span>
+        </div>
+        <div class="messages">
+          <div class="msg bot">
+            <strong>Token Factory Copilot</strong> 已就绪。我可以帮你完成运营分析、安全审计、成本优化和容量规划等任务。<br><br>试试问我：<br>&bull; &ldquo;分析本月 Token 用量趋势&rdquo;<br>&bull; &ldquo;检查安全合规状态&rdquo;<br>&bull; &ldquo;生成本周 FinOps 报告&rdquo;
+          </div>
+          <div class="msg user">帮我分析一下本月各模型的 Token 消耗情况</div>
+          <div class="msg bot">
+            根据当前数据，本月 Token 消耗概览：<br><br>
+            <strong>GPT-4o</strong>：1.2B tokens (&uarr;15%)<br>
+            <strong>Claude 3.5</strong>：860M tokens (&uarr;8%)<br>
+            <strong>Qwen-72B</strong>：420M tokens (&darr;3%)<br>
+            <strong>DeepSeek-V2</strong>：310M tokens (&uarr;22%)<br><br>
+            总消耗较上月增长 <strong>11.2%</strong>，主要由 DeepSeek-V2 新接入用户驱动。建议关注该模型的配额设置。
+          </div>
+        </div>
+        <div class="chat-input">
+          <input type="text" placeholder="输入你的问题..." />
+          <button class="send-btn">发送</button>
+        </div>
+      </div>
+    </div>
+    <footer class="foot">&copy; DaoCloud &middot; Token Factory Mockup</footer>
+  </main>
+</body>
+</html>
