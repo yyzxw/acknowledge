@@ -3,320 +3,81 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Research Reports · 项目研究</title>
+  <title>Acknowledge</title>
   <style>
     :root {
       --bg-0: #060a12;
       --bg-1: #08111f;
       --bg-2: #0d1728;
-      --panel: rgba(13, 25, 43, 0.92);
-      --panel-strong: rgba(18, 34, 58, 0.96);
-      --line: rgba(135, 163, 199, 0.24);
-      --line-strong: rgba(143, 199, 255, 0.46);
       --text: #eef7ff;
       --muted: #9eb4ca;
-      --soft: #c9d9ea;
       --cyan: #23d7ff;
-      --blue: #5b8dff;
-      --green: #35e6bd;
-      --gold: #f6bd4b;
-      --purple: #a98cff;
-      --red: #ff7070;
-      --radius-xl: 26px;
-      --radius-lg: 18px;
-      --radius-md: 12px;
-      --shadow-soft: 0 22px 80px rgba(0, 0, 0, 0.34);
-      --shadow-cyan: 0 0 36px rgba(35, 215, 255, 0.18);
-      --shadow-gold: 0 0 42px rgba(246, 189, 75, 0.14);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body {
-      min-height: 100%;
-      font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    body {
+      font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: var(--text);
-      background:
-        radial-gradient(1200px 700px at 15% -10%, rgba(35, 215, 255, 0.14), transparent 60%),
-        radial-gradient(1000px 620px at 110% 10%, rgba(169, 140, 255, 0.12), transparent 60%),
-        radial-gradient(900px 640px at 50% 120%, rgba(91, 141, 255, 0.14), transparent 60%),
-        linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
-      -webkit-font-smoothing: antialiased;
+      background: linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
     }
 
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(rgba(135, 163, 199, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(135, 163, 199, 0.05) 1px, transparent 1px);
-      background-size: 56px 56px;
-      mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.9), transparent 75%);
-      z-index: 0;
+    .readme {
+      max-width: 640px;
+      text-align: center;
     }
 
-    .page {
-      position: relative;
-      z-index: 1;
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 64px 40px 80px;
-    }
-
-    header.hero { text-align: center; margin-bottom: 56px; }
-
-    .brand-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 16px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: var(--panel);
-      color: var(--soft);
-      font-size: 13px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      box-shadow: var(--shadow-soft);
-    }
-    .brand-chip .dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 12px var(--cyan);
-      animation: pulse 2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(1.3); }
-    }
-
-    h1.title {
-      margin: 24px 0 14px;
-      font-size: clamp(32px, 4.2vw, 52px);
+    h1 {
+      font-size: 2.5rem;
       font-weight: 700;
-      letter-spacing: 0.02em;
-      background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 55%, var(--blue) 100%);
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
     }
 
-    p.subtitle {
-      max-width: 760px;
-      margin: 0 auto;
+    p {
       color: var(--muted);
-      font-size: 16px;
-      line-height: 1.75;
+      font-size: 1.1rem;
+      line-height: 1.8;
+      margin-bottom: 1.5rem;
     }
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 24px;
-      margin-top: 8px;
-    }
-
-    .card {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      padding: 28px 28px 24px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-xl);
-      background: var(--panel);
-      box-shadow: var(--shadow-soft);
-      text-decoration: none;
-      color: inherit;
-      overflow: hidden;
-      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-    }
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(140deg, rgba(35, 215, 255, 0.08), transparent 45%);
-      opacity: 0;
-      transition: opacity 0.25s ease;
-      pointer-events: none;
-    }
-    .card.gold-glow::before {
-      background: linear-gradient(140deg, rgba(246, 189, 75, 0.08), transparent 45%);
-    }
-    .card.purple-glow::before {
-      background: linear-gradient(140deg, rgba(169, 140, 255, 0.08), transparent 45%);
-    }
-    .card.green-glow::before {
-      background: linear-gradient(140deg, rgba(53, 230, 189, 0.08), transparent 45%);
-    }
-    .card:hover {
-      transform: translateY(-4px);
-      border-color: var(--line-strong);
-      box-shadow: var(--shadow-soft), var(--shadow-cyan);
-    }
-    .card.gold-glow:hover { box-shadow: var(--shadow-soft), var(--shadow-gold); }
-    .card.red-glow::before {
-      background: linear-gradient(140deg, rgba(255, 112, 112, 0.08), transparent 45%);
-    }
-    .card.red-glow:hover { box-shadow: var(--shadow-soft), 0 0 36px rgba(255, 112, 112, 0.2); }
-    .card.green-glow:hover { box-shadow: var(--shadow-soft), 0 0 36px rgba(53, 230, 189, 0.2); }
-    .card:hover::before { opacity: 1; }
-
-    .card-icon {
-      width: 44px; height: 44px;
-      border-radius: 14px;
-      display: grid;
-      place-items: center;
-      margin-bottom: 16px;
-    }
-    .card-icon.research { background: rgba(255, 112, 112, 0.14); color: #ff7070; }
-    .card-icon.kcover { background: rgba(53, 230, 189, 0.14); color: var(--green); }
-
-    .card-tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      width: fit-content;
-      margin-bottom: 12px;
-    }
-    .card-tag.red { background: rgba(255, 112, 112, 0.14); color: var(--red); }
-    .card-tag.green { background: rgba(53, 230, 189, 0.14); color: var(--green); }
-
-    .card h2 {
-      margin: 0 0 8px;
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-      color: var(--text);
-    }
-
-    .card p {
-      margin: 0 0 20px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.7;
-    }
-
-    .card-meta {
+    .links {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 22px;
+      justify-content: center;
+      gap: 1rem;
     }
 
-    .meta-pill {
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--line);
-      color: var(--soft);
-      font-size: 12px;
-    }
-
-    .card-footer {
-      margin-top: auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-top: 18px;
-      border-top: 1px dashed var(--line);
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .card-footer .path {
-      font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-      color: var(--soft);
-      font-size: 12px;
-    }
-
-    .open-arrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    a {
       color: var(--cyan);
-      font-weight: 600;
-      font-size: 13px;
-      letter-spacing: 0.04em;
-    }
-    .open-arrow svg { transition: transform 0.25s ease; }
-    .card:hover .open-arrow svg { transform: translateX(4px); }
-
-    footer.foot {
-      margin-top: 72px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 12.5px;
-      letter-spacing: 0.06em;
+      text-decoration: none;
+      padding: 0.6rem 1.2rem;
+      border: 1px solid rgba(35, 215, 255, 0.3);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
     }
 
-    @media (max-width: 640px) {
-      .page { padding: 40px 20px 60px; }
-      .card { padding: 22px 20px; }
+    a:hover {
+      background: rgba(35, 215, 255, 0.1);
+      border-color: var(--cyan);
     }
   </style>
 </head>
 <body>
-  <main class="page">
-    <header class="hero">
-      <span class="brand-chip"><span class="dot"></span>Research Reports</span>
-      <h1 class="title">项目研究报告</h1>
-      <p class="subtitle">
-        汇集 AI / 云原生领域的技术调研、产品分析报告，点击下方卡片查看详情。
-      </p>
-    </header>
-
-    <section class="grid">
-      <a class="card red-glow" href="./research/deepseek-v4-report.html">
-        <div class="card-icon research">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-        </div>
-        <span class="card-tag red">Research</span>
-        <h2>DeepSeek V4 深度调研报告</h2>
-        <p>全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势，附详细 Benchmark 对比分析。</p>
-        <div class="card-meta">
-          <span class="meta-pill">MoE 架构</span>
-          <span class="meta-pill">模型评测</span>
-          <span class="meta-pill">成本分析</span>
-        </div>
-        <div class="card-footer">
-          <span class="path">research/deepseek-v4-report.html</span>
-          <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
-        </div>
-      </a>
-
-      <a class="card green-glow" href="./research/kcover-report.html">
-        <div class="card-icon kcover">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-          </svg>
-        </div>
-        <span class="card-tag green">Report</span>
-        <h2>Kcover 技术调研报告</h2>
-        <p>Kcover 项目技术架构分析、核心组件解读与实践指南。</p>
-        <div class="card-meta">
-          <span class="meta-pill">技术架构</span>
-          <span class="meta-pill">组件分析</span>
-        </div>
-        <div class="card-footer">
-          <span class="path">research/kcover-report.html</span>
-          <span class="open-arrow">打开 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
-        </div>
-      </a>
-    </section>
-
-    <footer class="foot">
-      &copy; Research Reports
-    </footer>
-  </main>
+  <div class="readme">
+    <h1>Acknowledge</h1>
+    <p>项目研究与技术文档汇集。</p>
+    <div class="links">
+      <a href="./research/">查看研究报告 →</a>
+    </div>
+  </div>
 </body>
 </html>

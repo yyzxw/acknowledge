@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Reports</title>
+  <style>
+    :root {
+      --bg-0: #060a12;
+      --bg-1: #08111f;
+      --bg-2: #0d1728;
+      --panel: rgba(13, 25, 43, 0.92);
+      --line: rgba(135, 163, 199, 0.24);
+      --line-strong: rgba(143, 199, 255, 0.46);
+      --text: #eef7ff;
+      --muted: #9eb4ca;
+      --soft: #c9d9ea;
+      --cyan: #23d7ff;
+      --green: #35e6bd;
+      --red: #ff7070;
+      --radius-xl: 26px;
+      --radius-md: 12px;
+      --shadow-soft: 0 22px 80px rgba(0, 0, 0, 0.34);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 700px at 15% -10%, rgba(35, 215, 255, 0.14), transparent 60%),
+        radial-gradient(1000px 620px at 110% 10%, rgba(169, 140, 255, 0.12), transparent 60%),
+        linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 4rem 2rem;
+    }
+
+    header { text-align: center; margin-bottom: 3rem; }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+    .back:hover {
+      color: var(--cyan);
+      border-color: var(--cyan);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      padding: 1.75rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--panel);
+      box-shadow: var(--shadow-soft);
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.25s ease;
+    }
+    .card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-2px);
+    }
+    .card.red:hover { box-shadow: 0 0 36px rgba(255, 112, 112, 0.2); }
+    .card.green:hover { box-shadow: 0 0 36px rgba(53, 230, 189, 0.2); }
+
+    .card-tag {
+      display: inline-flex;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      width: fit-content;
+      margin-bottom: 1rem;
+    }
+    .card-tag.red { background: rgba(255, 112, 112, 0.14); color: var(--red); }
+    .card-tag.green { background: rgba(53, 230, 189, 0.14); color: var(--green); }
+
+    .card h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .card p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      flex: 1;
+    }
+
+    .card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .pill {
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+      color: var(--soft);
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Research Reports</h1>
+      <p class="subtitle">AI / 云原生领域的技术调研与产品分析</p>
+    </header>
+
+    <a class="back" href="../">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M13 6l-6 6 6 6"/></svg>
+      返回首页
+    </a>
+
+    <div class="grid">
+      <a class="card red" href="./deepseek-v4-report.html">
+        <span class="card-tag red">Research</span>
+        <h2>DeepSeek V4 深度调研报告</h2>
+        <p>全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势。</p>
+        <div class="card-meta">
+          <span class="pill">MoE 架构</span>
+          <span class="pill">模型评测</span>
+          <span class="pill">成本分析</span>
+        </div>
+      </a>
+
+      <a class="card green" href="./kcover-report.html">
+        <span class="card-tag green">Report</span>
+        <h2>Kcover 技术调研报告</h2>
+        <p>Kcover 项目技术架构分析、核心组件解读与实践指南。</p>
+        <div class="card-meta">
+          <span class="pill">技术架构</span>
+          <span class="pill">组件分析</span>
+        </div>
+      </a>
+    </div>
+  </main>
+</body>
+</html>
