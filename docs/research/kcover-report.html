@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kcover 项目调研报告 - Kubernetes AI 工作负载故障感知与恢复</title>
+<style>
+  :root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-card: #1e293b;
+    --bg-card-hover: #334155;
+    --accent: #06b6d4;
+    --accent-light: #22d3ee;
+    --accent-dim: rgba(6, 182, 212, 0.15);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border: #334155;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #3b82f6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .hero {
+    position: relative;
+    padding: 80px 0 60px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.08) 0%, transparent 50%);
+    animation: pulse-bg 8s ease-in-out infinite;
+  }
+
+  @keyframes pulse-bg {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  .hero-badge {
+    display: inline-block;
+    padding: 6px 16px;
+    border: 1px solid var(--accent);
+    border-radius: 20px;
+    color: var(--accent);
+    font-size: 13px;
+    letter-spacing: 1px;
+    margin-bottom: 24px;
+    position: relative;
+    background: var(--accent-dim);
+  }
+
+  .hero h1 {
+    font-size: 42px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    position: relative;
+    background: linear-gradient(135deg, var(--text-primary), var(--accent-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero .subtitle {
+    font-size: 18px;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .hero .meta {
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--text-muted);
+    position: relative;
+  }
+
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    padding: 32px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+
+  .stat-item { text-align: center; }
+  .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .section { padding: 48px 0; }
+
+  .section-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-title .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .section-desc { color: var(--text-secondary); margin-bottom: 32px; font-size: 15px; }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.2s ease;
+  }
+
+  .card:hover { border-color: var(--accent); background: var(--bg-card-hover); }
+  .card-icon { font-size: 28px; margin-bottom: 12px; }
+  .card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+  .card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+  .arch-diagram {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px 24px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+
+  .arch-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    min-width: 700px;
+  }
+
+  .arch-layer { display: flex; gap: 16px; width: 100%; justify-content: center; flex-wrap: wrap; }
+
+  .arch-box {
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 140px;
+  }
+
+  .arch-box.primary { background: linear-gradient(135deg, #0e7490, #06b6d4); color: white; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3); }
+  .arch-box.secondary { background: var(--bg-secondary); border: 1px solid var(--accent); color: var(--accent-light); }
+  .arch-box.output { background: linear-gradient(135deg, #065f46, #10b981); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+  .arch-box.warning { background: linear-gradient(135deg, #92400e, #f59e0b); color: white; }
+
+  .arch-arrow { text-align: center; padding: 8px 0; color: var(--accent); font-size: 20px; line-height: 1; }
+  .arch-label { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 2px; }
+
+  .data-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  .data-table th { background: var(--bg-secondary); color: var(--accent-light); padding: 12px 16px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--accent); font-size: 13px; letter-spacing: 0.3px; }
+  .data-table td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+  .data-table tr:nth-child(even) td { background: rgba(30, 41, 59, 0.5); }
+  .data-table tr:hover td { background: var(--bg-card-hover); }
+  .data-table code { background: rgba(6, 182, 212, 0.1); color: var(--accent-light); padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 500; margin: 2px 4px 2px 0; }
+  .tag-blue { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+  .tag-cyan { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
+  .tag-green { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+  .tag-yellow { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+  .tag-red { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+  .code-block {
+    background: #0c1222;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+
+  .code-block pre { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+  .code-block .comment { color: var(--text-muted); }
+  .code-block .keyword { color: #c084fc; }
+  .code-block .string { color: #34d399; }
+
+  .info-box { border-radius: 10px; padding: 20px 24px; margin: 20px 0; display: flex; gap: 14px; align-items: flex-start; }
+  .info-box.tip { background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.25); }
+  .info-box.warning { background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); }
+  .info-box .icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+  .info-box .content { font-size: 14px; color: var(--text-secondary); }
+  .info-box .content strong { color: var(--text-primary); }
+
+  .sequence-flow { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 32px; margin: 24px 0; }
+  .seq-step { display: flex; align-items: center; gap: 16px; padding: 12px 0; position: relative; }
+  .seq-step:not(:last-child)::after { content: ''; position: absolute; left: 19px; top: 100%; width: 2px; height: 12px; background: var(--accent); opacity: 0.4; }
+  .seq-num { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+  .seq-num.detect { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid #3b82f6; }
+  .seq-num.record { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; }
+  .seq-num.trigger { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; }
+  .seq-num.recover { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; }
+  .seq-num.ack { background: rgba(6, 182, 212, 0.2); color: #22d3ee; border: 1px solid #06b6d4; }
+  .seq-content h4 { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+  .seq-content p { font-size: 13px; color: var(--text-muted); }
+
+  .glossary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .glossary-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; }
+  .glossary-item dt { font-weight: 600; color: var(--accent-light); font-size: 14px; font-family: 'SF Mono', 'Fira Code', monospace; }
+  .glossary-item dd { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+  .score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 24px 0; }
+  .score-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+  .score-circle { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; margin: 0 auto 12px; }
+  .score-high { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 2px solid #10b981; }
+  .score-mid { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 2px solid #f59e0b; }
+  .score-card .label { font-size: 13px; color: var(--text-muted); }
+
+  .issue-list { display: flex; flex-direction: column; gap: 12px; }
+  .issue-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; display: flex; align-items: flex-start; gap: 14px; }
+  .issue-id { font-family: 'SF Mono', monospace; font-size: 13px; color: var(--accent); white-space: nowrap; min-width: 40px; }
+  .issue-body h4 { font-size: 14px; color: var(--text-primary); margin-bottom: 4px; }
+  .issue-body p { font-size: 13px; color: var(--text-muted); }
+
+  .file-tree {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+  }
+  .file-tree .dir { color: #60a5fa; font-weight: 600; }
+  .file-tree .desc { color: var(--text-muted); font-family: -apple-system, sans-serif; margin-left: 12px; }
+
+  .source-section { background: var(--bg-secondary); border-radius: 10px; padding: 24px; margin-top: 48px; }
+  .source-section h3 { font-size: 16px; margin-bottom: 16px; color: var(--text-primary); }
+  .source-list { list-style: none; font-size: 13px; }
+  .source-list li { padding: 6px 0; color: var(--text-muted); display: flex; gap: 8px; align-items: baseline; }
+  .source-list li a { color: var(--accent); text-decoration: none; }
+  .source-list li a:hover { text-decoration: underline; }
+  .credibility { font-size: 11px; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .cred-verified { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+
+  .back-top {
+    position: fixed; bottom: 32px; right: 32px; width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); color: white; border: none; cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(6, 182, 212, 0.4); transition: transform 0.2s;
+  }
+  .back-top:hover { transform: translateY(-2px); }
+
+  .toc { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 32px; }
+  .toc h3 { font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .toc-list { list-style: none; columns: 2; column-gap: 24px; }
+  .toc-list li { break-inside: avoid; }
+  .toc-list a { display: block; padding: 4px 0; color: var(--text-secondary); text-decoration: none; font-size: 14px; transition: color 0.2s; }
+  .toc-list a:hover { color: var(--accent-light); }
+  .toc-list .num { color: var(--accent); font-weight: 600; margin-right: 8px; }
+
+  .compare-bar { margin: 8px 0; }
+  .compare-bar .bar-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .compare-bar .bar-track { height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+  .compare-bar .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .bar-fill.cyan { background: linear-gradient(90deg, #0e7490, #06b6d4); }
+  .bar-fill.green { background: linear-gradient(90deg, #065f46, #10b981); }
+  .bar-fill.yellow { background: linear-gradient(90deg, #92400e, #f59e0b); }
+
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 28px; }
+    .stats-bar { grid-template-columns: repeat(3, 1fr); }
+    .card-grid { grid-template-columns: 1fr; }
+    .glossary-grid { grid-template-columns: 1fr; }
+    .score-grid { grid-template-columns: repeat(2, 1fr); }
+    .toc-list { columns: 1; }
+    .arch-flow { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<button class="back-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to Top">&#8593;</button>
+
+<div class="hero">
+  <div class="container">
+    <div class="hero-badge">OPEN SOURCE PROJECT ANALYSIS</div>
+    <h1>kcover</h1>
+    <p class="subtitle">Kubernetes Coverage for Fault Awareness and Recovery<br>面向大规模 AI 工作负载的故障感知与即时恢复方案</p>
+    <p class="meta">BaizeAI &middot; Apache 2.0 &middot; Go &middot; KubeCon Hong Kong 2024 演讲项目 &middot; 调研日期: 2026-04-24</p>
+  </div>
+</div>
+
+<div class="container">
+  <div class="stats-bar">
+    <div class="stat-item"><div class="stat-value">35</div><div class="stat-label">Stars</div></div>
+    <div class="stat-item"><div class="stat-value">3</div><div class="stat-label">Forks</div></div>
+    <div class="stat-item"><div class="stat-value">Go</div><div class="stat-label">语言</div></div>
+    <div class="stat-item"><div class="stat-value">2</div><div class="stat-label">组件</div></div>
+    <div class="stat-item"><div class="stat-value">1.19+</div><div class="stat-label">K8s 版本</div></div>
+  </div>
+
+  <div class="toc">
+    <h3>目录</h3>
+    <ul class="toc-list">
+      <li><a href="#bg"><span class="num">1</span>背景与术语</a></li>
+      <li><a href="#overview"><span class="num">2</span>项目概述</a></li>
+      <li><a href="#arch"><span class="num">3</span>架构设计</a></li>
+      <li><a href="#flow"><span class="num">4</span>核心工作流</a></li>
+      <li><a href="#code"><span class="num">5</span>代码结构分析</a></li>
+      <li><a href="#features"><span class="num">6</span>功能特性详解</a></li>
+      <li><a href="#eval"><span class="num">7</span>综合评估</a></li>
+      <li><a href="#issues"><span class="num">8</span>问题与路线图</a></li>
+      <li><a href="#appendix"><span class="num">9</span>附录</a></li>
+    </ul>
+  </div>
+</div>
+
+<div class="container">
+  <div class="section" id="bg">
+    <div class="section-title"><span class="icon">&#128218;</span>背景与术语</div>
+    <p class="section-desc">在深入分析 kcover 之前，先理解它所解决的核心问题和相关术语。</p>
+
+    <div class="info-box tip">
+      <span class="icon">&#128161;</span>
+      <div class="content">
+        <strong>核心痛点</strong>：在大规模 GPU 集群上训练 AI 模型时，GPU 故障、网络中断、节点异常等硬件/软件故障频发。传统做法依赖人工介入排查和重启，导致训练任务长时间中断，资源利用率低下。
+      </div>
+    </div>
+
+    <dl class="glossary-grid">
+      <div class="glossary-item"><dt>Kubeflow Training Operator</dt><dd>Kubernetes 上的分布式训练任务编排器，支持 PyTorchJob、TFJob 等自定义资源（CRD），管理训练 Pod 的生命周期。</dd></div>
+      <div class="glossary-item"><dt>PyTorchJob / TFJob</dt><dd>Kubeflow 定义的 CRD，分别用于管理 PyTorch 和 TensorFlow 分布式训练任务。包含 Master 和 Worker 角色。</dd></div>
+      <div class="glossary-item"><dt>DCGM / dcgmi</dt><dd>NVIDIA Data Center GPU Manager，GPU 集群管理工具。<code>dcgmi diag</code> 可对 GPU 执行健康诊断，检测硬件故障。</dd></div>
+      <div class="glossary-item"><dt>XID Error</dt><dd>NVIDIA GPU 驱动报告的错误代码，标识 GPU 硬件或驱动级别的异常（如显存 ECC 错误、GPU 掉线等）。</dd></div>
+      <div class="glossary-item"><dt>Leader Election</dt><dd>Kubernetes 中的主备选举机制，确保多副本部署时仅一个实例执行控制逻辑，通过 Lease 对象实现。</dd></div>
+      <div class="glossary-item"><dt>Informer</dt><dd>Kubernetes client-go 提供的本地缓存机制，高效监听集群资源变化，无需频繁轮询 API Server。</dd></div>
+    </dl>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="overview">
+    <div class="section-title"><span class="icon">&#128065;</span>项目概述</div>
+    <p class="section-desc">kcover 是 BaizeAI 开源的一个 Kubernetes 控制器，专为大规模 AI/ML 工作负载提供自动化的故障感知和恢复能力。</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">&#128268;</div>
+        <h3>故障感知</h3>
+        <p>通过 Pod 状态监控、NVIDIA GPU 诊断（DCGM）、Kubernetes Event 监听等多维度检测故障，实现硬件/网络/软件故障的自动发现。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#9889;</div>
+        <h3>即时恢复</h3>
+        <p>检测到故障后自动执行恢复：删除异常 Pod 触发重建、将故障节点标记为不可调度，无需人工介入。内置 TTL 防抖机制防止重启风暴。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#127760;</div>
+        <h3>大规模设计</h3>
+        <p>基于 Kubernetes Informer 和 Leader Election 构建，支持多副本部署；Agent 以 DaemonSet 方式运行在每个 GPU 节点，实现节点级诊断。</p>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px;">
+      <h3 style="font-size: 16px; margin-bottom: 12px;">基本信息</h3>
+      <table class="data-table">
+        <tr><td style="width:180px; color: var(--text-primary);">项目名称</td><td>kcover</td></tr>
+        <tr><td style="color: var(--text-primary);">组织</td><td>BaizeAI（百泽 AI）&mdash; 与 Merbridge、DaoCloud 生态关联</td></tr>
+        <tr><td style="color: var(--text-primary);">许可证</td><td>Apache 2.0（允许商用）</td></tr>
+        <tr><td style="color: var(--text-primary);">编程语言</td><td>Go 1.23+</td></tr>
+        <tr><td style="color: var(--text-primary);">安装方式</td><td>Helm Chart &mdash; <code>helm install kcover baizeai/kcover</code></td></tr>
+        <tr><td style="color: var(--text-primary);">镜像仓库</td><td><code>release-ci.daocloud.io/baize/kcover-controller</code> / <code>kcover-agent</code></td></tr>
+        <tr><td style="color: var(--text-primary);">支持平台</td><td>linux/amd64, linux/arm64</td></tr>
+        <tr><td style="color: var(--text-primary);">K8s 兼容</td><td>1.19+</td></tr>
+        <tr><td style="color: var(--text-primary);">KubeCon 演讲</td><td>"Sit Back and Relax with Fault Awareness and Robust Instant Recovery for Large Scale AI Workloads" &mdash; KubeCon HK 2024</td></tr>
+        <tr><td style="color: var(--text-primary);">Topics</td><td><span class="tag tag-cyan">kubeflow</span><span class="tag tag-blue">kubernetes</span><span class="tag tag-green">llm</span><span class="tag tag-yellow">mlops</span><span class="tag tag-red">nvidia-gpu</span><span class="tag tag-blue">pytorchjob</span><span class="tag tag-cyan">xid-error</span></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="arch">
+    <div class="section-title"><span class="icon">&#127959;</span>架构设计</div>
+    <p class="section-desc">kcover 采用 Controller-Agent 双组件架构，遵循 Kubernetes 原生设计范式。</p>
+
+    <div class="arch-diagram">
+      <div class="arch-flow">
+        <div style="text-align:center; margin-bottom: 8px;"><span style="font-size:12px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;">检测层 (Detection Layer)</span></div>
+        <div class="arch-layer">
+          <div><div class="arch-box secondary">Pod Status Collector</div><div class="arch-label">监听 Pod 容器状态变化</div></div>
+          <div><div class="arch-box secondary">DCGM Diagnostics</div><div class="arch-label">GPU 健康诊断 (dcgmi)</div></div>
+          <div><div class="arch-box secondary">K8s Event Watcher</div><div class="arch-label">监听带标注的 Event</div></div>
+        </div>
+        <div class="arch-arrow">&#9660;</div>
+        <div style="text-align:center; margin-bottom: 8px;"><span style="font-size:12px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;">事件总线 (Event Bus)</span></div>
+        <div class="arch-layer">
+          <div><div class="arch-box primary">KubeEventsRecorder</div><div class="arch-label">事件录制 + 分发 (带 need-recovery 标注)</div></div>
+        </div>
+        <div class="arch-arrow">&#9660;</div>
+        <div style="text-align:center; margin-bottom: 8px;"><span style="font-size:12px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;">恢复层 (Recovery Layer)</span></div>
+        <div class="arch-layer">
+          <div><div class="arch-box output">Recovery Controller</div><div class="arch-label">Pod 级恢复：删除 Pod 触发重建</div></div>
+          <div><div class="arch-box warning">Node Cordon</div><div class="arch-label">节点级恢复：标记不可调度</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px;">
+      <h3 style="font-size: 16px; margin-bottom: 16px;">双组件模型</h3>
+      <table class="data-table">
+        <thead><tr><th>组件</th><th>部署方式</th><th>职责</th><th>对应入口</th></tr></thead>
+        <tbody>
+          <tr><td style="color: var(--text-primary); font-weight: 600;">kcover-controller</td><td>Deployment（多副本 + Leader Election）</td><td>集群级控制：诊断编排、事件处理、恢复执行</td><td><code>cmd/kcover/main.go</code></td></tr>
+          <tr><td style="color: var(--text-primary); font-weight: 600;">kcover-agent</td><td>DaemonSet（每个 GPU 节点一个）</td><td>节点级诊断：执行 DCGM GPU 健康检查，上报故障</td><td><code>cmd/collector-controller/main.go</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="info-box tip">
+      <span class="icon">&#128161;</span>
+      <div class="content"><strong>设计亮点</strong>：Agent 仅负责诊断和上报，Controller 负责决策和恢复。这种分离让 GPU 诊断不影响控制平面的可用性，也便于独立升级 Agent 的诊断策略。</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="flow">
+    <div class="section-title"><span class="icon">&#128260;</span>核心工作流</div>
+    <p class="section-desc">从故障发生到恢复完成的完整处理流程。</p>
+
+    <div class="sequence-flow">
+      <div class="seq-step">
+        <div class="seq-num detect">1</div>
+        <div class="seq-content"><h4>故障检测</h4><p>PodStatusCollector 通过 Informer 监听 Pod 状态变化；或 DCGM Agent 每 30 秒执行一次 GPU 诊断；或外部系统通过标注 Event 触发。</p></div>
+      </div>
+      <div class="seq-step">
+        <div class="seq-num record">2</div>
+        <div class="seq-content"><h4>事件录制</h4><p>诊断模块将故障信息包装为 <code>CollectorEvent</code>，包含目标类型（Pod/Node/Device）、命名空间、事件类型（Error/Warning）。</p></div>
+      </div>
+      <div class="seq-step">
+        <div class="seq-num trigger">3</div>
+        <div class="seq-content"><h4>事件标注与分发</h4><p>KubeEventsRecorder 将事件写入 Kubernetes Event 对象，并附加 <code>kcover.io/need-recovery=true</code> 标注。Controller 的 Informer 监听到标注 Event。</p></div>
+      </div>
+      <div class="seq-step">
+        <div class="seq-num recover">4</div>
+        <div class="seq-content"><h4>恢复决策</h4><p>RecoveryController 检查 Pod/Job 是否带有 <code>kcover.io/cascading-recovery=true</code> 标签；校验 RestartPolicy 非 Never；通过 TTL Cache 确认不在冷却期内（30 秒）。</p></div>
+      </div>
+      <div class="seq-step">
+        <div class="seq-num ack">5</div>
+        <div class="seq-content"><h4>执行恢复</h4><p><strong>Pod 级</strong>：批量删除该 Job 的所有 Pod，由 Kubeflow Operator 自动重建。<strong>Node 级</strong>：将节点标记为 Unschedulable，并对该节点上的所有 Job 执行 Pod 级恢复。</p></div>
+      </div>
+    </div>
+
+    <div class="info-box warning">
+      <span class="icon">&#9888;</span>
+      <div class="content"><strong>防抖机制</strong>：通过 TTL Cache 实现 30 秒冷却期，同一 Job 在冷却期内不会被重复重启。这避免了故障节点的反复重启风暴，但当前的 30 秒是硬编码值（Issue #9 请求改为可配置）。</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="code">
+    <div class="section-title"><span class="icon">&#128196;</span>代码结构分析</div>
+    <p class="section-desc">项目代码精简，核心逻辑约 2000 行 Go 代码，模块划分清晰。</p>
+
+    <div class="file-tree">
+      <span class="dir">cmd/</span><span class="desc"># 入口点</span><br>
+      &nbsp;&nbsp;<span class="dir">kcover/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">main.go</span> <span class="desc">Controller 入口，Leader Election + 启动所有子系统</span><br>
+      &nbsp;&nbsp;<span class="dir">collector-controller/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">main.go</span> <span class="desc">Agent 入口，节点级 DCGM 诊断</span><br>
+      <span class="dir">pkg/</span><span class="desc"># 核心包</span><br>
+      &nbsp;&nbsp;<span class="dir">constants/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">const.go</span> <span class="desc">标签和标注常量定义</span><br>
+      &nbsp;&nbsp;<span class="dir">diagnosis/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">collector.go</span> <span class="desc">Diagnostic 接口定义</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">controller/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">controller.go</span> <span class="desc">诊断编排器，管理多个 Diagnostic</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">nvidiadiag/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">nvidia_diag.go</span> <span class="desc">NVIDIA DCGM GPU 诊断实现</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">podstatus/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">pod_status.go</span> <span class="desc">Pod 容器状态变化监控</span><br>
+      &nbsp;&nbsp;<span class="dir">events/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">events.go</span> <span class="desc">事件类型定义（Pod/Node/Device + Error/Warning）</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">kubeevents.go</span> <span class="desc">Kubernetes Event 录制和监听实现</span><br>
+      &nbsp;&nbsp;<span class="dir">recovery/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">recovery.go</span> <span class="desc">恢复控制器：Pod 重启 + Node Cordon</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">job.go</span> <span class="desc">Kubeflow Job 标签查询（PyTorchJob/TFJob）</span><br>
+      &nbsp;&nbsp;<span class="dir">runner/</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="file">runner.go</span> <span class="desc">生命周期接口 (Start/Stop)</span><br>
+      &nbsp;&nbsp;<span class="dir">kube/</span> <span class="desc">Kubernetes 配置工具</span><br>
+      <span class="dir">manifests/</span> <span class="desc">Helm Chart 和部署清单</span><br>
+      <span class="dir">docker/</span> <span class="desc">Dockerfile (controller + agent)</span><br>
+      <span class="file">go.mod</span> <span class="desc">Go 模块定义，依赖 k8s.io v0.32.0</span><br>
+    </div>
+
+    <div style="margin-top: 24px;">
+      <h3 style="font-size: 16px; margin-bottom: 16px;">关键依赖</h3>
+      <table class="data-table">
+        <thead><tr><th>依赖</th><th>版本</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>k8s.io/client-go</td><td>v0.32.0</td><td>Kubernetes API 客户端、Informer、Leader Election</td></tr>
+          <tr><td>jellydator/ttlcache</td><td>v3.3.0</td><td>TTL 缓存，用于重启防抖和 Job 标签缓存</td></tr>
+          <tr><td>samber/lo</td><td>v1.47.0</td><td>Go 泛型工具库，简化集合操作</td></tr>
+          <tr><td>k8s.io/klog/v2</td><td>v2.130.1</td><td>结构化日志</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="info-box tip">
+      <span class="icon">&#128161;</span>
+      <div class="content"><strong>代码质量观察</strong>：依赖极少（仅 4 个直接依赖），无第三方框架依赖，代码精简。但 <code>nvidiadiag/nvidia_diag.go</code> 中的 <code>dcgmi diag</code> 调用尚未实现（注释状态），说明 GPU 诊断功能仍在开发中。</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="features">
+    <div class="section-title"><span class="icon">&#9881;</span>功能特性详解</div>
+    <p class="section-desc">kcover 的三大核心能力：标签驱动的恢复策略、多维度故障检测、分级恢复机制。</p>
+
+    <h3 style="font-size: 18px; margin: 24px 0 16px;">6.1 标签驱动的恢复策略</h3>
+    <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">kcover 通过 Kubernetes 标签（Label）和标注（Annotation）控制恢复行为，无需修改应用代码：</p>
+
+    <table class="data-table">
+      <thead><tr><th>标签/标注</th><th>作用范围</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>kcover.io/cascading-recovery=true</code></td><td>Pod 或 Job</td><td>启用级联恢复。可标注在 Pod 上，也可标注在 PyTorchJob/TFJob 上自动传递到 Pod</td></tr>
+        <tr><td><code>kcover.io/need-recovery=true</code></td><td>K8s Event Annotation</td><td>触发恢复的信号。诊断模块或外部系统通过此标注标记需要恢复的 Event</td></tr>
+        <tr><td><code>training.kubeflow.org/job-name</code></td><td>Pod (Kubeflow 自动添加)</td><td>标识 Pod 所属的训练 Job，用于批量删除同 Job 的所有 Pod</td></tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+<pre><span class="comment"># 在 PyTorchJob 上启用恢复（推荐方式，自动传递到 Pod）</span>
+<span class="keyword">kubectl</span> label pytorchjobs my-training-job <span class="string">kcover.io/cascading-recovery=true</span>
+
+<span class="comment"># 或直接标注 Pod</span>
+<span class="keyword">kubectl</span> label pod my-training-worker-0 <span class="string">kcover.io/cascading-recovery=true</span>
+
+<span class="comment"># 也可以在 Job YAML 中预设</span>
+<span class="keyword">metadata:</span>
+  <span class="keyword">labels:</span>
+    <span class="string">kcover.io/cascading-recovery</span>: <span class="string">"true"</span></pre>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 32px 0 16px;">6.2 多维度故障检测</h3>
+    <div class="card-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 16px;">
+      <div class="card">
+        <h3>Pod 容器状态监控</h3>
+        <p><strong>实现状态</strong>: <span class="tag tag-green">已实现</span></p>
+        <p style="margin-top: 8px;">通过 Kubernetes Informer 实时监听 Pod 状态变化。当容器以 <code>Reason: Error</code> 状态退出时，自动产生恢复事件。仅监控带有恢复标签的 Pod。</p>
+      </div>
+      <div class="card">
+        <h3>NVIDIA GPU 诊断</h3>
+        <p><strong>实现状态</strong>: <span class="tag tag-yellow">开发中</span></p>
+        <p style="margin-top: 8px;">Agent 每 30 秒执行 <code>dcgmi diag -r 1</code>，检测 GPU 硬件故障。当前代码框架已搭建，但核心 <code>dcgmi</code> 调用和结果解析仍在注释状态。</p>
+      </div>
+      <div class="card">
+        <h3>Kubernetes Event 监听</h3>
+        <p><strong>实现状态</strong>: <span class="tag tag-green">已实现</span></p>
+        <p style="margin-top: 8px;">监听集群中所有带有 <code>kcover.io/need-recovery=true</code> 标注的 Event。这提供了外部集成通道 &mdash; 任何能创建 K8s Event 的系统都可以触发恢复。</p>
+      </div>
+      <div class="card">
+        <h3>外部系统集成</h3>
+        <p><strong>实现状态</strong>: <span class="tag tag-cyan">架构支持</span></p>
+        <p style="margin-top: 8px;">通过 Kubernetes Event 标注机制，任何外部监控系统（如 Prometheus AlertManager、DCGM Exporter）只需创建带标注的 Event 即可触发恢复，无需代码集成。</p>
+      </div>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 32px 0 16px;">6.3 分级恢复机制</h3>
+    <table class="data-table">
+      <thead><tr><th>故障级别</th><th>触发条件</th><th>恢复动作</th><th>影响范围</th></tr></thead>
+      <tbody>
+        <tr><td style="color: var(--text-primary);"><strong>Pod 级</strong></td><td>容器异常退出（exit code != 0）</td><td>删除该 Job 的所有 Pod &rarr; Kubeflow Operator 自动重建</td><td>单个训练任务</td></tr>
+        <tr><td style="color: var(--text-primary);"><strong>Node 级</strong></td><td>节点故障（GPU 掉线、DCGM 报告等）</td><td>1. 将节点标记为 Unschedulable<br>2. 对该节点上所有带恢复标签的 Job 执行 Pod 级恢复</td><td>故障节点上的所有训练任务</td></tr>
+      </tbody>
+    </table>
+
+    <div class="info-box tip">
+      <span class="icon">&#128161;</span>
+      <div class="content"><strong>恢复原理</strong>：kcover 本身不直接"重启"训练。它删除 Pod 后，由 Kubeflow Training Operator 负责重建 Pod 和恢复训练。这意味着 kcover 天然兼容 Kubeflow 的 checkpoint 恢复机制。</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="eval">
+    <div class="section-title"><span class="icon">&#128202;</span>综合评估</div>
+    <p class="section-desc">从代码质量、功能完整度、社区活跃度、生产就绪度四个维度评估。</p>
+
+    <div class="score-grid">
+      <div class="score-card"><div class="score-circle score-high">A</div><div class="label">代码质量</div></div>
+      <div class="score-card"><div class="score-circle score-mid">B-</div><div class="label">功能完整度</div></div>
+      <div class="score-card"><div class="score-circle score-mid">C+</div><div class="label">社区活跃度</div></div>
+      <div class="score-card"><div class="score-circle score-mid">B</div><div class="label">生产就绪度</div></div>
+    </div>
+
+    <h3 style="font-size: 18px; margin: 24px 0 16px;">详细评分</h3>
+    <div style="max-width: 500px;">
+      <div class="compare-bar"><div class="bar-label"><span>代码简洁性</span><span style="color: #34d399;">95%</span></div><div class="bar-track"><div class="bar-fill green" style="width: 95%;"></div></div></div>
+      <div class="compare-bar"><div class="bar-label"><span>架构设计</span><span style="color: #22d3ee;">90%</span></div><div class="bar-track"><div class="bar-fill cyan" style="width: 90%;"></div></div></div>
+      <div class="compare-bar"><div class="bar-label"><span>K8s 原生集成</span><span style="color: #22d3ee;">85%</span></div><div class="bar-track"><div class="bar-fill cyan" style="width: 85%;"></div></div></div>
+      <div class="compare-bar"><div class="bar-label"><span>核心功能完整度</span><span style="color: #fbbf24;">60%</span></div><div class="bar-track"><div class="bar-fill yellow" style="width: 60%;"></div></div></div>
+      <div class="compare-bar"><div class="bar-label"><span>文档质量</span><span style="color: #fbbf24;">45%</span></div><div class="bar-track"><div class="bar-fill yellow" style="width: 45%;"></div></div></div>
+      <div class="compare-bar"><div class="bar-label"><span>测试覆盖</span><span style="color: #fbbf24;">40%</span></div><div class="bar-track"><div class="bar-fill yellow" style="width: 40%;"></div></div></div>
+      <div class="compare-bar"><div class="bar-label"><span>社区规模</span><span style="color: #fbbf24;">30%</span></div><div class="bar-track"><div class="bar-fill yellow" style="width: 30%;"></div></div></div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h3 style="font-size: 18px; margin-bottom: 16px;">SWOT 分析</h3>
+      <div class="card-grid" style="grid-template-columns: repeat(2, 1fr);">
+        <div class="card" style="border-left: 3px solid #10b981;">
+          <h3 style="color: #34d399;">Strengths (优势)</h3>
+          <ul style="list-style: none; font-size: 14px; color: var(--text-secondary);">
+            <li>&#10003; 极简设计，核心逻辑清晰，易于理解和二次开发</li>
+            <li>&#10003; 零侵入 &mdash; 通过标签/标注驱动，无需修改训练代码</li>
+            <li>&#10003; K8s 原生 &mdash; 标准 Informer + Leader Election</li>
+            <li>&#10003; 外部集成友好 &mdash; Event 标注机制开放</li>
+            <li>&#10003; 双组件架构 &mdash; Controller/Agent 分离合理</li>
+          </ul>
+        </div>
+        <div class="card" style="border-left: 3px solid #f87171;">
+          <h3 style="color: #f87171;">Weaknesses (劣势)</h3>
+          <ul style="list-style: none; font-size: 14px; color: var(--text-secondary);">
+            <li>&#10007; DCGM 诊断核心功能未完成实现</li>
+            <li>&#10007; 缺乏文档（无架构文档、无 API 文档）</li>
+            <li>&#10007; 测试覆盖不足（Makefile 有 test 目标但未见测试文件）</li>
+            <li>&#10007; 配置硬编码（冷却时间、诊断间隔等不可配置）</li>
+            <li>&#10007; 仅支持 Kubeflow Operator（Volcano 支持在 Issue 中）</li>
+          </ul>
+        </div>
+        <div class="card" style="border-left: 3px solid #60a5fa;">
+          <h3 style="color: #60a5fa;">Opportunities (机会)</h3>
+          <ul style="list-style: none; font-size: 14px; color: var(--text-secondary);">
+            <li>&#9654; AI 训练集群规模爆发，GPU 故障恢复是刚需</li>
+            <li>&#9654; KubeCon 演讲带来社区曝光</li>
+            <li>&#9654; 可扩展为通用 K8s 工作负载故障恢复方案</li>
+            <li>&#9654; 与 Volcano 等调度器集成可扩大覆盖面</li>
+          </ul>
+        </div>
+        <div class="card" style="border-left: 3px solid #fbbf24;">
+          <h3 style="color: #fbbf24;">Threats (风险)</h3>
+          <ul style="list-style: none; font-size: 14px; color: var(--text-secondary);">
+            <li>&#9654; 社区规模小（35 stars），长期维护存疑</li>
+            <li>&#9654; 无明确的贡献者社区和治理结构</li>
+            <li>&#9654; 竞品：Kubernetes 原生 Job 重试、Volcano 重试机制</li>
+            <li>&#9654; 依赖 Kubeflow Operator 生态，生态绑定风险</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h3 style="font-size: 18px; margin-bottom: 16px;">适用场景</h3>
+      <table class="data-table">
+        <thead><tr><th>场景</th><th>适用性</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td style="color: var(--text-primary);">大规模 LLM 训练集群</td><td><span class="tag tag-green">非常适合</span></td><td>GPU 故障频繁，自动恢复可大幅减少人工介入和训练中断时间</td></tr>
+          <tr><td style="color: var(--text-primary);">Kubeflow 分布式训练</td><td><span class="tag tag-green">非常适合</span></td><td>原生支持 PyTorchJob 和 TFJob，无缝集成</td></tr>
+          <tr><td style="color: var(--text-primary);">通用 K8s 工作负载</td><td><span class="tag tag-yellow">一般适合</span></td><td>架构支持但需扩展，当前聚焦 Kubeflow 生态</td></tr>
+          <tr><td style="color: var(--text-primary);">非 GPU 工作负载</td><td><span class="tag tag-yellow">一般适合</span></td><td>Pod 状态监控可用，但 DCGM 诊断不适用</td></tr>
+          <tr><td style="color: var(--text-primary);">生产环境（立即可用）</td><td><span class="tag tag-red">需谨慎</span></td><td>核心 GPU 诊断功能未完成，建议先在测试环境验证 Pod 级恢复</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="issues">
+    <div class="section-title"><span class="icon">&#128203;</span>问题与路线图</div>
+    <p class="section-desc">当前 5 个 Open Issue 反映了社区关注的方向。</p>
+
+    <div class="issue-list">
+      <div class="issue-item">
+        <span class="issue-id">#13</span>
+        <div class="issue-body"><h4>Save pods' log before deleting</h4><p>在删除 Pod 之前保存其日志。恢复操作会删除 Pod 导致日志丢失，建议先收集日志以便事后分析故障原因。<span class="tag tag-blue">renovate</span> <span class="tag tag-yellow">2025-06</span></p></div>
+      </div>
+      <div class="issue-item">
+        <span class="issue-id">#9</span>
+        <div class="issue-body"><h4>Config safety detection interval time window size</h4><p>请求将安全检测间隔和时间窗口大小改为可配置。当前 30 秒的检测间隔和冷却期是硬编码的。<span class="tag tag-green">enhancement</span> <span class="tag tag-yellow">2025-03</span></p></div>
+      </div>
+      <div class="issue-item">
+        <span class="issue-id">#8</span>
+        <div class="issue-body"><h4>Enhancement: support volcano</h4><p>增加对 Volcano 调度器的支持。Volcano 是另一个主流的 K8s 批处理调度器，集成可扩大用户群。<span class="tag tag-green">enhancement</span> <span class="tag tag-yellow">2025-01</span></p></div>
+      </div>
+      <div class="issue-item">
+        <span class="issue-id">#3</span>
+        <div class="issue-body"><h4>GPU disconnection leads to training failure</h4><p>GPU 断连导致训练失败的 bug 报告。这印证了 kcover 要解决的核心痛点。<span class="tag tag-red">bug</span> <span class="tag tag-yellow">2024-08</span></p></div>
+      </div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h3 style="font-size: 18px; margin-bottom: 16px;">推测路线图</h3>
+      <table class="data-table">
+        <thead><tr><th>阶段</th><th>内容</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td style="color: var(--text-primary); font-weight: 600;">Phase 1</td><td>Pod 状态监控 + 基础恢复（删除 Pod + Node Cordon）</td><td><span class="tag tag-green">已完成</span></td></tr>
+          <tr><td style="color: var(--text-primary); font-weight: 600;">Phase 2</td><td>NVIDIA DCGM GPU 诊断集成（Agent 端 dcgmi 调用）</td><td><span class="tag tag-yellow">开发中</span></td></tr>
+          <tr><td style="color: var(--text-primary); font-weight: 600;">Phase 3</td><td>可配置化（检测间隔、冷却时间、诊断策略）</td><td><span class="tag tag-blue">计划中</span></td></tr>
+          <tr><td style="color: var(--text-primary); font-weight: 600;">Phase 4</td><td>Volcano 调度器支持 + 更多 Job 类型</td><td><span class="tag tag-blue">计划中</span></td></tr>
+          <tr><td style="color: var(--text-primary); font-weight: 600;">Phase 5</td><td>恢复前日志收集、更丰富的诊断报告</td><td><span class="tag tag-blue">计划中</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section" id="appendix">
+    <div class="section-title"><span class="icon">&#128206;</span>附录</div>
+
+    <h3 style="font-size: 18px; margin-bottom: 16px;">快速上手</h3>
+    <div class="code-block">
+<pre><span class="comment"># 1. 添加 Helm 仓库</span>
+<span class="keyword">helm</span> repo add baizeai https://baizeai.github.io/charts
+
+<span class="comment"># 2. 安装 kcover</span>
+<span class="keyword">helm</span> install kcover baizeai/kcover \
+  --namespace kcover-system \
+  --create-namespace
+
+<span class="comment"># 3. 为训练 Job 启用故障恢复</span>
+<span class="keyword">kubectl</span> label pytorchjobs my-llm-training \
+  <span class="string">kcover.io/cascading-recovery=true</span>
+
+<span class="comment"># 4. 查看恢复事件</span>
+<span class="keyword">kubectl</span> get events -A -w --field-selector reason=Error</pre>
+    </div>
+
+    <div class="source-section">
+      <h3>数据来源与可信度</h3>
+      <ul class="source-list">
+        <li><span class="credibility cred-verified">已验证</span><a href="https://github.com/BaizeAI/kcover">GitHub - BaizeAI/kcover</a> &mdash; 仓库源码、README、Issues、目录结构（直接读取）</li>
+        <li><span class="credibility cred-verified">已验证</span><a href="https://pkg.go.dev/github.com/baizeai/kcover">Go Packages - baizeai/kcover</a> &mdash; Go 模块文档和包结构</li>
+        <li><span class="credibility cred-verified">已验证</span><a href="https://baizeai.github.io/talks/2024-08-21-kubecon-hk/">KubeCon HK 2024 Talk</a> &mdash; 官方演讲幻灯片</li>
+        <li><span class="credibility cred-verified">已验证</span><a href="https://www.aibase.com/repos/project/kcover">AIBase - kcover</a> &mdash; 项目元数据（创建日期、Topics）</li>
+        <li><span class="credibility cred-verified">已验证</span>所有源码文件通过 GitHub API 直接获取和分析</li>
+      </ul>
+    </div>
+
+    <div style="text-align: center; padding: 32px 0; color: var(--text-muted); font-size: 12px;">
+      kcover Project Research Report &middot; 2026-04-24
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
