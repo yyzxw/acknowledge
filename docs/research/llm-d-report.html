@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>llm-d 开源组织深度研究报告</title>
+  <style>
+    :root {
+      --bg-0: #030508;
+      --bg-1: #050a12;
+      --bg-2: #08111f;
+      --bg-3: #0d1829;
+      --panel: rgba(13, 25, 43, 0.85);
+      --panel-hover: rgba(20, 38, 65, 0.9);
+      --line: rgba(135, 163, 199, 0.18);
+      --line-strong: rgba(143, 199, 255, 0.4);
+      --text: #e8f0fa;
+      --muted: #8ba3bf;
+      --soft: #b8c9dc;
+      --cyan: #22d4ff;
+      --cyan-dim: rgba(34, 212, 255, 0.15);
+      --purple: #a78bfa;
+      --purple-dim: rgba(167, 139, 250, 0.15);
+      --green: #34e8b0;
+      --green-dim: rgba(52, 232, 176, 0.15);
+      --orange: #ffb347;
+      --orange-dim: rgba(255, 179, 71, 0.15);
+      --red: #ff7070;
+      --radius-xl: 20px;
+      --radius-lg: 14px;
+      --radius-md: 8px;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      color: var(--text);
+      background:
+        radial-gradient(1400px 800px at 10% -5%, rgba(34, 212, 255, 0.08), transparent 55%),
+        radial-gradient(1200px 700px at 95% 15%, rgba(167, 139, 250, 0.07), transparent 55%),
+        radial-gradient(800px 500px at 50% 100%, rgba(52, 232, 176, 0.05), transparent 50%),
+        linear-gradient(180deg, var(--bg-0), var(--bg-1) 30%, var(--bg-2));
+      min-height: 100vh;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 5rem;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      margin-bottom: 4rem;
+      padding: 2rem 0;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1rem;
+      background: var(--cyan-dim);
+      border: 1px solid rgba(34, 212, 255, 0.3);
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 1.5rem;
+    }
+
+    h1 {
+      font-size: clamp(1.8rem, 5vw, 2.8rem);
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, #fff 0%, var(--cyan) 50%, var(--purple) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Back link */
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 0.4rem 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      transition: all 0.2s ease;
+      margin-bottom: 2rem;
+    }
+    .back:hover {
+      color: var(--cyan);
+      border-color: var(--cyan);
+    }
+
+    /* Section */
+    section { margin-bottom: 4rem; }
+
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 4px;
+      height: 1.4rem;
+      background: linear-gradient(180deg, var(--cyan), var(--purple));
+      border-radius: 2px;
+    }
+
+    /* Cards grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      padding: 1.5rem;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+
+    .card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .card:hover::before { opacity: 1; }
+
+    .card.cyan { --accent: var(--cyan); --accent-dim: var(--cyan-dim); }
+    .card.purple { --accent: var(--purple); --accent-dim: var(--purple-dim); }
+    .card.green { --accent: var(--green); --accent-dim: var(--green-dim); }
+    .card.orange { --accent: var(--orange); --accent-dim: var(--orange-dim); }
+
+    .card-stars {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      font-size: 0.75rem;
+      color: var(--accent);
+      font-weight: 600;
+      background: var(--accent-dim);
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+    }
+
+    .card h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .card p {
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.65;
+      margin-bottom: 1rem;
+    }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .tag {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--line);
+      color: var(--soft);
+    }
+
+    .card-badge {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      font-size: 0.65rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .card-badge.deprecated {
+      background: rgba(255, 112, 112, 0.15);
+      color: var(--red);
+    }
+
+    /* Architecture diagram */
+    .arch-diagram {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      padding: 2rem;
+      overflow-x: auto;
+    }
+
+    .arch-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-width: 600px;
+    }
+
+    .arch-layer {
+      display: flex;
+      gap: 1rem;
+      align-items: stretch;
+    }
+
+    .arch-label {
+      width: 140px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .arch-content {
+      flex: 1;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .arch-box {
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-lg);
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid;
+      transition: all 0.2s ease;
+    }
+
+    .arch-box.cyan {
+      background: var(--cyan-dim);
+      border-color: rgba(34, 212, 255, 0.3);
+      color: var(--cyan);
+    }
+
+    .arch-box.purple {
+      background: var(--purple-dim);
+      border-color: rgba(167, 139, 250, 0.3);
+      color: var(--purple);
+    }
+
+    .arch-box.green {
+      background: var(--green-dim);
+      border-color: rgba(52, 232, 176, 0.3);
+      color: var(--green);
+    }
+
+    .arch-box.orange {
+      background: var(--orange-dim);
+      border-color: rgba(255, 179, 71, 0.3);
+      color: var(--orange);
+    }
+
+    .arch-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 0;
+      color: var(--line-strong);
+      font-size: 1.2rem;
+    }
+
+    /* Relationship diagram */
+    .rel-diagram {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      padding: 2rem;
+    }
+
+    .rel-main {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .rel-main-box {
+      display: inline-block;
+      padding: 1rem 2rem;
+      background: linear-gradient(135deg, var(--cyan-dim), var(--purple-dim));
+      border: 2px solid var(--cyan);
+      border-radius: var(--radius-lg);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .rel-main-stars {
+      font-size: 0.8rem;
+      color: var(--cyan);
+      margin-top: 0.3rem;
+    }
+
+    .rel-connections {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .rel-item {
+      background: var(--bg-3);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      position: relative;
+    }
+
+    .rel-item h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.3rem;
+    }
+
+    .rel-item .stars {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .rel-item p {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .rel-item.core {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+
+    .rel-item.support {
+      border-color: var(--green);
+    }
+
+    .rel-item.deprecated {
+      border-color: var(--red);
+      opacity: 0.7;
+    }
+
+    /* Comparison table */
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .comparison-table th {
+      background: var(--bg-3);
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .comparison-table td {
+      font-size: 0.9rem;
+    }
+
+    .comparison-table tr:last-child td { border-bottom: none; }
+
+    .comparison-table .check { color: var(--green); }
+    .comparison-table .cross { color: var(--red); }
+    .comparison-table .partial { color: var(--orange); }
+
+    /* Feature list */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+
+    .feature-item {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+    }
+
+    .feature-item h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .feature-item p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* Quote */
+    .highlight-box {
+      background: linear-gradient(135deg, var(--cyan-dim), var(--purple-dim));
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-xl);
+      padding: 2rem;
+      margin: 2rem 0;
+    }
+
+    .highlight-box p {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--soft);
+    }
+
+    /* Code blocks */
+    .code-block {
+      background: var(--bg-3);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    .code-block code {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--soft);
+      white-space: pre;
+      display: block;
+      line-height: 1.6;
+    }
+
+    .code-block .comment { color: var(--muted); }
+    .code-block .keyword { color: var(--purple); }
+    .code-block .string { color: var(--green); }
+
+    /* Footer stats */
+    .stats-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    .stat-box {
+      flex: 1;
+      min-width: 140px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      text-align: center;
+    }
+
+    .stat-box .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+
+    .stat-box .label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .page { padding: 2rem 1rem 4rem; }
+      .arch-label { display: none; }
+      .grid { grid-template-columns: 1fr; }
+      .comparison-table { font-size: 0.8rem; }
+      .comparison-table th, .comparison-table td { padding: 0.75rem 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <a class="back" href="./">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M13 6l-6 6 6 6"/></svg>
+      返回研究报告
+    </a>
+
+    <header>
+      <div class="logo-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        开源组织深度分析
+      </div>
+      <h1>llm-d 开源组织深度研究报告</h1>
+      <p class="subtitle">Kubernetes 分布式 LLM 推理服务编排平台的技术全景分析</p>
+    </header>
+
+    <!-- Stats -->
+    <section>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="value">17</div>
+          <div class="label">仓库数量</div>
+        </div>
+        <div class="stat-box">
+          <div class="value">3,668</div>
+          <div class="label">总 Stars</div>
+        </div>
+        <div class="stat-box">
+          <div class="value">v0.5</div>
+          <div class="label">最新版本</div>
+        </div>
+        <div class="stat-box">
+          <div class="value">Go</div>
+          <div class="label">主要语言</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Project Overview -->
+    <section>
+      <h2 class="section-title">项目概览</h2>
+      <div class="highlight-box">
+        <p>llm-d 是一个高性能分布式推理服务栈，致力于在 Kubernetes 上实现 SOTA（State-of-the-Art）推理性能。项目基于 vLLM 作为默认模型服务器和引擎，通过 Kubernetes Gateway API 作为控制平面 API 和负载均衡编排器，为生产环境提供完善的分布式推理解决方案。</p>
+      </div>
+    </section>
+
+    <!-- Core Repositories -->
+    <section>
+      <h2 class="section-title">核心仓库</h2>
+      <div class="grid">
+        <div class="card cyan">
+          <span class="card-stars">3068 ★</span>
+          <h3>llm-d (主仓库)</h3>
+          <p>核心项目，提供在 Kubernetes 上实现 SOTA 推理性能的完整架构和部署指南。</p>
+          <div class="card-tags">
+            <span class="tag">Kubernetes</span>
+            <span class="tag">Gateway API</span>
+            <span class="tag">负载均衡</span>
+            <span class="tag">P/D 分解</span>
+          </div>
+        </div>
+
+        <div class="card purple">
+          <span class="card-stars">174 ★</span>
+          <h3>llm-d-inference-scheduler</h3>
+          <p>推理请求的优化路由调度器，基于 Gateway API 的 EPP (Endpoint Picker) 实现智能路由。</p>
+          <div class="card-tags">
+            <span class="tag">EPP</span>
+            <span class="tag">调度器</span>
+            <span class="tag">P/D Sidecar</span>
+          </div>
+        </div>
+
+        <div class="card green">
+          <span class="card-stars">136 ★</span>
+          <h3>llm-d-kv-cache</h3>
+          <p>分布式 KV-Cache 调度和 offloading 库，提供 KV 缓存感知的路由能力。</p>
+          <div class="card-tags">
+            <span class="tag">KV-Cache</span>
+            <span class="tag">索引追踪</span>
+            <span class="tag">分布式</span>
+          </div>
+        </div>
+
+        <div class="card orange">
+          <span class="card-stars">119 ★</span>
+          <h3>llm-d-inference-sim</h3>
+          <p>轻量级 vLLM 模拟器，无需 GPU 即可测试推理基础设施，支持 OpenAI 兼容 API。</p>
+          <div class="card-tags">
+            <span class="tag">模拟器</span>
+            <span class="tag">延迟模拟</span>
+            <span class="tag">故障注入</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture -->
+    <section>
+      <h2 class="section-title">技术架构</h2>
+      <div class="arch-diagram">
+        <div class="arch-layers">
+          <div class="arch-layer">
+            <div class="arch-label">应用层</div>
+            <div class="arch-content">
+              <div class="arch-box cyan">优化基线</div>
+              <div class="arch-box cyan">P/D 分解</div>
+              <div class="arch-box cyan">Wide EP</div>
+              <div class="arch-box cyan">KV 缓存</div>
+              <div class="arch-box cyan">自动扩缩容</div>
+            </div>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-layer">
+            <div class="arch-label">调度层</div>
+            <div class="arch-content">
+              <div class="arch-box purple">Inference Scheduler</div>
+              <div class="arch-box purple">EPP</div>
+              <div class="arch-box purple">PD-Sidecar</div>
+            </div>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-layer">
+            <div class="arch-label">路由层</div>
+            <div class="arch-content">
+              <div class="arch-box green">Gateway API</div>
+              <div class="arch-box green">Envoy ext-proc</div>
+            </div>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-layer">
+            <div class="arch-label">引擎层</div>
+            <div class="arch-content">
+              <div class="arch-box orange">vLLM</div>
+              <div class="arch-box orange">PyTorch/JAX</div>
+            </div>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-layer">
+            <div class="arch-label">资源层</div>
+            <div class="arch-content">
+              <div class="arch-box cyan">Kubernetes</div>
+              <div class="arch-box cyan">GPU/TPU/XPU</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Project Relationships -->
+    <section>
+      <h2 class="section-title">仓库关系图</h2>
+      <div class="rel-diagram">
+        <div class="rel-main">
+          <div class="rel-main-box">
+            <div>llm-d</div>
+            <div class="rel-main-stars">主项目 · 3068 ★</div>
+          </div>
+        </div>
+        <div class="rel-connections">
+          <div class="rel-item core">
+            <span class="stars">174 ★</span>
+            <h4>llm-d-inference-scheduler</h4>
+            <p>智能路由调度器</p>
+          </div>
+          <div class="rel-item core">
+            <span class="stars">136 ★</span>
+            <h4>llm-d-kv-cache</h4>
+            <p>KV 缓存分布式追踪</p>
+          </div>
+          <div class="rel-item core">
+            <span class="stars">119 ★</span>
+            <h4>llm-d-inference-sim</h4>
+            <p>vLLM 行为模拟器</p>
+          </div>
+          <div class="rel-item support">
+            <span class="stars">58 ★</span>
+            <h4>llm-d-benchmark</h4>
+            <p>自动化基准测试</p>
+          </div>
+          <div class="rel-item support">
+            <span class="stars">38 ★</span>
+            <h4>llm-d-workload-variant-autoscaler</h4>
+            <p>变体自动扩缩容</p>
+          </div>
+          <div class="rel-item support">
+            <span class="stars">52 ★</span>
+            <h4>llm-d-deployer</h4>
+            <p>Helm charts (已废弃)</p>
+          </div>
+          <div class="rel-item deprecated">
+            <span class="stars">17 ★</span>
+            <h4>llm-d-routing-sidecar</h4>
+            <p>已合并到 inference-scheduler</p>
+          </div>
+          <div class="rel-item deprecated">
+            <span class="stars">28 ★</span>
+            <h4>llm-d-model-service</h4>
+            <p>已迁移至 Helm charts</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Five Core Capabilities -->
+    <section>
+      <h2 class="section-title">五大核心能力</h2>
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h4>1. 优化基线 (Optimized Baseline)</h4>
+          <p>vLLM + Gateway API 负载均衡，配合前缀缓存感知路由、利用率负载均衡、多租户公平性和优先级调度。</p>
+        </div>
+        <div class="feature-item">
+          <h4>2. P/D 分解 (Prefill/Decode Disagg)</h4>
+          <p>将推理分为预填充和解码两阶段分别在独立实例执行，降低 TTFT、提升 TPOT，适合大模型和长提示场景。</p>
+        </div>
+        <div class="feature-item">
+          <h4>3. 广域专家并行 (Wide Expert-Parallism)</h4>
+          <p>支持 MoE 模型（如 DeepSeek-R1）的数据并行+专家并行部署，通过 fast accelerator networks 互联。</p>
+        </div>
+        <div class="feature-item">
+          <h4>4. 分层 KV 缓存 (Tiered KV Cache)</h4>
+          <p>GPU/CPU/SSD/Remote Storage 多层 KV 缓存 offload，提升前缀缓存命中率和内存利用率。</p>
+        </div>
+        <div class="feature-item">
+          <h4>5. 工作负载自动扩缩容</h4>
+          <p>SLO 感知成本优化的自动扩缩容，支持异构硬件和流量感知的变体自动扩缩容。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- KV Cache Details -->
+    <section>
+      <h2 class="section-title">KV-Cache 索引机制</h2>
+      <div class="arch-diagram">
+        <div class="code-block">
+<code>┌─────────────────────────────────────────────────────────┐
+│                      vLLM Fleet                           │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐                  │
+│  │ Pod 1   │  │ Pod 2   │  │ Pod N   │                  │
+│  │ GPU/CPU │  │ GPU/CPU │  │ GPU/CPU │                  │
+│  └────┬────┘  └────┬────┘  └────┬────┘                  │
+│       │              │              │                      │
+│       └──────────────┼──────────────┘                      │
+│                      ▼                                     │
+│              KVEvents Stream                               │
+│                      │                                     │
+│                      ▼                                     │
+│         ┌───────────────────────┐                        │
+│         │   Event Subscriber     │                        │
+│         └───────────┬───────────┘                        │
+│                     ▼                                     │
+│         ┌───────────────────────┐                        │
+│         │    KV-Block Index     │                        │
+│         │  (全局近实时视图)      │                        │
+│         └───────────┬───────────┘                        │
+│                     │                                     │
+│         Scheduler.score(prompt, pods)                     │
+└─────────────────────────────────────────────────────────┘</code>
+        </div>
+        <p style="color: var(--muted); font-size: 0.9rem; margin-top: 1rem;">
+          KVCache Indexer 通过消费 vLLM 发出的 KVEvents 维护全局 KV 块位置索引，使调度器能够做出 KV 缓存感知的路由决策。
+        </p>
+      </div>
+    </section>
+
+    <!-- Competitor Comparison -->
+    <section>
+      <h2 class="section-title">竞品对比</h2>
+      <div style="overflow-x: auto;">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>竞品</th>
+              <th>定位层次</th>
+              <th>KV 缓存</th>
+              <th>P/D 分解</th>
+              <th>路由调度</th>
+              <th>多租户</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>llm-d</strong></td>
+              <td>编排层</td>
+              <td class="check">✓ 分布式</td>
+              <td class="check">✓ 完整方案</td>
+              <td class="check">✓ EPP</td>
+              <td class="check">✓ 完善</td>
+            </tr>
+            <tr>
+              <td>vLLM</td>
+              <td>引擎层</td>
+              <td class="partial">△ 单节点</td>
+              <td class="partial">△ 实验性</td>
+              <td class="cross">✗</td>
+              <td class="partial">△ 基础</td>
+            </tr>
+            <tr>
+              <td>SGLang</td>
+              <td>服务框架</td>
+              <td class="partial">△ 单节点</td>
+              <td class="cross">✗</td>
+              <td class="cross">✗</td>
+              <td class="partial">△ 基础</td>
+            </tr>
+            <tr>
+              <td>Ray Serve</td>
+              <td>分布式框架</td>
+              <td class="cross">✗</td>
+              <td class="cross">✗</td>
+              <td class="partial">△ 有限</td>
+              <td class="partial">△ 基础</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Key Insights -->
+    <section>
+      <h2 class="section-title">关键洞察</h2>
+      <div class="highlight-box">
+        <p><strong>1. 企业级完整性：</strong>llm-d 不是简单的模型服务器，而是面向生产的完整分布式推理编排平台，从模型服务到路由调度再到自动扩缩容全覆盖。</p>
+      </div>
+      <div class="highlight-box" style="margin-top: 1rem;">
+        <p><strong>2. Kubernetes 原生：</strong>深度绑定云原生生态，基于 Kubernetes Gateway API 实现服务网络抽象，适合企业级部署。</p>
+      </div>
+      <div class="highlight-box" style="margin-top: 1rem;">
+        <p><strong>3. 与 vLLM 互补：</strong>llm-d 基于 vLLM 构建上层编排能力，不替代 vLLM 而是增强其生产部署能力。</p>
+      </div>
+    </section>
+
+    <!-- Core Terms -->
+    <section>
+      <h2 class="section-title">核心术语</h2>
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h4>EPP (Endpoint Picker)</h4>
+          <p>基于 Gateway API 的推理请求调度组件，决定请求路由到哪个模型服务端点。</p>
+        </div>
+        <div class="feature-item">
+          <h4>P/D Disaggregation</h4>
+          <p>Prefill/Decode 分离技术，将 LLM 推理的预填充阶段和解码阶段部署在独立实例。</p>
+        </div>
+        <div class="feature-item">
+          <h4>TTFT / TPOT</h4>
+          <p>Time To First Token / Time Per Output Token，衡量推理延迟的核心指标。</p>
+        </div>
+        <div class="feature-item">
+          <h4>Wide Expert-Parallelism</h4>
+          <p>MoE 模型的广度专家并行，结合数据并行和专家并行提升吞吐量。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Target Hardware -->
+    <section>
+      <h2 class="section-title">支持的硬件平台</h2>
+      <div class="grid">
+        <div class="card cyan">
+          <h3>NVIDIA</h3>
+          <p>A100, H100, B200 等 Ampere 及更新架构 GPU</p>
+        </div>
+        <div class="card purple">
+          <h3>AMD</h3>
+          <p>MI250, MI300 等 CDNA 架构加速器</p>
+        </div>
+        <div class="card green">
+          <h3>Google TPU</h3>
+          <p>TPU v5e 及更新版本</p>
+        </div>
+        <div class="card orange">
+          <h3>Intel GPU</h3>
+          <p>GPU Max 系列 (Ponte Vecchio 等)</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer style="text-align: center; padding: 3rem 0; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); margin-top: 4rem;">
+      <p>llm-d 开源组织深度分析报告 · 数据来源: GitHub · 更新日期: 2026-04-25</p>
+      <p style="margin-top: 0.5rem;">
+        <a href="https://github.com/llm-d" style="color: var(--cyan); text-decoration: none;">GitHub Organization</a> ·
+        <a href="https://llm-d.ai" style="color: var(--cyan); text-decoration: none;">官方网站</a>
+      </p>
+    </footer>
+  </main>
+</body>
+</html>

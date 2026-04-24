@@ -19,6 +19,7 @@
       --green: #35e6bd;
       --red: #ff7070;
       --blue: #4a9eff;
+      --purple: #a78bfa;
       --radius-xl: 26px;
       --radius-md: 12px;
       --shadow-soft: 0 22px 80px rgba(0, 0, 0, 0.34);
@@ -103,6 +104,7 @@
     .card.red:hover { box-shadow: 0 0 36px rgba(255, 112, 112, 0.2); }
     .card.green:hover { box-shadow: 0 0 36px rgba(53, 230, 189, 0.2); }
     .card.blue:hover { box-shadow: 0 0 36px rgba(74, 158, 255, 0.2); }
+    .card.purple:hover { box-shadow: 0 0 36px rgba(167, 139, 250, 0.2); }
 
     .card-tag {
       display: inline-flex;
@@ -118,6 +120,7 @@
     .card-tag.red { background: rgba(255, 112, 112, 0.14); color: var(--red); }
     .card-tag.green { background: rgba(53, 230, 189, 0.14); color: var(--green); }
     .card-tag.blue { background: rgba(74, 158, 255, 0.14); color: var(--blue); }
+    .card-tag.purple { background: rgba(167, 139, 250, 0.14); color: var(--purple); }
 
     .card h2 {
       font-size: 1.25rem;
@@ -192,6 +195,17 @@
           <span class="pill">LLM 路由</span>
           <span class="pill">信号驱动</span>
           <span class="pill">架构分析</span>
+        </div>
+      </a>
+
+      <a class="card purple" href="./llm-d-report.html">
+        <span class="card-tag purple">Research</span>
+        <h2>llm-d 开源组织深度研究报告</h2>
+        <p>Kubernetes 分布式 LLM 推理服务编排平台，17 个仓库协同工作，P/D 分解、KV 缓存感知调度等核心能力解析。</p>
+        <div class="card-meta">
+          <span class="pill">Kubernetes</span>
+          <span class="pill">推理编排</span>
+          <span class="pill">分布式</span>
         </div>
       </a>
     </div>
