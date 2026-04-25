@@ -151,64 +151,290 @@
       color: var(--soft);
       font-size: 0.75rem;
     }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      background: rgba(6, 10, 18, 0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--line);
+      height: 60px;
+      display: flex;
+      align-items: center;
+    }
+    .nav-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .nav-brand {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .nav-brand span { color: var(--cyan); }
+
+    /* Search */
+    .search-wrap {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .search-input {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 12px 8px 36px;
+      color: var(--text);
+      font-size: 0.9rem;
+      width: 200px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    .search-input:focus {
+      border-color: var(--cyan);
+      background: rgba(35, 215, 255, 0.08);
+      width: 260px;
+    }
+    .search-input::placeholder { color: var(--muted); }
+
+    /* Search Results Dropdown */
+    .search-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 380px;
+      max-height: 420px;
+      overflow-y: auto;
+      background: var(--bg-1);
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 200;
+    }
+    .search-dropdown.active { display: block; }
+    .search-result {
+      display: block;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-decoration: none;
+      color: inherit;
+      transition: background 0.15s ease;
+    }
+    .search-result:last-child { border-bottom: none; }
+    .search-result:hover { background: rgba(35, 215, 255, 0.06); }
+    .search-result-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .search-result-excerpt {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .search-result-excerpt mark {
+      background: rgba(35, 215, 255, 0.2);
+      color: var(--cyan);
+      border-radius: 2px;
+      padding: 0 2px;
+    }
+    .search-empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .search-hint {
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
-  <main class="page">
-    <header>
-      <h1>Research Reports</h1>
-      <p class="subtitle">AI / 云原生领域的技术调研与产品分析</p>
-    </header>
 
-    <a class="back" href="../">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M13 6l-6 6 6 6"/></svg>
-      返回首页
+<nav>
+  <div class="nav-inner">
+    <a href="../" class="nav-brand">Acknowledge</a>
+    <div class="search-wrap">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" class="search-input" placeholder="搜索文档..." id="searchInput" autocomplete="off">
+      <div class="search-dropdown" id="searchDropdown">
+        <div class="search-hint">输入关键词搜索...</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="page" style="padding-top: 80px;">
+  <header>
+    <h1>Research Reports</h1>
+    <p class="subtitle">AI / 云原生领域的技术调研与产品分析</p>
+  </header>
+
+  <a class="back" href="../">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M13 6l-6 6 6 6"/></svg>
+    返回首页
+  </a>
+
+  <div class="grid">
+    <a class="card red" href="./deepseek-v4-report.html">
+      <span class="card-tag red">Research</span>
+      <h2>DeepSeek V4 深度调研报告</h2>
+      <p>全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势。</p>
+      <div class="card-meta">
+        <span class="pill">MoE 架构</span>
+        <span class="pill">模型评测</span>
+        <span class="pill">成本分析</span>
+      </div>
     </a>
 
-    <div class="grid">
-      <a class="card red" href="./deepseek-v4-report.html">
-        <span class="card-tag red">Research</span>
-        <h2>DeepSeek V4 深度调研报告</h2>
-        <p>全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势。</p>
-        <div class="card-meta">
-          <span class="pill">MoE 架构</span>
-          <span class="pill">模型评测</span>
-          <span class="pill">成本分析</span>
-        </div>
-      </a>
+    <a class="card green" href="./kcover-report.html">
+      <span class="card-tag green">Report</span>
+      <h2>Kcover 技术调研报告</h2>
+      <p>Kcover 项目技术架构分析、核心组件解读与实践指南。</p>
+      <div class="card-meta">
+        <span class="pill">技术架构</span>
+        <span class="pill">组件分析</span>
+      </div>
+    </a>
 
-      <a class="card green" href="./kcover-report.html">
-        <span class="card-tag green">Report</span>
-        <h2>Kcover 技术调研报告</h2>
-        <p>Kcover 项目技术架构分析、核心组件解读与实践指南。</p>
-        <div class="card-meta">
-          <span class="pill">技术架构</span>
-          <span class="pill">组件分析</span>
-        </div>
-      </a>
+    <a class="card blue" href="./semantic-router-research.html">
+      <span class="card-tag blue">Research</span>
+      <h2>vLLM Semantic Router 深度研究报告</h2>
+      <p>系统级智能路由器，信号驱动决策引擎，10+ 种模型选择算法，面向云、数据中心和边缘环境。</p>
+      <div class="card-meta">
+        <span class="pill">LLM 路由</span>
+        <span class="pill">信号驱动</span>
+        <span class="pill">架构分析</span>
+      </div>
+    </a>
 
-      <a class="card blue" href="./semantic-router-research.html">
-        <span class="card-tag blue">Research</span>
-        <h2>vLLM Semantic Router 深度研究报告</h2>
-        <p>系统级智能路由器，信号驱动决策引擎，10+ 种模型选择算法，面向云、数据中心和边缘环境。</p>
-        <div class="card-meta">
-          <span class="pill">LLM 路由</span>
-          <span class="pill">信号驱动</span>
-          <span class="pill">架构分析</span>
-        </div>
-      </a>
+    <a class="card purple" href="./llm-d-report.html">
+      <span class="card-tag purple">Research</span>
+      <h2>llm-d 开源组织深度研究报告</h2>
+      <p>Kubernetes 分布式 LLM 推理服务编排平台，17 个仓库协同工作，P/D 分解、KV 缓存感知调度等核心能力解析。</p>
+      <div class="card-meta">
+        <span class="pill">Kubernetes</span>
+        <span class="pill">推理编排</span>
+        <span class="pill">分布式</span>
+      </div>
+    </a>
+  </div>
+</main>
 
-      <a class="card purple" href="./llm-d-report.html">
-        <span class="card-tag purple">Research</span>
-        <h2>llm-d 开源组织深度研究报告</h2>
-        <p>Kubernetes 分布式 LLM 推理服务编排平台，17 个仓库协同工作，P/D 分解、KV 缓存感知调度等核心能力解析。</p>
-        <div class="card-meta">
-          <span class="pill">Kubernetes</span>
-          <span class="pill">推理编排</span>
-          <span class="pill">分布式</span>
-        </div>
-      </a>
-    </div>
-  </main>
+<script>
+  // Simple in-memory search index
+  const searchData = [
+    {
+      title: "DeepSeek V4 深度调研报告",
+      url: "./deepseek-v4-report.html",
+      excerpt: "全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势。",
+      tags: ["MoE 架构", "模型评测", "成本分析"]
+    },
+    {
+      title: "Kcover 技术调研报告",
+      url: "./kcover-report.html",
+      excerpt: "Kcover 项目技术架构分析、核心组件解读与实践指南。",
+      tags: ["技术架构", "组件分析"]
+    },
+    {
+      title: "vLLM Semantic Router 深度研究报告",
+      url: "./semantic-router-research.html",
+      excerpt: "系统级智能路由器，信号驱动决策引擎，10+ 种模型选择算法，面向云、数据中心和边缘环境。",
+      tags: ["LLM 路由", "信号驱动", "架构分析"]
+    },
+    {
+      title: "llm-d 开源组织深度研究报告",
+      url: "./llm-d-report.html",
+      excerpt: "Kubernetes 分布式 LLM 推理服务编排平台，17 个仓库协同工作，P/D 分解、KV 缓存感知调度等核心能力解析。",
+      tags: ["Kubernetes", "推理编排", "分布式"]
+    }
+  ];
+
+  const searchInput = document.getElementById('searchInput');
+  const searchDropdown = document.getElementById('searchDropdown');
+  let debounceTimer;
+
+  function highlight(text, query) {
+    if (!query || !text) return text;
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return text.replace(regex, '<mark>$1</mark>');
+  }
+
+  function search(query) {
+    const q = query.toLowerCase();
+    return searchData.filter(item =>
+      item.title.toLowerCase().includes(q) ||
+      item.excerpt.toLowerCase().includes(q) ||
+      item.tags.some(tag => tag.toLowerCase().includes(q))
+    );
+  }
+
+  searchInput.addEventListener('input', function() {
+    clearTimeout(debounceTimer);
+    const query = this.value.trim();
+
+    if (query.length < 1) {
+      searchDropdown.classList.remove('active');
+      return;
+    }
+
+    debounceTimer = setTimeout(() => {
+      const results = search(query);
+
+      if (results.length === 0) {
+        searchDropdown.innerHTML = '<div class="search-empty">未找到相关结果</div>';
+        searchDropdown.classList.add('active');
+        return;
+      }
+
+      searchDropdown.innerHTML = results.map(r => `
+        <a class="search-result" href="${r.url}">
+          <div class="search-result-title">${highlight(r.title, query)}</div>
+          <div class="search-result-excerpt">${highlight(r.excerpt, query)}</div>
+        </a>
+      `).join('');
+      searchDropdown.classList.add('active');
+    }, 100);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.search-wrap')) {
+      searchDropdown.classList.remove('active');
+    }
+  });
+
+  searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      searchDropdown.classList.remove('active');
+      searchInput.blur();
+    }
+  });
+</script>
 </body>
 </html>
