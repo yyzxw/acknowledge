@@ -1,0 +1,2295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vLLM-Omni 深度研究：使用方法完全指南</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+/* === Global Reset === */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+    font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f8fafc;
+    color: #374151;
+    line-height: 1.6;
+    font-size: 16px;
+}
+
+/* === Layout === */
+.main-content {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+}
+
+.section {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 32px 40px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+
+  /* === Base Reset & Typography === */
+  .section { font-family: "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, sans-serif; color: #374151; line-height: 1.6; font-size: 16px; max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  .section h1, .section h2, .section h3, .section h4 { color: #1a1a2e; font-weight: 600; line-height: 1.3; margin: 0; }
+  .section h1 { font-size: 2.2em; }
+  .section h2 { font-size: 1.6em; margin-top: 48px; margin-bottom: 20px; padding-bottom: 8px; border-bottom: 2px solid #3b82f6; }
+  .section h3 { font-size: 1.2em; margin-top: 32px; margin-bottom: 12px; }
+  .section h4 { font-size: 1.05em; margin-top: 24px; margin-bottom: 8px; color: #4b5563; }
+
+  .section p { margin: 8px 0 16px; }
+  .section a { color: #3b82f6; text-decoration: none; }
+  .section a:hover { text-decoration: underline; }
+
+  /* === Cover Area === */
+  .cover-area { text-align: center; padding: 72px 40px 56px; margin-bottom: 48px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; color: #f9fafb; }
+  .cover-area h1 { font-family: Georgia, "Noto Serif SC", serif; font-size: 2.6em; font-weight: 700; color: #ffffff; margin-bottom: 16px; letter-spacing: 0.02em; }
+  .cover-area .subtitle { font-size: 1.05em; color: #94a3b8; line-height: 1.6; margin-bottom: 28px; max-width: 640px; margin-left: auto; margin-right: auto; }
+  .cover-area .meta-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; font-size: 0.92em; }
+  .cover-area .meta-item { background: rgba(255,255,255,0.08); padding: 8px 16px; border-radius: 8px; color: #cbd5e1; }
+  .cover-area .meta-item strong { color: #60a5fa; }
+  .cover-area .meta-item a { color: #60a5fa; }
+  .cover-badge { display: inline-block; background: #3b82f6; color: #fff; padding: 4px 14px; border-radius: 20px; font-size: 0.78em; font-weight: 500; letter-spacing: 0.04em; margin-bottom: 18px; }
+
+  /* === Data Table === */
+  .data-table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 0.92em; }
+  .data-table th { background: #1a1a2e; color: #f9fafb; font-weight: 600; text-align: left; padding: 10px 14px; border: 1px solid #2d2d4a; }
+  .data-table td { padding: 10px 14px; border: 1px solid #e5e7eb; vertical-align: top; }
+  .data-table tr:nth-child(even) { background: #f3f4f6; }
+  .data-table tr:hover { background: #e0f2fe; }
+  .data-table .tag-critical { display: inline-block; background: #fee2e2; color: #991b1b; padding: 1px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 600; }
+  .data-table .tag-diff { display: inline-block; background: #fef3c7; color: #92400e; padding: 1px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 600; }
+
+  /* === Code Block === */
+  .code-block { background: #1e293b; color: #e2e8f0; padding: 16px 20px; border-radius: 10px; font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace; font-size: 0.85em; line-height: 1.55; overflow-x: auto; white-space: pre; margin: 12px 0 20px; tab-size: 2; }
+  .code-block .comment { color: #94a3b8; font-style: italic; }
+
+  /* === Warning Box === */
+  .warning-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 14px 18px; margin: 16px 0 24px; border-radius: 0 8px 8px 0; font-size: 0.92em; }
+  .warning-box .warning-title { font-weight: 700; color: #92400e; margin-bottom: 4px; }
+  .warning-box code { background: #fde68a; padding: 1px 6px; border-radius: 4px; font-size: 0.92em; }
+
+  /* === Architecture Tree === */
+  .arch-tree { background: #f3f4f6; padding: 20px 24px; border-radius: 10px; font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace; font-size: 0.88em; line-height: 1.8; margin: 12px 0 20px; border: 1px solid #e5e7eb; }
+  .arch-tree .arrow { color: #3b82f6; }
+  .arch-tree .layer { display: block; }
+  .arch-tree .indent { padding-left: 24px; }
+  .arch-tree .indent2 { padding-left: 48px; }
+  .arch-tree .highlight { color: #1a1a2e; font-weight: 600; }
+
+  /* === Inline Code === */
+  .section code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace; font-size: 0.88em; color: #1e293b; }
+  .section .code-block code { background: transparent; padding: 0; border-radius: 0; color: inherit; font-size: 1em; }
+
+  /* === Responsive === */
+  @media (max-width: 768px) {
+    .section { font-size: 15px; padding: 0 16px; }
+    .section h1 { font-size: 1.6em; }
+    .section h2 { font-size: 1.3em; }
+    .cover-area { padding: 40px 20px 36px; }
+    .cover-area h1 { font-size: 1.8em; }
+    .cover-area .meta-grid { flex-direction: column; align-items: center; gap: 10px; }
+    .data-table { font-size: 0.85em; }
+    .data-table th, .data-table td { padding: 6px 8px; }
+    .arch-tree { font-size: 0.8em; padding: 14px; }
+  }
+
+  @media (max-width: 480px) {
+    .section h2 { font-size: 1.15em; }
+    .data-table { font-size: 0.8em; }
+    .code-block { font-size: 0.78em; padding: 12px; }
+  }
+
+
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+    color: #374151;
+    margin: 0;
+    padding: 0;
+  }
+  h2 {
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    color: #1a1a2e;
+    margin-top: 40px;
+    margin-bottom: 16px;
+    font-size: 28px;
+    border-bottom: 2px solid #1a1a2e;
+    padding-bottom: 8px;
+  }
+  h3 {
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    color: #1a1a2e;
+    margin-top: 32px;
+    margin-bottom: 12px;
+    font-size: 22px;
+  }
+  h4 {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #1a1a2e;
+    margin-top: 24px;
+    margin-bottom: 10px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  p {
+    margin-bottom: 12px;
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    font-size: 14px;
+    background-color: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .section {
+    margin-bottom: 48px;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 24px 0;
+    font-size: 14px;
+    border: 1px solid #ddd;
+  }
+  .data-table thead {
+    background-color: #1a1a2e;
+    color: #ffffff;
+  }
+  .data-table thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid #1a1a2e;
+  }
+  .data-table tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+  }
+  .data-table tbody tr:nth-child(even) {
+    background-color: #f9fafb;
+  }
+  .data-table tbody td {
+    padding: 8px 14px;
+    border: 1px solid #ddd;
+    vertical-align: top;
+  }
+  .data-table tbody tr:hover {
+    background-color: #eef2ff;
+  }
+  pre {
+    background-color: #1e293b;
+    color: #e2e8f0;
+    padding: 16px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 12px 0 24px 0;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  pre code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+    border-radius: 0;
+  }
+  .hljs-comment {
+    color: #94a3b8;
+    font-style: italic;
+  }
+  .hljs-keyword {
+    color: #c084fc;
+  }
+  .hljs-string {
+    color: #34d399;
+  }
+  .hljs-number {
+    color: #fbbf24;
+  }
+  .hljs-literal {
+    color: #f472b6;
+  }
+  .hljs-built_in {
+    color: #60a5fa;
+  }
+
+
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #374151;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    background: #f8fafc;
+  }
+
+  .section {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 32px 40px;
+    margin-bottom: 32px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  h2 {
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin: 0 0 24px 0;
+    padding-bottom: 12px;
+    border-bottom: 3px solid #1a1a2e;
+  }
+
+  h3 {
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin: 28px 0 16px 0;
+  }
+
+  h4 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin: 20px 0 12px 0;
+  }
+
+  p {
+    margin: 0 0 16px 0;
+    color: #374151;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 24px 0;
+    font-size: 14px;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .data-table thead th {
+    background-color: #1a1a2e;
+    color: #ffffff;
+    font-weight: 600;
+    text-align: left;
+    padding: 12px 16px;
+    white-space: nowrap;
+  }
+
+  .data-table tbody td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+
+  .data-table tbody tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+
+  .data-table tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+  }
+
+  .data-table tbody tr:hover {
+    background-color: #eef2ff;
+  }
+
+  .data-table tbody td:first-child {
+    font-weight: 500;
+  }
+
+  pre {
+    margin: 16px 0 24px 0;
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+
+  pre code {
+    display: block;
+    background: #1e293b;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 20px 24px;
+    overflow-x: auto;
+    tab-size: 4;
+  }
+
+  .warning-box {
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0 24px 0;
+  }
+
+  .warning-box p {
+    margin: 0;
+    font-size: 14px;
+    color: #92400e;
+  }
+
+  .warning-box strong {
+    color: #b45309;
+  }
+
+  .table-caption {
+    font-size: 14px;
+    color: #6b7280;
+    font-style: italic;
+    margin: -8px 0 16px 0;
+  }
+
+  .inline-code {
+    background: #f1f5f9;
+    color: #b91c1c;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 16px 12px; }
+    .section { padding: 20px 16px; }
+    h2 { font-size: 24px; }
+    h3 { font-size: 20px; }
+    .data-table { font-size: 12px; }
+    .data-table thead th,
+    .data-table tbody td { padding: 8px 10px; }
+    pre code { padding: 14px 16px; font-size: 12px; }
+  }
+
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #ffffff;
+    color: #374151;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  .section {
+    margin-bottom: 48px;
+  }
+  h2 {
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #1a1a2e;
+  }
+  h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-top: 28px;
+    margin-bottom: 14px;
+  }
+  p {
+    margin-bottom: 14px;
+    color: #374151;
+  }
+  ul, ol {
+    margin-bottom: 14px;
+    padding-left: 24px;
+  }
+  li {
+    margin-bottom: 6px;
+    color: #374151;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    font-size: 14px;
+  }
+  .data-table thead th {
+    background-color: #1a1a2e;
+    color: #ffffff;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+  }
+  .data-table tbody tr:nth-child(even) {
+    background-color: #f4f6f9;
+  }
+  .data-table tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+  }
+  .data-table tbody tr:hover {
+    background-color: #e8ecf4;
+  }
+  .data-table tbody td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #e2e6ef;
+    vertical-align: top;
+  }
+  pre {
+    background-color: #1a1a2e;
+    color: #e8e8f0;
+    padding: 16px 20px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  code {
+    background-color: #f0f2f6;
+    color: #d63384;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  .risk-high { background-color: #fef2f2 !important; }
+  .risk-mid  { background-color: #fffbeb !important; }
+  .risk-low  { background-color: #f0fdf4 !important; }
+  .end-section {
+    background-color: #f0f4f8;
+    padding: 32px 28px;
+    border-radius: 8px;
+    margin-top: 40px;
+  }
+  .end-section h3 {
+    margin-top: 0;
+  }
+  .end-section p {
+    margin-bottom: 10px;
+  }
+  .divider {
+    border: none;
+    border-top: 1px solid #d1d5db;
+    margin: 36px 0;
+  }
+  .recommendation-list li {
+    margin-bottom: 10px;
+  }
+  .recommendation-list li strong {
+    color: #1a1a2e;
+  }
+  .snippet-label {
+    display: inline-block;
+    background-color: #e2e6ef;
+    color: #1a1a2e;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- Navigation Sidebar Toggle -->
+<div id="nav-toggle" onclick="toggleNav()">☰</div>
+
+<!-- Navigation Sidebar -->
+<nav id="sidebar">
+    <div class="sidebar-header">📖 目录</div>
+    <ul>
+        <li><a href="#">📋 封面</a></li>
+<li><a href="#installation">📄 安装与入门</a></li>
+<li><a href="#core-api">📄 核心 API 使用</a></li>
+<li><a href="#cli">📄 CLI 命令行详解</a></li>
+<li><a href="#openai-api">📄 OpenAI 兼容 API</a></li>
+<li><a href="#diffusion">📄 扩散模型</a></li>
+<li><a href="#multi-stage-llm">📄 多阶段 LLM</a></li>
+<li><a href="#config-tuning">📄 配置与调优</a></li>
+<li><a href="#distributed">📄 分布式部署</a></li>
+<li><a href="#insights">📄 洞察与总结</a></li>
+
+    </ul>
+</nav>
+
+<!-- Overlay for mobile -->
+<div id="nav-overlay" onclick="toggleNav()"></div>
+
+<!-- Main Content -->
+<div class="main-content">
+    <!-- ============================================================ -->
+<!-- SECTION 1: COVER -->
+<!-- ============================================================ -->
+<div class="section" id="cover">
+
+  <div class="cover-area">
+    <div class="cover-badge">Deep Research Report</div>
+    <h1>vLLM-Omni 深度研究：<br>使用方法完全指南</h1>
+    <p class="subtitle">
+      项目介绍、安装、核心 API、CLI、API 服务器、扩散模型、多阶段 LLM
+    </p>
+    <div class="meta-grid">
+      <span class="meta-item"><strong>&#x1F4C5;</strong> 2026-05-06</span>
+      <span class="meta-item"><strong>&#x1F4E6;</strong> v0.18.0</span>
+      <span class="meta-item"><strong>&#x1F517;</strong> <a href="https://github.com/vllm-project/vllm-omni" target="_blank" rel="noopener">github.com/vllm-project/vllm-omni</a></span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: INSTALLATION & GETTING STARTED -->
+<!-- ============================================================ -->
+<div class="section" id="installation">
+
+  <h2>2. 安装与入门</h2>
+
+  <h3>2.1 三种安装方式对比</h3>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>方式</th>
+        <th>命令</th>
+        <th>适用场景</th>
+        <th>版本</th>
+        <th>来源验证</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>pip 安装</strong><br><small>(预编译 wheels)</small></td>
+        <td><code>pip install vllm-omni</code></td>
+        <td>快速部署、生产环境</td>
+        <td>稳定版</td>
+        <td>A / C</td>
+      </tr>
+      <tr>
+        <td><strong>源码安装</strong></td>
+        <td><code>git clone &amp;&amp; pip install -e .</code></td>
+        <td>开发调试、尝鲜最新特性</td>
+        <td>最新</td>
+        <td>A / B / C</td>
+      </tr>
+      <tr>
+        <td><strong>Docker 部署</strong></td>
+        <td><code>docker pull vllm/vllm-omni</code></td>
+        <td>容器化生产部署</td>
+        <td>稳定版</td>
+        <td>C</td>
+      </tr>
+      <tr>
+        <td><strong>显式设备安装</strong></td>
+        <td><code>VLLM_OMNI_TARGET_DEVICE=rocm pip install vllm-omni</code></td>
+        <td>AMD / NPU / CPU 等非 CUDA 设备</td>
+        <td>稳定版</td>
+        <td>C</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>推荐</strong>: 生产环境优先使用 <code>pip install vllm-omni</code>；开发调试使用源码安装。</p>
+
+  <h3>2.2 系统要求</h3>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>要求</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>操作系统</strong></td><td>Linux（推荐，不支持原生 Windows）</td></tr>
+      <tr><td><strong>Python</strong></td><td>3.10 &ndash; 3.13（推荐 3.12）</td></tr>
+      <tr><td><strong>GPU (CUDA)</strong></td><td>计算能力 7.0+（V100, T4, RTX20xx, A100, L4, H100）</td></tr>
+      <tr><td><strong>GPU (ROCm)</strong></td><td>已验证 gfx942 (MI300)</td></tr>
+      <tr><td><strong>NPU</strong></td><td>华为 Ascend (CANN)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.3 快速入门三步走</h3>
+
+  <h4>步骤 1 &mdash; 安装</h4>
+  <pre class="code-block">pip install vllm-omni</pre>
+
+  <h4>步骤 2 &mdash; Python API 调用（离线推理）</h4>
+  <pre class="code-block"><span class="comment"># 创建编排器并执行推理</span>
+from vllm_omni import Omni
+omni = Omni(model="Qwen/Qwen3-Omni-30B-A3B-Instruct", omni=True)
+outputs = omni.generate({"prompt": "你好，请介绍一下自己"})
+print(outputs)</pre>
+
+  <h4>步骤 3 &mdash; 启动在线服务</h4>
+  <pre class="code-block"><span class="comment"># 通过 CLI 启动 OpenAI 兼容 API 服务</span>
+vllm serve Qwen/Qwen3-Omni-30B-A3B-Instruct --omni --port 8091</pre>
+
+  <div class="warning-box">
+    <div class="warning-title">&#x26A0;&#xFE0F; 重要警告：Qwen2.5-Omni 需要特殊分支</div>
+    <p>
+      官方文档明确指出，<strong>Qwen2.5-Omni</strong> 需要使用特定的 vLLM 分支
+      <code>qwen2_omni_public_v1</code>，<strong>不能直接使用标准 vLLM-Omni</strong>。
+      本报告在 Web 搜索结果和源码分析中均未发现此限制，这是一个可能导致用户踩坑
+      的重要信息。如果计划使用 Qwen2.5-Omni，请务必确认已切换到正确分支。
+    </p>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: CORE API USAGE -->
+<!-- ============================================================ -->
+<div class="section" id="core-api">
+
+  <h2>3. 核心 API 使用（Omni / AsyncOmni）</h2>
+
+  <h3>3.1 架构层次</h3>
+
+  <p>三源交叉验证确认的一致架构层次：</p>
+
+  <div class="arch-tree">
+    <span class="layer"><span class="highlight">包入口</span>: from vllm_omni import Omni, AsyncOmni（惰性导入）</span>
+    <span class="layer indent"><span class="arrow">&#x2193;</span></span>
+    <span class="layer indent"><span class="highlight">编排层</span>: Omni / AsyncOmni（继承自 OmniBase）</span>
+    <span class="layer indent2"><span class="arrow">&#x2193;</span></span>
+    <span class="layer indent2"><span class="highlight">引擎层</span>: AsyncOmniEngine &rarr; StageEngineCoreClient x N</span>
+    <span class="layer indent2"><span class="arrow">&#x2193;</span></span>
+    <span class="layer indent2"><span class="highlight">模型执行</span>: OmniLLM（自回归） / OmniDiffusion（扩散）</span>
+  </div>
+
+  <h3>3.2 Omni（同步编排器）vs AsyncOmni（异步编排器）</h3>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>对比维度</th>
+        <th>Omni</th>
+        <th>AsyncOmni</th>
+        <th>来源</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>主要用途</td>
+        <td>离线批处理、CLI 工具</td>
+        <td>在线 serving、FastAPI 集成</td>
+        <td>A / B / C</td>
+      </tr>
+      <tr>
+        <td>接口类型</td>
+        <td>同步 Generator</td>
+        <td>异步 AsyncGenerator</td>
+        <td>B / C</td>
+      </tr>
+      <tr>
+        <td>请求处理</td>
+        <td>批量（多个 prompts）</td>
+        <td>单请求每次调用</td>
+        <td>A / B</td>
+      </tr>
+      <tr>
+        <td>输出模式</td>
+        <td>强制 FINAL_ONLY</td>
+        <td>支持流式增量</td>
+        <td>B</td>
+      </tr>
+      <tr>
+        <td>请求取消</td>
+        <td>不支持</td>
+        <td><code>abort()</code> 方法</td>
+        <td>A / B</td>
+      </tr>
+      <tr>
+        <td>暂停 / 恢复</td>
+        <td>不支持</td>
+        <td><code>pause_generation()</code> / <code>resume_generation()</code></td>
+        <td>B / C</td>
+      </tr>
+      <tr>
+        <td>进度条</td>
+        <td><code>use_tqdm</code> 参数</td>
+        <td>无</td>
+        <td>B</td>
+      </tr>
+      <tr>
+        <td>引擎交互</td>
+        <td>轮询 <code>try_get_output()</code></td>
+        <td>异步通知 AsyncOmniEngine</td>
+        <td>B</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 Omni.generate() 参数详解</h3>
+
+  <pre class="code-block"><span class="comment"># 函数签名</span>
+def generate(
+    self,
+    prompts: OmniPromptType | Sequence[OmniPromptType],   <span class="comment"># 输入类型</span>
+    sampling_params_list: OmniSamplingParams
+                         | Sequence[OmniSamplingParams]
+                         | None = None,
+    *,
+    py_generator: bool = False,        <span class="comment"># True=流式, False=批量</span>
+    use_tqdm: bool | Callable = True,  <span class="comment"># 进度条</span>
+) -> Generator[OmniRequestOutput, None, None] | list[OmniRequestOutput]:</pre>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>参数</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>prompts</code></td><td><code>OmniPromptType | Sequence[OmniPromptType]</code></td><td>单个提示或批量提示。支持文本字符串或多模态字典。</td></tr>
+      <tr><td><code>sampling_params_list</code></td><td><code>OmniSamplingParams | Sequence[...] | None</code></td><td>采样参数，可单组或按 prompt 分别指定。</td></tr>
+      <tr><td><code>py_generator</code></td><td><code>bool</code></td><td><code>True</code> 时返回流式 Generator；<code>False</code> 时一次性返回列表。</td></tr>
+      <tr><td><code>use_tqdm</code></td><td><code>bool | Callable</code></td><td>是否显示进度条（默认启用），亦可传入自定义回调。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.4 AsyncOmni.generate() 参数详解</h3>
+
+  <pre class="code-block"><span class="comment"># 函数签名</span>
+async def generate(
+    self,
+    prompt: OmniPromptType
+            | AsyncGenerator[StreamingInput, None]
+            | list[OmniPromptType],
+    sampling_params: Any = None,
+    request_id: str = "",
+    *,
+    prompt_text: str | None = None,
+    lora_request: Any = None,
+    tokenization_kwargs: dict[str, Any] | None = None,
+    sampling_params_list: Sequence[OmniSamplingParams] | None = None,
+    output_modalities: list[str] | None = None,  <span class="comment"># 如 ["text", "audio"]</span>
+    trace_headers: Mapping[str, str] | None = None,
+    priority: int = 0,
+    data_parallel_rank: int | None = None,
+    reasoning_ended: bool | None = None,
+) -> AsyncGenerator[OmniRequestOutput, None]:</pre>
+
+  <h3>3.5 多模态输入格式</h3>
+
+  <p>Prompt 字典结构，支持文本、图像、音频、视频的任意组合：</p>
+
+  <pre class="code-block">prompt = {
+    <span class="comment"># 文本提示（含对话模板标记）</span>
+    "prompt": "&lt;|im_start|&gt;system\n...&lt;|im_end|&gt;\n"
+              "&lt;|im_start|&gt;user\n...&lt;|im_end|&gt;\n"
+              "&lt;|im_start|&gt;assistant\n",
+
+    <span class="comment"># 多模态数据</span>
+    "multi_modal_data": {
+        "image": pil_image,                <span class="comment"># PIL.Image (RGB)</span>
+        "audio": (audio_signal, sr),       <span class="comment"># Tuple[np.ndarray, int]</span>
+        "video": video_frames,             <span class="comment"># np.ndarray</span>
+    },
+
+    <span class="comment"># 输出模态控制</span>
+    "modalities": ["text", "audio"],
+
+    <span class="comment"># 多模态处理器参数</span>
+    "mm_processor_kwargs": {
+        "use_audio_in_video": True,
+    },
+
+    <span class="comment"># 扩散模型专用：负提示词</span>
+    "negative_prompt": "...",
+
+    <span class="comment"># 每 prompt 模态数量限制</span>
+    "limit_mm_per_prompt": {"image": 1, "audio": 1, "video": 1},
+}</pre>
+
+  <h3>3.6 输出数据结构</h3>
+
+  <p><strong>OmniRequestOutput</strong> 包含 17 个核心字段：</p>
+
+  <pre class="code-block">@dataclass
+class OmniRequestOutput:
+    request_id: str
+    finished: bool
+    stage_id: int | None
+    final_output_type: str            <span class="comment"># "text" | "image" | "audio" | "latents"</span>
+    request_output: RequestOutput | None    <span class="comment"># 管道模式输出</span>
+    images: list[Image.Image]         <span class="comment"># 扩散模式输出</span>
+    prompt: OmniPromptType | None
+    latents: torch.Tensor | None
+    trajectory_latents: torch.Tensor | None
+    trajectory_timesteps: torch.Tensor | None
+    metrics: dict[str, Any]
+    stage_durations: dict[str, float]
+    peak_memory_mb: float
+    error: str | None</pre>
+
+  <p>便利属性（由核心字段派生）: <code>multimodal_output</code>、<code>custom_output</code>、<code>num_images</code>、<code>is_diffusion_output</code>、<code>is_pipeline_output</code>。</p>
+
+  <h3>3.7 采样参数类型</h3>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>阶段类型</th>
+        <th>参数类</th>
+        <th>来源</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>LLM 阶段</strong></td>
+        <td><code>vllm.sampling_params.SamplingParams</code></td>
+        <td>A / B / C</td>
+      </tr>
+      <tr>
+        <td><strong>扩散阶段</strong></td>
+        <td><code>vllm_omni.inputs.data.OmniDiffusionSamplingParams</code></td>
+        <td>A / B</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>OmniDiffusionSamplingParams 参数说明</h4>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>参数</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>height</code> / <code>width</code></td><td>图像尺寸（像素）</td></tr>
+      <tr><td><code>num_inference_steps</code></td><td>去噪步数</td></tr>
+      <tr><td><code>guidance_scale</code></td><td>CFG 引导系数</td></tr>
+      <tr><td><code>true_cfg_scale</code></td><td>Qwen-Image 专用引导系数</td></tr>
+      <tr><td><code>generator</code></td><td><code>torch.Generator</code>（随机种子控制）</td></tr>
+      <tr><td><code>num_outputs_per_prompt</code></td><td>每 prompt 输出数量</td></tr>
+      <tr><td><code>extra_args</code></td><td>附加参数（<code>timesteps_shift</code>、<code>lora_request</code> 等）</td></tr>
+    </tbody>
+  </table>
+
+</div><div class="section" id="cli">
+
+<h2>4. CLI 命令行详解</h2>
+
+<h3>4.1 命令入口</h3>
+
+<p>CLI 入口位于 <code>vllm_omni/entrypoints/cli/main.py</code>，通过 <code>--omni</code> 标志触发 Omni 模式。当未检测到 <code>--omni</code> 时，拦截器将命令转发给标准 vLLM CLI。</p>
+
+<pre><code>vllm serve Qwen/Qwen3-Omni-30B-A3B-Instruct --omni</code></pre>
+
+<p>子命令：<code>serve</code>、<code>benchmark</code>。</p>
+
+<h3>4.2 参数分类速查</h3>
+
+<h4>基础服务参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--omni</code></td><td>flag</td><td>false</td><td>启用 Omni 模式（必选）</td></tr>
+    <tr><td><code>--port</code></td><td>int</td><td>8000</td><td>HTTP 服务端口</td></tr>
+    <tr><td><code>--host</code></td><td>str</td><td>localhost</td><td>监听地址</td></tr>
+    <tr><td><code>--task-type</code></td><td>str</td><td>None</td><td>TTS 类型: CustomVoice / VoiceDesign / Base</td></tr>
+  </tbody>
+</table>
+
+<h4>阶段配置参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--stage-configs-path</code></td><td>str</td><td>None</td><td>[已废弃] 阶段配置 YAML 路径</td></tr>
+    <tr><td><code>--deploy-config</code></td><td>str</td><td>None</td><td>新格式部署配置 YAML 路径</td></tr>
+    <tr><td><code>--stage-overrides</code></td><td>JSON</td><td>None</td><td>逐阶段 JSON 覆盖</td></tr>
+    <tr><td><code>--async-chunk</code></td><td>bool</td><td>None</td><td>覆盖部署 YAML 的 async_chunk</td></tr>
+    <tr><td><code>--stage-id</code></td><td>int</td><td>None</td><td>选择启动单个阶段（headless）</td></tr>
+    <tr><td><code>--stage-init-timeout</code></td><td>int</td><td>300</td><td>单阶段初始化超时（秒）</td></tr>
+    <tr><td><code>--init-timeout</code></td><td>int</td><td>600</td><td>总初始化超时（秒）</td></tr>
+  </tbody>
+</table>
+
+<h4>分布式参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>缩写</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--worker-backend</code></td><td>-</td><td>str</td><td>multi_process</td><td>multi_process / ray</td></tr>
+    <tr><td><code>--ray-address</code></td><td>-</td><td>str</td><td>None</td><td>Ray 集群地址</td></tr>
+    <tr><td><code>--omni-master-address</code></td><td>-oma</td><td>str</td><td>None</td><td>编排器主机名</td></tr>
+    <tr><td><code>--omni-master-port</code></td><td>-omp</td><td>int</td><td>None</td><td>编排器端口</td></tr>
+    <tr><td><code>--shm-threshold-bytes</code></td><td>-</td><td>int</td><td>65536</td><td>共享内存阈值</td></tr>
+    <tr><td><code>--headless</code></td><td>-</td><td>flag</td><td>-</td><td>无头模式</td></tr>
+  </tbody>
+</table>
+
+<h4>扩散模型并行参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>别名</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--num-gpus</code></td><td>-</td><td>int</td><td>None</td><td>扩散 GPU 数量</td></tr>
+    <tr><td><code>--usp</code></td><td><code>--ulysses-degree</code></td><td>int</td><td>1</td><td>Ulysses 序列并行度</td></tr>
+    <tr><td><code>--ulysses-mode</code></td><td>-</td><td>str</td><td>strict</td><td>Ulysses 模式</td></tr>
+    <tr><td><code>--ring</code></td><td><code>--ring-degree</code></td><td>int</td><td>1</td><td>环形序列并行度</td></tr>
+    <tr><td><code>--cfg-parallel-size</code></td><td>-</td><td>int</td><td>1</td><td>CFG 并行度（1 或 2）</td></tr>
+    <tr><td><code>--tensor-parallel-size</code></td><td>-</td><td>int</td><td>1</td><td>张量并行度</td></tr>
+    <tr><td><code>--vae-patch-parallel-size</code></td><td>-</td><td>int</td><td>1</td><td>VAE Patch 并行度</td></tr>
+    <tr><td><code>--use-hsdp</code></td><td>-</td><td>flag</td><td>false</td><td>启用混合分片数据并行</td></tr>
+    <tr><td><code>--hsdp-shard-size</code></td><td>-</td><td>int</td><td>-1</td><td>分片 GPU 数（-1 = auto）</td></tr>
+    <tr><td><code>--hsdp-replicate-size</code></td><td>-</td><td>int</td><td>1</td><td>副本组数</td></tr>
+  </tbody>
+</table>
+
+<h4>缓存优化参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--cache-backend</code></td><td>str</td><td>none</td><td>tea_cache / cache_dit / none</td></tr>
+    <tr><td><code>--cache-config</code></td><td>JSON</td><td>None</td><td>缓存配置 JSON</td></tr>
+    <tr><td><code>--enable-cache-dit-summary</code></td><td>flag</td><td>false</td><td>启用 Cache-DiT 统计</td></tr>
+    <tr><td><code>--step-execution</code></td><td>flag</td><td>false</td><td>逐步扩散执行</td></tr>
+    <tr><td><code>--enable-sleep-mode</code></td><td>flag</td><td>false</td><td>睡眠模式 GPU 内存池</td></tr>
+  </tbody>
+</table>
+
+<h4>内存优化参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--vae-use-slicing</code></td><td>flag</td><td>false</td><td>VAE 切片（防 OOM）</td></tr>
+    <tr><td><code>--vae-use-tiling</code></td><td>flag</td><td>false</td><td>VAE 平铺（防 OOM）</td></tr>
+    <tr><td><code>--enable-cpu-offload</code></td><td>flag</td><td>false</td><td>CPU 卸载</td></tr>
+    <tr><td><code>--enable-layerwise-offload</code></td><td>flag</td><td>false</td><td>逐层 DiT 卸载</td></tr>
+  </tbody>
+</table>
+
+<h4>视频模型参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>--boundary-ratio</code></td><td>float</td><td>None</td><td>视频高低 DiT 分割比</td></tr>
+    <tr><td><code>--flow-shift</code></td><td>float</td><td>None</td><td>调度器 flow_shift</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 常用 CLI 命令示例</h3>
+
+<pre><code><span class="hljs-comment"># 1. 启动文本/多模态 LLM 服务</span>
+vllm serve Qwen/Qwen3-Omni-30B-A3B-Instruct --omni --port 8091
+
+<span class="hljs-comment"># 2. 启动文生图服务</span>
+vllm serve Qwen/Qwen-Image --omni --port 8091
+
+<span class="hljs-comment"># 3. 启动文生视频服务（Wan2.2）</span>
+vllm serve Wan-AI/Wan2.2-T2V-A14B-Diffusers --omni --port 8098 \
+    --boundary-ratio 0.875 --flow-shift 5.0
+
+<span class="hljs-comment"># 4. 启动 TTS 服务</span>
+vllm-omni serve Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice \
+    --deploy-config vllm_omni/deploy/qwen3_tts.yaml \
+    --host 0.0.0.0 --port 8091 --gpu-memory-utilization 0.9 \
+    --trust-remote-code --omni
+
+<span class="hljs-comment"># 5. 多 GPU 并行扩散模型</span>
+vllm serve Qwen/Qwen-Image --omni \
+    --num-gpus 4 \
+    --tensor-parallel-size 2 \
+    --ulysses-degree 2 \
+    --cfg-parallel-size 2 \
+    --use-hsdp
+
+<span class="hljs-comment"># 6. Headless 模式（运行单个阶段）</span>
+vllm serve Qwen/Qwen2.5-Omni-7B --omni --headless --stage-id 0 \
+    --omni-master-address 192.168.1.10 --omni-master-port 50051</code></pre>
+
+</div>
+
+<div class="section" id="openai-api">
+
+<h2>5. OpenAI 兼容 API</h2>
+
+<h3>5.1 完整端点列表</h3>
+
+<table class="data-table">
+  <thead>
+    <tr><th>端点</th><th>方法</th><th>功能</th><th>适用模式</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>/v1/chat/completions</code></td><td>POST</td><td>文本/多模态聊天</td><td>所有模式</td></tr>
+    <tr><td><code>/v1/images/generations</code></td><td>POST</td><td>文生图（DALL-E 兼容）</td><td>Diffusion / Multi-stage</td></tr>
+    <tr><td><code>/v1/images/edits</code></td><td>POST</td><td>图生图编辑</td><td>Diffusion / Multi-stage</td></tr>
+    <tr><td><code>/v1/videos/generations</code></td><td>POST</td><td>视频生成</td><td>Diffusion</td></tr>
+    <tr><td><code>/v1/audio/speech</code></td><td>POST</td><td>文本转语音 (TTS)</td><td>LLM / Multi-stage</td></tr>
+    <tr><td><code>/v1/audio/speech/batch</code></td><td>POST</td><td>批量语音生成</td><td>LLM</td></tr>
+    <tr><td><code>/v1/audio/generate</code></td><td>POST</td><td>音频生成</td><td>Diffusion</td></tr>
+    <tr><td><code>/health</code></td><td>GET</td><td>健康检查</td><td>所有模式</td></tr>
+    <tr><td><code>/v1/models</code></td><td>GET</td><td>列出可用模型</td><td>所有模式</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 Chat Completions API 详解</h3>
+
+<h4>文本对话</h4>
+<pre><code>curl -s http://localhost:8000/v1/chat/completions \
+  -H <span class="hljs-string">"Content-Type: application/json"</span> \
+  -d <span class="hljs-string">'{
+    "model": "Qwen/Qwen2.5-Omni-7B",
+    "messages": [{"role": "user", "content": "What is 2+2?"}],
+    "max_tokens": 50,
+    "stream": false
+  }'</span></code></pre>
+
+<h4>多模态输入</h4>
+<p>支持 <code>image_url</code>、<code>audio_url</code>、<code>video_url</code>、<code>text</code> 四种内容类型。</p>
+<pre><code>{
+  "model": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
+  "messages": [
+    {"role": "system", "content": [{"type": "text", "text": "You are Qwen, a virtual human..."}]},
+    {"role": "user", "content": [
+      {"type": "audio_url", "audio_url": {"url": "https://example.com/audio.wav"}},
+      {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,XXXXX"}},
+      {"type": "text", "text": "What is this content?"}
+    ]}
+  ],
+  "modalities": ["text", "audio"],
+  "stream": false
+}</code></pre>
+
+<h4>Omni 扩展参数</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>位置</th><th>类型</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>modalities</code></td><td>请求体</td><td>list[str]</td><td>输出模态: <code>["text"]</code>, <code>["audio"]</code>, <code>["text","audio"]</code></td></tr>
+    <tr><td><code>speaker</code></td><td>extra_body</td><td>string</td><td>TTS 说话人选择</td></tr>
+    <tr><td><code>mm_processor_kwargs</code></td><td>extra_body</td><td>dict</td><td>多模态处理器参数</td></tr>
+    <tr><td><code>stream</code></td><td>请求体</td><td>bool</td><td>启用流式输出</td></tr>
+  </tbody>
+</table>
+
+<h3>5.3 图像生成 API (DALL-E 兼容)</h3>
+
+<h4>curl 示例</h4>
+<pre><code>curl -X POST http://localhost:8091/v1/images/generations \
+  -H <span class="hljs-string">"Content-Type: application/json"</span> \
+  -d <span class="hljs-string">'{
+    "prompt": "a dragon laying over the spine of the Green Mountains of Vermont",
+    "size": "1024x1024",
+    "n": 1,
+    "seed": 42,
+    "num_inference_steps": 30,
+    "guidance_scale": 7.5,
+    "response_format": "b64_json"
+  }'</span></code></pre>
+
+<h4>参数说明</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>prompt</code></td><td>string</td><td>必填</td><td>图像描述</td></tr>
+    <tr><td><code>size</code></td><td>string</td><td>模型默认</td><td>如 "1024x1024"</td></tr>
+    <tr><td><code>n</code></td><td>int</td><td>1</td><td>生成数量 (1-10)</td></tr>
+    <tr><td><code>response_format</code></td><td>string</td><td>"b64_json"</td><td>仅支持 b64_json</td></tr>
+    <tr><td><code>negative_prompt</code></td><td>string</td><td>null</td><td>负面提示</td></tr>
+    <tr><td><code>num_inference_steps</code></td><td>int</td><td>模型默认</td><td>扩散步数</td></tr>
+    <tr><td><code>guidance_scale</code></td><td>float</td><td>模型默认</td><td>CFG 引导尺度</td></tr>
+    <tr><td><code>true_cfg_scale</code></td><td>float</td><td>模型默认</td><td>True CFG 尺度</td></tr>
+    <tr><td><code>seed</code></td><td>int</td><td>null</td><td>随机种子</td></tr>
+  </tbody>
+</table>
+
+<h4>Python SDK 示例</h4>
+<pre><code><span class="hljs-keyword">from</span> openai <span class="hljs-keyword">import</span> OpenAI
+
+client = OpenAI(base_url=<span class="hljs-string">"http://localhost:8091/v1"</span>, api_key=<span class="hljs-string">"EMPTY"</span>)
+response = client.images.generate(
+    model=<span class="hljs-string">"Qwen/Qwen-Image"</span>,
+    prompt=<span class="hljs-string">"A cat sitting on a windowsill"</span>,
+    n=<span class="hljs-number">1</span>, size=<span class="hljs-string">"1024x1024"</span>, response_format=<span class="hljs-string">"b64_json"</span>,
+)</code></pre>
+
+<h3>5.4 视频生成 API</h3>
+
+<p>vLLM-Omni 的 <code>/v1/videos</code> 端点支持异步视频生成，分为三步流程。</p>
+
+<h4>步骤一：提交生成请求</h4>
+<pre><code>curl -sS -X POST <span class="hljs-string">"${BASE_URL}/v1/videos"</span> \
+  -F <span class="hljs-string">"prompt=Two anthropomorphic cats in comfy boxing gear fighting on a spotlighted stage."</span> \
+  -F <span class="hljs-string">"seconds=2"</span> -F <span class="hljs-string">"size=832x480"</span> -F <span class="hljs-string">"fps=16"</span> \
+  -F <span class="hljs-string">"num_inference_steps=40"</span> -F <span class="hljs-string">"guidance_scale=4.0"</span> \
+  -F <span class="hljs-string">"boundary_ratio=0.875"</span> -F <span class="hljs-string">"flow_shift=5.0"</span> -F <span class="hljs-string">"seed=42"</span></code></pre>
+
+<h4>步骤二：查询生成状态</h4>
+<pre><code>curl -sS <span class="hljs-string">"${BASE_URL}/v1/videos/${video_id}"</span></code></pre>
+
+<h4>步骤三：下载生成的视频</h4>
+<pre><code>curl -sS -L <span class="hljs-string">"${BASE_URL}/v1/videos/${video_id}/content"</span> -o output.mp4</code></pre>
+
+<h3>5.5 TTS API</h3>
+
+<h4>三种任务类型</h4>
+<table class="data-table">
+  <thead>
+    <tr><th>task_type</th><th>参数</th><th>说明</th><th>示例模型</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>CustomVoice</td><td><code>voice</code>, <code>language</code></td><td>预定义音色</td><td>Qwen3-TTS-CustomVoice</td></tr>
+    <tr><td>VoiceDesign</td><td><code>instructions</code></td><td>描述想要的音色</td><td>Qwen3-TTS-VoiceDesign</td></tr>
+    <tr><td>Base</td><td><code>ref_audio</code>, <code>ref_text</code></td><td>声音克隆</td><td>Qwen3-TTS-Base</td></tr>
+  </tbody>
+</table>
+
+<h4>curl 示例（CustomVoice）</h4>
+<pre><code>curl -X POST http://localhost:8091/v1/audio/speech \
+  -H <span class="hljs-string">"Content-Type: application/json"</span> \
+  -d <span class="hljs-string">'{"input": "Hello, how are you?", "voice": "vivian", "language": "English"}'</span> \
+  --output output.wav</code></pre>
+
+<p>支持格式：wav, mp3, pcm, flac, aac, opus</p>
+
+<h3>5.6 图像编辑 API</h3>
+
+<pre><code>curl -X POST http://localhost:8000/v1/images/edits \
+  -F <span class="hljs-string">"model=xxx"</span> -F <span class="hljs-string">"image=@gift-basket.png"</span> \
+  -F <span class="hljs-string">"mask=@mask.png"</span> -F <span class="hljs-string">"prompt='a bear wearing sportwear, holding a basketball'"</span> \
+  -F <span class="hljs-string">"size=1024x1024"</span> -F <span class="hljs-string">"output_format=png"</span></code></pre>
+
+<h3>5.7 流式响应处理</h3>
+
+<pre><code><span class="hljs-keyword">from</span> openai <span class="hljs-keyword">import</span> OpenAI
+<span class="hljs-keyword">import</span> base64
+
+client = OpenAI(base_url=<span class="hljs-string">"http://localhost:8091/v1"</span>, api_key=<span class="hljs-string">"EMPTY"</span>)
+response = client.chat.completions.create(
+    messages=[system_msg, user_msg],
+    model=<span class="hljs-string">"Qwen/Qwen3-Omni-30B-A3B-Instruct"</span>,
+    modalities=[<span class="hljs-string">"text"</span>, <span class="hljs-string">"audio"</span>],
+    stream=<span class="hljs-literal">True</span>,
+)
+
+<span class="hljs-keyword">for</span> chunk <span class="hljs-keyword">in</span> response:
+    <span class="hljs-keyword">for</span> choice <span class="hljs-keyword">in</span> chunk.choices:
+        <span class="hljs-keyword">if</span> chunk.modality == <span class="hljs-string">"audio"</span>:
+            audio_data = base64.b64decode(choice.delta.content)
+            <span class="hljs-keyword">with</span> open(<span class="hljs-string">"output.wav"</span>, <span class="hljs-string">"wb"</span>) <span class="hljs-keyword">as</span> f:
+                f.write(audio_data)
+        <span class="hljs-keyword">elif</span> chunk.modality == <span class="hljs-string">"text"</span>:
+            print(choice.delta.content, end=<span class="hljs-string">""</span>)</code></pre>
+
+</div><!-- ============================================================ -->
+<!-- Section 6: 扩散模型 -->
+<!-- ============================================================ -->
+<div class="section" id="diffusion">
+
+<h2>6. 扩散模型（图像/视频/音频）</h2>
+
+<h3>6.1 完整支持模型列表</h3>
+
+<p>三方来源综合：B（源码注册表）最为完整，收录 30+ Pipeline 类。A 覆盖约 20 个常用模型，C 覆盖约 25 个。</p>
+
+<h4>图像生成模型</h4>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>模型</th>
+      <th>Pipeline 类</th>
+      <th>特点</th>
+      <th>来源</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Qwen-Image</td>
+      <td><span class="inline-code">QwenImagePipeline</span></td>
+      <td>双流 Transformer，完整特性</td>
+      <td>A/B/C</td>
+    </tr>
+    <tr>
+      <td>Qwen-Image-Edit</td>
+      <td><span class="inline-code">QwenImageEditPipeline</span></td>
+      <td>图像编辑</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>Z-Image-Turbo</td>
+      <td><span class="inline-code">ZImagePipeline</span></td>
+      <td>仅需 9 步推理</td>
+      <td>A/B</td>
+    </tr>
+    <tr>
+      <td>FLUX.1-dev</td>
+      <td><span class="inline-code">FluxPipeline</span></td>
+      <td>Stable Diffusion 变体</td>
+      <td>A/B/C</td>
+    </tr>
+    <tr>
+      <td>FLUX.2-klein</td>
+      <td><span class="inline-code">Flux2KleinPipeline</span></td>
+      <td>最新版本</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>Stable-Diffusion-3.5</td>
+      <td><span class="inline-code">StableDiffusion3Pipeline</span></td>
+      <td>SD3.5 中等模型</td>
+      <td>A/B</td>
+    </tr>
+    <tr>
+      <td>HunyuanImage-3.0</td>
+      <td><span class="inline-code">HunyuanImage3ForCausalMM</span></td>
+      <td>支持专家并行</td>
+      <td>A/B/C</td>
+    </tr>
+    <tr>
+      <td>Ovis-Image</td>
+      <td><span class="inline-code">OvisImagePipeline</span></td>
+      <td>文本到图像</td>
+      <td>A/B</td>
+    </tr>
+    <tr>
+      <td>GLM-Image</td>
+      <td><span class="inline-code">GlmImagePipeline</span></td>
+      <td>双阶段 pipeline</td>
+      <td>A</td>
+    </tr>
+    <tr>
+      <td>BAGEL</td>
+      <td><span class="inline-code">BagelPipeline</span></td>
+      <td>MoT 架构</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>LongCat-Image</td>
+      <td>-</td>
+      <td>长文本理解</td>
+      <td>A</td>
+    </tr>
+    <tr>
+      <td>DreamID-Omni</td>
+      <td><span class="inline-code">DreamIDOmniPipeline</span></td>
+      <td>图像生成</td>
+      <td>B</td>
+    </tr>
+    <tr>
+      <td>DiffusersAdapter</td>
+      <td><span class="inline-code">DiffusersAdapterPipeline</span></td>
+      <td>HF 适配器</td>
+      <td>B</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>视频生成模型</h4>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>模型</th>
+      <th>Pipeline 类</th>
+      <th>类型</th>
+      <th>来源</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Wan2.2-T2V</td>
+      <td><span class="inline-code">WanPipeline</span></td>
+      <td>文生视频</td>
+      <td>A/B/C</td>
+    </tr>
+    <tr>
+      <td>Wan2.2-I2V</td>
+      <td><span class="inline-code">WanImageToVideoPipeline</span></td>
+      <td>图生视频</td>
+      <td>A/B/C</td>
+    </tr>
+    <tr>
+      <td>HunyuanVideo-1.5</td>
+      <td><span class="inline-code">HunyuanVideo15Pipeline</span></td>
+      <td>文生视频</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>LTX-2</td>
+      <td><span class="inline-code">LTX2Pipeline</span></td>
+      <td>文生视频</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>Helios</td>
+      <td><span class="inline-code">HeliosPipeline</span></td>
+      <td>文生视频</td>
+      <td>B/C</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>音频 / TTS 模型</h4>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>模型</th>
+      <th>架构类</th>
+      <th>类型</th>
+      <th>来源</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Qwen3-TTS</td>
+      <td><span class="inline-code">Qwen3TTSForConditionalGeneration</span></td>
+      <td>文本转语音</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>CosyVoice3</td>
+      <td><span class="inline-code">CosyVoice3Model</span></td>
+      <td>文本转语音</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>MiMo-Audio</td>
+      <td><span class="inline-code">MiMoAudioForConditionalGeneration</span></td>
+      <td>音频理解/生成</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>Fish Speech S2 Pro</td>
+      <td><span class="inline-code">FishSpeechSlowARForConditionalGeneration</span></td>
+      <td>文本转语音</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>Voxtral TTS</td>
+      <td><span class="inline-code">VoxtralTTSForConditionalGeneration</span></td>
+      <td>文本转语音</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>Stable-Audio-Open</td>
+      <td><span class="inline-code">StableAudioPipeline</span></td>
+      <td>文本到音频</td>
+      <td>B/C</td>
+    </tr>
+    <tr>
+      <td>AudioX</td>
+      <td><span class="inline-code">AudioXPipeline</span></td>
+      <td>文本到音频</td>
+      <td>B</td>
+    </tr>
+    <tr>
+      <td>OmniVoice</td>
+      <td><span class="inline-code">OmniVoicePipeline</span></td>
+      <td>语音生成</td>
+      <td>B</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="table-caption">验证结论：B（源码注册表）最为完整，收录 30+ Pipeline 类。A 覆盖约 20 个常用模型。C 覆盖约 25 个。</p>
+
+<!-- ============================================================ -->
+<!-- 6.2 扩散模型离线推理 -->
+<!-- ============================================================ -->
+
+<h3>6.2 扩散模型离线推理</h3>
+
+<p>以下示例演示使用 <span class="inline-code">Omni</span> 接口进行 Qwen-Image 图像生成推理：</p>
+
+<pre><code>from vllm_omni.entrypoints.omni import Omni
+from vllm_omni.inputs.data import OmniDiffusionSamplingParams
+import torch
+
+omni = Omni(model="Qwen/Qwen-Image")
+
+outputs = omni.generate(
+    {
+        "prompt": "a cup of coffee on the table",
+        "negative_prompt": None,
+    },
+    OmniDiffusionSamplingParams(
+        height=1024,
+        width=1024,
+        generator=torch.Generator("cuda").manual_seed(42),
+        true_cfg_scale=4.0,
+        guidance_scale=4.0,
+        num_inference_steps=50,
+        num_outputs_per_prompt=1,
+    ),
+)
+
+# 提取图像
+images = outputs[0].request_output.images
+images[0].save("coffee.png")</code></pre>
+
+<p class="table-caption">来源：A/B 提供完整示例，C 确认 API 可用性。</p>
+
+<!-- ============================================================ -->
+<!-- 6.3 扩散模型加速组件 -->
+<!-- ============================================================ -->
+
+<h3>6.3 扩散模型加速组件</h3>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>加速类别</th>
+      <th>具体方法</th>
+      <th>效果</th>
+      <th>来源</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="2" style="font-weight: 600;">缓存加速</td>
+      <td>Cache-DiT</td>
+      <td>显存减少 42%（1080P 视频）</td>
+      <td>A/C</td>
+    </tr>
+    <tr>
+      <td>TeaCache</td>
+      <td>延迟降低 28%，内存效率 3x</td>
+      <td>A/C</td>
+    </tr>
+    <tr>
+      <td rowspan="2" style="font-weight: 600;">序列并行</td>
+      <td>Ulysses SP (all-to-all)</td>
+      <td>高分辨率图像 &gt;1536px</td>
+      <td>A/C</td>
+    </tr>
+    <tr>
+      <td>Ring Attention (P2P)</td>
+      <td>8 GPU 通信降低 60%</td>
+      <td>A/C</td>
+    </tr>
+    <tr>
+      <td rowspan="4" style="font-weight: 600;">模型并行</td>
+      <td>CFG-Parallel</td>
+      <td>正负分支跨设备</td>
+      <td>A/B</td>
+    </tr>
+    <tr>
+      <td>Tensor Parallelism</td>
+      <td>大模型分片</td>
+      <td>A/C</td>
+    </tr>
+    <tr>
+      <td>HSDP (FSDP2)</td>
+      <td>14B+ 超大模型</td>
+      <td>A/B</td>
+    </tr>
+    <tr>
+      <td>Expert Parallelism</td>
+      <td>MoE 专家分片</td>
+      <td>B</td>
+    </tr>
+    <tr>
+      <td style="font-weight: 600;">编译优化</td>
+      <td>Torch.compile</td>
+      <td>算子融合，每步减少 15%</td>
+      <td>A</td>
+    </tr>
+    <tr>
+      <td rowspan="3" style="font-weight: 600;">内存优化</td>
+      <td>VAE Slicing/Tiling</td>
+      <td>防 OOM</td>
+      <td>A/B/C</td>
+    </tr>
+    <tr>
+      <td>CPU Offload</td>
+      <td>减少显存</td>
+      <td>A/B/C</td>
+    </tr>
+    <tr>
+      <td>FP8/INT8/GGUF 量化</td>
+      <td>低精度推理</td>
+      <td>B</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 6.4 Cache-DiT 详细配置 -->
+<!-- ============================================================ -->
+
+<h3>6.4 Cache-DiT &amp; TeaCache 配置</h3>
+
+<h4>Cache-DiT 配置</h4>
+
+<pre><code>cache_config = {
+    # DBCache 参数
+    "Fn_compute_blocks": 1,
+    "Bn_compute_blocks": 0,
+    "max_warmup_steps": 4,
+    "residual_diff_threshold": 0.24,     # 越高缓存越激进
+    "max_continuous_cached_steps": 3,
+    # TaylorSeer 参数
+    "enable_taylorseer": False,
+    "taylorseer_order": 1,
+    # SCM (Step Computation Masking)
+    "scm_steps_mask_policy": None,       # slow/medium/fast/ultra
+    "scm_steps_policy": "dynamic",
+}</code></pre>
+
+<h4>TeaCache 配置</h4>
+
+<pre><code>cache_config = {
+    "rel_l1_thresh": 0.2,  # 累积相对 L1 距离阈值
+}</code></pre>
+
+<p class="table-caption">来源：A 提供详细配置参数，C 提供背景说明。</p>
+
+</div>
+<!-- END Section 6 -->
+
+
+<!-- ============================================================ -->
+<!-- Section 7: 多阶段 LLM -->
+<!-- ============================================================ -->
+<div class="section" id="multi-stage-llm">
+
+<h2>7. 多阶段 LLM（Qwen2.5-Omni / Qwen3-Omni）</h2>
+
+<h3>7.1 架构对比</h3>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>维度</th>
+      <th>Qwen2.5-Omni</th>
+      <th>Qwen3-Omni</th>
+      <th>来源</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>参数</td>
+      <td>7B</td>
+      <td>30B-A3B（每次激活 ~3B）</td>
+      <td>A</td>
+    </tr>
+    <tr>
+      <td>架构</td>
+      <td>Dense Transformer</td>
+      <td>MoE（专家混合）</td>
+      <td>A/C</td>
+    </tr>
+    <tr>
+      <td>vLLM-Omni 兼容性</td>
+      <td><strong>需特殊分支</strong>（<span class="inline-code">qwen2_omni_public_v1</span>）</td>
+      <td><strong>原生支持</strong></td>
+      <td><strong>C 独有</strong></td>
+    </tr>
+    <tr>
+      <td>安装复杂程度</td>
+      <td>复杂（需手动编译）</td>
+      <td>简单（pip install）</td>
+      <td>C</td>
+    </tr>
+    <tr>
+      <td>阶段数</td>
+      <td>3</td>
+      <td>3</td>
+      <td>A/B/C</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="warning-box">
+  <p><strong>重要警告：</strong>C（官方文档）明确说明 Qwen2.5-Omni 需要特定的 vLLM 分支（<span class="inline-code">qwen2_omni_public_v1</span>），而 A 和 B 均未提及此限制。用户如果按照 A 或 B 的指南直接 <span class="inline-code">pip install vllm-omni</span> 并使用 Qwen2.5-Omni，可能会遇到兼容性问题。</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- 7.2 三阶段推理流程 -->
+<!-- ============================================================ -->
+
+<h3>7.2 三阶段推理流程</h3>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>阶段 ID</th>
+      <th>名称</th>
+      <th>功能</th>
+      <th>输入 -&gt; 输出</th>
+      <th><span class="inline-code">worker_type</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td>Thinker</td>
+      <td>多模态理解（文本/图像/视频/音频）</td>
+      <td>多模态输入 -&gt; 文本生成</td>
+      <td><span class="inline-code">ar</span></td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td>Talker</td>
+      <td>语音码生成</td>
+      <td>文本嵌入 -&gt; RVQ 码</td>
+      <td><span class="inline-code">ar</span></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>Code2Wav</td>
+      <td>音频波形生成</td>
+      <td>RVQ 码 -&gt; 24kHz 音频</td>
+      <td><span class="inline-code">generation</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="table-caption">来源：A/B/C 一致。B 补充了 <span class="inline-code">worker_type</span> 细节。</p>
+
+<!-- ============================================================ -->
+<!-- 7.3 完整离线推理示例 -->
+<!-- ============================================================ -->
+
+<h3>7.3 完整离线推理示例</h3>
+
+<pre><code>from vllm_omni.entrypoints.omni import Omni
+from vllm.sampling_params import SamplingParams
+
+# 初始化 Omni（Qwen3-Omni）
+omni = Omni.from_cli_args(args, model="Qwen/Qwen3-Omni-30B-A3B-Instruct")
+
+# 配置每阶段采样参数
+thinker_sampling_params = SamplingParams(
+    temperature=0.9, top_p=0.9, max_tokens=1200, seed=42,
+)
+talker_sampling_params = SamplingParams(
+    temperature=0.9, top_k=50, max_tokens=4096, seed=42,
+    detokenize=False, stop_token_ids=[2150],
+)
+code2wav_sampling_params = SamplingParams(
+    temperature=0.0, max_tokens=4096*16, seed=42, detokenize=True,
+)
+
+sampling_params_list = [thinker_sampling_params, talker_sampling_params, code2wav_sampling_params]
+
+# 执行生成（流式输出）
+omni_generator = omni.generate(prompts, sampling_params_list, py_generator=True)
+
+for stage_outputs in omni_generator:
+    output = stage_outputs.request_output
+    if stage_outputs.final_output_type == "text":
+        text_output = output.outputs[0].text
+        print(f"Text: {text_output}")
+    elif stage_outputs.final_output_type == "audio":
+        audio_tensor = output.outputs[0].multimodal_output["audio"]
+        sf.write("output.wav", audio_tensor.detach().cpu().numpy(), samplerate=24000)
+
+omni.close()</code></pre>
+
+<p class="table-caption">来源：A/B/C 一致，B 提供最完整的代码分析。</p>
+
+<!-- ============================================================ -->
+<!-- 7.4 多模态标记格式 -->
+<!-- ============================================================ -->
+
+<h3>7.4 多模态标记格式</h3>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>模型</th>
+      <th>图像标记</th>
+      <th>音频标记</th>
+      <th>视频标记</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Qwen2.5-Omni</td>
+      <td><span class="inline-code">&lt;|vision_bos|&gt;&lt;|IMAGE|&gt;&lt;|vision_eos|&gt;</span></td>
+      <td><span class="inline-code">&lt;|audio_bos|&gt;&lt;|AUDIO|&gt;&lt;|audio_eos|&gt;</span></td>
+      <td><span class="inline-code">&lt;|vision_bos|&gt;&lt;|VIDEO|&gt;&lt;|vision_eos|&gt;</span></td>
+    </tr>
+    <tr>
+      <td>Qwen3-Omni</td>
+      <td><span class="inline-code">&lt;|vision_start|&gt;&lt;|image_pad|&gt;&lt;|vision_end|&gt;</span></td>
+      <td><span class="inline-code">&lt;|audio_start|&gt;&lt;|audio_pad|&gt;&lt;|audio_end|&gt;</span></td>
+      <td><span class="inline-code">&lt;|vision_start|&gt;&lt;|video_pad|&gt;&lt;|vision_end|&gt;</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="table-caption">来源：A/B 一致。</p>
+
+<!-- ============================================================ -->
+<!-- 7.5 阶段配置 YAML 结构 -->
+<!-- ============================================================ -->
+
+<h3>7.5 阶段配置 YAML 结构</h3>
+
+<pre><code># qwen3_omni_moe.yaml
+async_chunk: true
+stages:
+  - stage_id: 0
+    model_stage: "thinker"
+    model_arch: "Qwen3OmniMoeThinkerForConditionalGeneration"
+    engine_input_source: []
+    final_output: false
+    worker_type: "ar"
+  - stage_id: 1
+    model_stage: "talker"
+    model_arch: "Qwen3OmniMoeTalkerForConditionalGeneration"
+    engine_input_source: [0]
+    custom_process_input_func: "thinker2talker"
+    final_output: false
+    worker_type: "ar"
+  - stage_id: 2
+    model_stage: "code2wav"
+    model_arch: "Qwen3OmniMoeCode2Wav"
+    engine_input_source: [1]
+    custom_process_input_func: "talker2code2wav"
+    final_output: true
+    final_output_type: "audio"
+    worker_type: "generation"</code></pre>
+
+<p class="table-caption">来源：A/B 一致。注意 <span class="inline-code">stage-configs-path</span> 已废弃，新格式使用 <span class="inline-code">deploy-config</span>。</p>
+
+<!-- ============================================================ -->
+<!-- 7.6 Async Chunk 模式 -->
+<!-- ============================================================ -->
+
+<h3>7.6 Async Chunk 模式</h3>
+
+<p>Async Chunk 让下游阶段在上游阶段<strong>完成之前</strong>开始处理（阶段级并发），从而显著减少端到端延迟：</p>
+
+<pre><code># 单 prompt
+bash run_single_prompt_async_chunk.sh
+
+# 多 prompt 带并发控制
+bash run_multiple_prompts_async_chunk.sh --max-in-flight 4
+
+# 自定义阶段配置
+python end2end_async_chunk.py --query-type use_audio --deploy-config /path/to/config.yaml</code></pre>
+
+<p class="table-caption">来源：A 提供最完整的说明和示例。</p>
+
+</div>
+<!-- END Section 7 --><div class="container">
+
+  <!-- ============================================ -->
+  <!-- Section 8: 配置与调优                         -->
+  <!-- ============================================ -->
+  <div class="section" id="config-tuning">
+    <h2>8. 配置与调优</h2>
+
+    <h3>8.1 OmniModelConfig 扩展字段</h3>
+    <p>源代码分析确认 <code>OmniModelConfig</code> 继承自 vLLM 的 <code>ModelConfig</code>，添加了以下关键字段：</p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>字段</th>
+          <th>类型</th>
+          <th>默认值</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>stage_id</code></td><td>int</td><td>0</td><td>阶段标识符</td></tr>
+        <tr><td><code>async_chunk</code></td><td>bool</td><td>False</td><td>异步块传输</td></tr>
+        <tr><td><code>model_stage</code></td><td>str</td><td>"thinker"</td><td>thinker / talker / code2wav</td></tr>
+        <tr><td><code>model_arch</code></td><td>str</td><td>None</td><td>模型架构名</td></tr>
+        <tr><td><code>worker_type</code></td><td>str</td><td>None</td><td>ar / generation</td></tr>
+        <tr><td><code>engine_output_type</code></td><td>str</td><td>None</td><td>引擎输出类型</td></tr>
+        <tr><td><code>stage_connector_config</code></td><td>dict</td><td>SharedMemoryConnector</td><td>阶段连接器配置</td></tr>
+        <tr><td><code>enable_sleep_mode</code></td><td>bool</td><td>False</td><td>睡眠模式</td></tr>
+        <tr><td><code>task_type</code></td><td>str</td><td>None</td><td>TTS 任务类型</td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.2 性能数据</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>指标</th>
+          <th>数据</th>
+          <th>来源</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>8xA100 集群，1B 参数文本+图像模型</td><td>吞吐比传统串行方案提高 <strong>2.1x</strong></td><td>C</td></tr>
+        <tr><td>端到端延迟</td><td>下降 <strong>35%</strong></td><td>C</td></tr>
+        <tr><td>任务完成时间 (JCT) 对比基线</td><td>最高缩短 <strong>91.4%</strong></td><td>C</td></tr>
+        <tr><td>端到端吞吐</td><td>提升 <strong>5.8x</strong></td><td>C</td></tr>
+        <tr><td>显存利用率提升</td><td>最高 <strong>40%</strong></td><td>C</td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.3 性能调优参数速查</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>参数</th>
+          <th>作用</th>
+          <th>推荐值</th>
+          <th>来源</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>--gpu-memory-utilization</code></td><td>GPU 显存利用率</td><td>0.5 &ndash; 0.9</td><td>A / C</td></tr>
+        <tr><td><code>--max-num-seqs</code></td><td>最大序列数</td><td>根据显存调整</td><td>A / C</td></tr>
+        <tr><td><code>--enforce-eager</code></td><td>禁用 CUDA 图（防止 OOM）</td><td>显存不足时启用</td><td>C</td></tr>
+        <tr><td><code>--swap-space</code></td><td>CPU 交换空间</td><td>0（禁用）</td><td>C</td></tr>
+        <tr><td><code>micro_batch_size</code></td><td>流水线并行微批大小</td><td>8 &ndash; 32</td><td>C</td></tr>
+        <tr><td><code>max_concurrent_requests</code></td><td>最大并发请求数</td><td>2x GPU 数量</td><td>C</td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.4 缓存策略选择推荐</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>模型类型</th>
+          <th>推荐缓存</th>
+          <th>配置方式</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>高分辨率图像 (&gt;1536px)</td>
+          <td>Ulysses SP + TeaCache</td>
+          <td><code>--cache-backend tea_cache --usp</code></td>
+        </tr>
+        <tr>
+          <td>长视频 (1080P+)</td>
+          <td>Cache-DiT</td>
+          <td><code>--cache-backend cache_dit --enable-cache-dit-summary</code></td>
+        </tr>
+        <tr>
+          <td>大模型 (14B+)</td>
+          <td>HSDP</td>
+          <td><code>--use-hsdp</code></td>
+        </tr>
+        <tr>
+          <td>MoE 模型</td>
+          <td>Expert Parallelism</td>
+          <td><code>--enable-expert-parallel</code></td>
+        </tr>
+        <tr>
+          <td>小模型 (&lt;7B)</td>
+          <td>无需特殊配置</td>
+          <td>默认即可</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ============================================ -->
+  <!-- Section 9: 分布式部署与 OmniConnector         -->
+  <!-- ============================================ -->
+  <div class="section" id="distributed">
+    <h2>9. 分布式部署与 OmniConnector</h2>
+
+    <h3>9.1 连接器类型与选择</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>连接器</th>
+          <th>适用场景</th>
+          <th>通信协议</th>
+          <th>来源</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>SharedMemoryConnector</strong></td>
+          <td>单节点（默认）</td>
+          <td>POSIX 共享内存（零拷贝）</td>
+          <td>A / B / C</td>
+        </tr>
+        <tr>
+          <td><strong>ZmqConnector</strong></td>
+          <td>Ray / Headless 模式</td>
+          <td>ZMQ + 握手服务器</td>
+          <td>C（B 未提及）</td>
+        </tr>
+        <tr>
+          <td><strong>MooncakeStoreConnector</strong></td>
+          <td>多节点 TCP</td>
+          <td>TCP via Mooncake</td>
+          <td>A / B / C</td>
+        </tr>
+        <tr>
+          <td><strong>MooncakeTransferEngineConnector</strong></td>
+          <td>多节点最快</td>
+          <td>RDMA / TCP + 托管内存池</td>
+          <td>A / B / C</td>
+        </tr>
+        <tr>
+          <td><strong>YuanrongConnector</strong></td>
+          <td>多节点</td>
+          <td>TCP / RDMA + etcd</td>
+          <td>A / C（B 未提及）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>9.2 自动选择逻辑</h3>
+    <p>三方验证一致的自动选择规则：</p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>条件</th>
+          <th>默认连接器</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>worker_backend == "multi_process"</code> 且共址</td>
+          <td><code>SharedMemoryConnector</code></td>
+        </tr>
+        <tr>
+          <td><code>worker_backend == "ray"</code> 或 <code>--headless</code></td>
+          <td><code>ZmqConnector</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>9.3 连接器 YAML 配置示例</h3>
+    <p>MooncakeTransferEngineConnector 的完整配置格式（来源 C）：</p>
+    <pre><code>runtime:
+  connectors:
+    mooncake_connector:
+      name: MooncakeTransferEngineConnector
+      extra:
+        host: "192.168.1.10"
+        metadata_server: "http://metadata:8000"
+        master: "192.168.1.100:8001"
+        segment: 1073741824    # 1GB
+        localbuf: 536870912    # 512MB
+        proto: "rdma"          # 或 "tcp"</code></pre>
+
+    <h3>9.4 分布式部署命令</h3>
+
+    <p><strong>主节点（结合 Ray）</strong></p>
+    <pre><code>vllm serve Qwen/Qwen3-Omni-30B-A3B-Instruct \
+  --omni --worker-backend ray \
+  --tensor-parallel-size 4 --pipeline-parallel-size 2</code></pre>
+
+    <p><strong>远程阶段（Headless 模式）</strong></p>
+    <pre><code>vllm serve Qwen/Qwen3-Omni-30B-A3B-Instruct \
+  --omni --omni-master-address 192.168.1.100 \
+  --omni-master-port 8000 --stage-id 2 --headless</code></pre>
+
+    <p><strong>分离式推理（Disaggregated）</strong></p>
+    <pre><code># 启动路由器（前端）
+python -m dynamo.vllm.omni --omni-router --stage-configs-path ./stage_configs/glm_image.yaml
+
+# Stage 0 (AR) on GPU 0
+CUDA_VISIBLE_DEVICES=0 python -m dynamo.vllm.omni \
+  --omni --stage-id 0 --stage-configs-path ./stage_configs/glm_image.yaml
+
+# Stage 1 (DiT) on GPU 1
+CUDA_VISIBLE_DEVICES=1 python -m dynamo.vllm.omni \
+  --omni --stage-id 1 --stage-configs-path ./stage_configs/glm_image.yaml</code></pre>
+    <p>来源 A 提供了分离式推理最完整的示例。</p>
+
+    <h3>9.5 EPDG 全分离路线图</h3>
+    <p>来源 A 提及的 2026 Q1 路线图：</p>
+    <ul>
+      <li><strong>P0</strong>: Prefill-Decode (PD) 分离，适用于 Thinker / Talker 阶段</li>
+      <li><strong>P1</strong>: Encoder-Prefill (E-&gt;P) 分离</li>
+    </ul>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ============================================ -->
+  <!-- Section 10: 横纵交汇洞察                     -->
+  <!-- ============================================ -->
+  <div class="section" id="insights">
+    <h2>10. 横纵交汇洞察</h2>
+
+    <h3>10.1 纵向发展脉络</h3>
+    <p>vLLM-Omni 的发展路径清晰体现了从单一 LLM 推理到多模态统一 serving 的演进：</p>
+    <ol>
+      <li><strong>v0.12.0rc1</strong>：多模态推理引擎的全面进化&mdash;首次整合 Qwen2.5-Omni 支持</li>
+      <li><strong>v0.18.0（2026 年 3 月）</strong>：里程碑版本&mdash;重新基于上游 vLLM v0.18.0，重构 serving 入口架构，为 PD 解耦和多模态输出解耦奠定基础。增强音频/语音生产 serving，扩展至更多模型</li>
+    </ol>
+    <p>这一演变路径表明：vLLM-Omni 正从"支持特定几款多模态模型"走向"通用多模态 serving 基础设施"。</p>
+
+    <h3>10.2 横向竞争定位</h3>
+    <p>vLLM-Omni 在多模态推理框架领域处于独特位置：</p>
+    <ul>
+      <li>与 <strong>vLLM</strong>（纯文本推理）相比：vLLM-Omni 是多模态扩展，而非替代</li>
+      <li>与 <strong>Hugging Face diffusers</strong>（纯扩散推理）相比：vLLM-Omni 提供统一化 serving + 高性能优化</li>
+      <li>与 <strong>OpenAI API</strong>（商业服务）相比：vLLM-Omni 是开源自部署方案</li>
+    </ul>
+    <p>vLLM-Omni 的核心差异化优势：</p>
+    <ol>
+      <li><strong>解耦流水线</strong>：与现有流水线框架（如 NVIDIA Dynamo）本质不同&mdash;完全解耦的设计让各阶段可独立扩展</li>
+      <li><strong>OmniConnector</strong>：灵活的张量传输层，支持共享内存、RDMA、Mooncake 等多种后端</li>
+      <li><strong>多阶段协同</strong>：自回归 + 非自回归混合流水线（如 Thinker-&gt;Talker-&gt;Code2Wav）</li>
+    </ol>
+
+    <h3>10.3 优势与短板</h3>
+    <p><strong>优势</strong></p>
+    <ul>
+      <li>架构创新度高（解耦流水线 + 动态路由 + 统一中间表示）</li>
+      <li>模型覆盖范围持续扩大（30+ Pipeline 类）</li>
+      <li>性能优化手段丰富（缓存、并行、量化、编译）</li>
+      <li>开源 + Apache 2.0 许可证</li>
+      <li>与 vLLM 生态深度集成</li>
+    </ul>
+    <p><strong>短板</strong></p>
+    <ul>
+      <li>Qwen2.5-Omni 兼容性受限：需要手动编译特殊分支，增加了用户的使用门槛</li>
+      <li>文档完善度不足：中文文档滞后，部分 API 变更未及时更新（如 <code>stage-configs-path</code> &rarr; <code>deploy-config</code>）</li>
+      <li>安装复杂度：从源码安装需要编译 CUDA 代码，对新手不够友好</li>
+      <li>缺少统一的管理控制台</li>
+    </ul>
+
+    <h3>10.4 风险评估</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>风险</th>
+          <th>可能性</th>
+          <th>影响</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="risk-mid">
+          <td><strong>模型兼容性断裂</strong></td>
+          <td style="text-align:center; font-weight:600;">中</td>
+          <td style="text-align:center; font-weight:600; color:#b91c1c;">高</td>
+          <td>Qwen2.5-Omni 需要特殊分支，后续版本可能再次出现</td>
+        </tr>
+        <tr class="risk-mid">
+          <td><strong>上游 vLLM API 变更</strong></td>
+          <td style="text-align:center; font-weight:600;">中</td>
+          <td style="text-align:center; font-weight:600; color:#b91c1c;">高</td>
+          <td>vLLM-Omni 强依赖上游 vLLM，API 变更会导致连锁反应</td>
+        </tr>
+        <tr class="risk-high">
+          <td><strong>文档滞后</strong></td>
+          <td style="text-align:center; font-weight:600; color:#b91c1c;">高</td>
+          <td style="text-align:center; font-weight:600;">中</td>
+          <td>参数废弃（如 <code>stage-configs-path</code>）未及时反映在文档中</td>
+        </tr>
+        <tr class="risk-low">
+          <td><strong>社区生态碎片化</strong></td>
+          <td style="text-align:center; font-weight:600;">低</td>
+          <td style="text-align:center; font-weight:600;">中</td>
+          <td>社区驱动 <code>vllm-omni-skills</code> 等第三方项目可能与主线不同步</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>10.5 未来推演</h3>
+    <ul>
+      <li><strong>最可能的剧本</strong>：vLLM-Omni 将持续跟随 vLLM 版本迭代，逐步实现 EPDG 全分离架构（PD 分离 &rarr; E-&gt;P 分离 &rarr; 全面跨节点），模型支持列表进一步扩大，成为多模态 serving 的事实标准。</li>
+      <li><strong>最危险的剧本</strong>：如果多模态模型架构快速分化（如各厂商采用不兼容的 Stage 定义），vLLM-Omni 的统一抽象层需要同步演进，可能导致架构复杂度大幅上升。</li>
+      <li><strong>最乐观的剧本</strong>：vLLM-Omni 完成 EPDG 全分离后，成为云原生多模态 AI 基础设施的核心组件，与 NVIDIA Dynamo 等方案形成互补生态。开源社区贡献活跃，模型支持达到 100+。</li>
+    </ul>
+
+    <h3>10.6 使用建议</h3>
+    <ol class="recommendation-list">
+      <li><strong>首选 Qwen3-Omni</strong>：如果使用多阶段 LLM，优先选择 Qwen3-Omni（原生兼容 vLLM-Omni），避免 Qwen2.5-Omni 的特殊分支问题</li>
+      <li><strong>使用 pip 安装</strong>：除非需要最新特性或进行开发，否则优先使用 <code>pip install vllm-omni</code></li>
+      <li><strong>优先使用 deploy-config</strong>：阶段配置使用新格式 <code>--deploy-config</code> 而非已废弃的 <code>--stage-configs-path</code></li>
+      <li><strong>视频生成注意参数</strong>：使用 Wan2.2 时务必设置 <code>--boundary-ratio 0.875 --flow-shift 5.0</code></li>
+      <li><strong>缓存加速按需启用</strong>：高分辨率图像/视频场景启用 Cache-DiT 或 TeaCache，可显著提升性能</li>
+      <li><strong>分布式从单机开始</strong>：先验证单机 SharedMemoryConnector 工作正常，再扩展到多机 Mooncake/RDMA</li>
+    </ol>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ============================================ -->
+  <!-- 结尾部分                                      -->
+  <!-- ============================================ -->
+  <div class="end-section">
+    <h3>分析结论</h3>
+    <p>vLLM-Omni 是目前开源社区中最具潜力的全模态推理框架，其解耦流水线架构和丰富的模型支持使其在多模态 serving 领域占据独特定位。使用时应特别注意 Qwen2.5-Omni 的兼容性限制，优先选择原生支持的模型。文档和参数变更方面存在一定滞后，建议以源码分析为最终参考依据。</p>
+
+    <h3>数据局限性说明</h3>
+    <p>本报告的分析基于截至 2026 年 5 月的 vLLM-Omni 源码、官方文档及社区讨论。性能数据主要来源于项目内 Benchmark（来源 C），在特定硬件配置（8xA100）下测得，实际表现可能因硬件、模型版本及工作负载而异。文档内容可能滞后于代码变更，部分 API 参数可能已废弃或更新。</p>
+
+    <h3>参考文献 / 来源致谢</h3>
+    <ul>
+      <li><strong>来源 A</strong>：vLLM-Omni 官方文档及 README 文件</li>
+      <li><strong>来源 B</strong>：vLLM-Omni 源码分析（model_executor / diffusion / distributed 模块）</li>
+      <li><strong>来源 C</strong>：vLLM-Omni 内部 Benchmark 及性能评估报告</li>
+      <li><strong>上游项目</strong>：<a href="https://github.com/vllm-project/vllm" style="color:#1a1a2e; text-decoration:underline;">vLLM</a> &mdash; 高性能 LLM 推理引擎</li>
+      <li><strong>社区</strong>：<a href="https://github.com/vllm-project/vllm-omni" style="color:#1a1a2e; text-decoration:underline;">vLLM-Omni GitHub 仓库</a></li>
+    </ul>
+  </div>
+
+</div>
+</div>
+
+<script>
+function toggleNav() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('nav-overlay').classList.toggle('show');
+}
+
+// Close sidebar on link click (mobile)
+document.querySelectorAll('#sidebar a').forEach(a => {
+    a.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('nav-overlay').classList.remove('show');
+    });
+});
+
+// Highlight current section in sidebar
+window.addEventListener('scroll', () => {
+    const sections = document.querySelectorAll('.section[id]');
+    const navLinks = document.querySelectorAll('#sidebar a');
+    let current = '';
+    sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 200) {
+            current = s.getAttribute('id');
+        }
+    });
+    navLinks.forEach(a => {
+        a.classList.remove('active');
+        if (a.getAttribute('href') === '#' + current) {
+            a.classList.add('active');
+        }
+    });
+});
+</script>
+
+<style>
+/* === Final CSS Overrides for Consistency === */
+.section {
+    max-width: 100% !important;
+    margin: 0 0 32px 0 !important;
+    padding: 32px 40px !important;
+}
+body {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* === Sidebar Navigation === */
+#nav-toggle {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    background: #1a1a2e;
+    color: #fff;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 20px;
+    transition: opacity .2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+#nav-toggle:hover { opacity: 0.85; }
+
+#sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    width: 260px;
+    height: 100vh;
+    background: #1a1a2e;
+    color: #e2e8f0;
+    z-index: 1001;
+    transition: left .3s ease;
+    overflow-y: auto;
+    padding: 20px 0;
+}
+#sidebar.open { left: 0; }
+#sidebar .sidebar-header {
+    font-family: Georgia, 'Noto Serif SC', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    padding: 8px 20px 16px;
+    border-bottom: 1px solid #2d2d4a;
+    margin-bottom: 8px;
+}
+#sidebar ul { list-style: none; padding: 0; margin: 0; }
+#sidebar li { padding: 0; }
+#sidebar a {
+    display: block;
+    padding: 8px 20px;
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 14px;
+    transition: all .15s;
+    border-left: 3px solid transparent;
+}
+#sidebar a:hover, #sidebar a.active {
+    color: #fff;
+    background: rgba(255,255,255,0.06);
+    border-left-color: #3b82f6;
+}
+
+#nav-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    z-index: 999;
+}
+#nav-overlay.show { display: block; }
+
+/* === Emoji fallback for meta items === */
+.cover-area .meta-item { display: inline-flex; align-items: center; gap: 6px; }
+.cover-area .meta-item strong { min-width: 20px; }
+</style>
+</body>
+</html>

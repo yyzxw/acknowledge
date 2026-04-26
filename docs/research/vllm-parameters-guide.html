@@ -1,0 +1,2530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vLLM 运行参数完全指南</title>
+<style>
+/* ═══════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════ */
+:root {
+  --bg-deep:    #030712;
+  --bg-base:    #060b1a;
+  --bg-elev:    #0b1225;
+  --bg-card:    rgba(255,255,255,0.03);
+  --bg-card-hover: rgba(255,255,255,0.06);
+  --border:     rgba(255,255,255,0.06);
+  --border-hi:  rgba(255,255,255,0.13);
+
+  --fg:         #edf2f7;
+  --fg-muted:   #8892a4;
+  --fg-dim:     #4a5568;
+
+  --accent:     #2b6cb0;
+  --accent-glow:rgba(43,108,176,0.25);
+  --accent2:    #63b3ed;
+  --green:      #48bb78;
+  --green-glow: rgba(72,187,120,0.2);
+  --amber:      #ecc94b;
+  --amber-glow: rgba(236,201,75,0.2);
+  --cyan:       #38b2ac;
+  --cyan-glow:  rgba(56,178,172,0.2);
+  --red:        #fc8181;
+
+  --font-head:  system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono:  "SF Mono", "Cascadia Code", "Fira Code", "Consolas", "Source Code Pro", monospace;
+
+  --r-sm:  8px;
+  --r-md:  14px;
+  --r-lg:  20px;
+  --r-xl:  28px;
+
+  --ease:  cubic-bezier(0.16, 1, 0.3, 1);
+  --dur:   250ms;
+
+  --w: 1280px;
+  --section-py: 5rem;
+}
+
+/* ═══════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-elev); }
+::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; }
+
+body {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  line-height: 1.8;
+  background: var(--bg-deep);
+  color: var(--fg);
+  overflow-x: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+p { font-size: 1rem; color: var(--fg-muted); line-height: 1.85; }
+h1, h2, h3, h4 { color: var(--fg); font-family: var(--font-head); }
+
+::selection { background: var(--accent); color: #fff; }
+
+/* ═══════════════════════════════════════════
+   AMBIENT BLOBS
+═══════════════════════════════════════════ */
+.blob {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+  animation: blobFloat 20s ease-in-out infinite;
+}
+.blob-1 {
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(43,108,176,0.12) 0%, transparent 70%);
+  top: -250px; left: -250px;
+}
+.blob-2 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(56,178,172,0.08) 0%, transparent 70%);
+  top: 35%; right: -150px;
+  animation-delay: -7s;
+}
+.blob-3 {
+  width: 450px; height: 450px;
+  background: radial-gradient(circle, rgba(99,179,237,0.08) 0%, transparent 70%);
+  bottom: 15%; left: 25%;
+  animation-delay: -14s;
+}
+@keyframes blobFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(30px, -40px) scale(1.05); }
+  66%       { transform: translate(-20px, 20px) scale(0.95); }
+}
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════ */
+.container {
+  max-width: var(--w);
+  margin: 0 auto;
+  padding: 0 clamp(1.5rem, 4vw, 3.5rem);
+}
+section { position: relative; z-index: 1; padding: var(--section-py) 0; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.75rem; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+/* ═══════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════ */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: rgba(3,7,18,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  height: 64px;
+  display: flex;
+  align-items: center;
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  width: 100%;
+  max-width: var(--w);
+  margin: 0 auto;
+  padding: 0 clamp(1.5rem, 4vw, 3.5rem);
+}
+.nav-brand {
+  font-family: var(--font-head);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  flex-shrink: 0;
+}
+.nav-brand span { color: var(--accent2); }
+.nav-links { display: flex; gap: 0.3rem; margin-left: auto; flex-wrap: wrap; }
+.nav-links a {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--r-sm);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.nav-links a:hover { color: var(--fg); background: var(--bg-card); }
+
+/* ═══════════════════════════════════════════
+   HERO
+═══════════════════════════════════════════ */
+.hero {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 8rem clamp(1.5rem, 4vw, 3.5rem) 5rem;
+  position: relative;
+  z-index: 1;
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent2);
+  background: rgba(43,108,176,0.1);
+  border: 1px solid rgba(43,108,176,0.25);
+  padding: 0.5rem 1.3rem;
+  border-radius: 999px;
+  margin-bottom: 1.75rem;
+  animation: fadeUp 0.8s var(--ease) both;
+}
+.hero-eyebrow::before { content: '◈'; font-size: 0.7rem; }
+
+.hero h1 {
+  font-family: var(--font-head);
+  font-size: clamp(4rem, 11vw, 7.5rem);
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+  color: var(--fg);
+  margin-bottom: 1.5rem;
+  animation: fadeUp 0.8s 0.1s var(--ease) both;
+}
+.hero h1 span {
+  background: linear-gradient(135deg, var(--accent2) 0%, var(--cyan) 60%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-desc {
+  font-size: 1.15rem;
+  color: var(--fg-muted);
+  max-width: 700px;
+  margin: 0 auto 2.75rem;
+  line-height: 1.8;
+  animation: fadeUp 0.8s 0.2s var(--ease) both;
+}
+
+.hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7rem;
+  margin-bottom: 3.5rem;
+  animation: fadeUp 0.8s 0.3s var(--ease) both;
+}
+.pill {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 0.5rem 1.15rem;
+  border-radius: 6px;
+  transition: transform var(--dur) var(--ease);
+}
+.pill:hover { transform: translateY(-2px); }
+.pill-green  { background: rgba(72,187,120,0.1); border: 1px solid rgba(72,187,120,0.25); color: var(--green); }
+.pill-accent{ background: rgba(43,108,176,0.12); border: 1px solid rgba(43,108,176,0.28); color: var(--accent2); }
+.pill-amber { background: rgba(236,201,75,0.1);  border: 1px solid rgba(236,201,75,0.25); color: var(--amber); }
+.pill-cyan  { background: rgba(56,178,172,0.1);  border: 1px solid rgba(56,178,172,0.25); color: var(--cyan); }
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  background: var(--bg-card);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+  animation: fadeUp 0.8s 0.4s var(--ease) both;
+}
+.hero-stat {
+  padding: 1.5rem 2.8rem;
+  border-right: 1px solid var(--border);
+  text-align: center;
+  min-width: 140px;
+}
+.hero-stat:last-child { border-right: none; }
+.hero-stat .hs-num {
+  font-family: var(--font-head);
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 0.3rem;
+}
+.hero-stat .hs-num.accent2 { color: var(--accent2); }
+.hero-stat .hs-num.green  { color: var(--green); }
+.hero-stat .hs-num.amber  { color: var(--amber); }
+.hero-stat .hs-lbl {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-dim);
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════
+   SECTION HEADER
+═══════════════════════════════════════════ */
+.section-header { margin-bottom: 3rem; }
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent2);
+  background: rgba(43,108,176,0.1);
+  border: 1px solid rgba(43,108,176,0.2);
+  padding: 0.35rem 0.95rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.section-title {
+  font-family: var(--font-head);
+  font-size: clamp(2.4rem, 4.5vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  margin-bottom: 0.85rem;
+}
+.section-intro {
+  font-size: 1.1rem;
+  color: var(--fg-muted);
+  max-width: 720px;
+  line-height: 1.85;
+}
+
+/* ═══════════════════════════════════════════
+   CARDS
+═══════════════════════════════════════════ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 1.75rem;
+  backdrop-filter: blur(8px);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.card:hover { background: var(--bg-card-hover); border-color: var(--border-hi); }
+
+.card-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent2);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.card-label::before {
+  content: '';
+  width: 3px;
+  height: 13px;
+  background: var(--accent2);
+  border-radius: 2px;
+}
+
+.detail-list { list-style: none; }
+.detail-list li {
+  font-size: 0.92rem;
+  color: var(--fg-muted);
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.detail-list li:last-child { border-bottom: none; }
+.detail-list li::before { content: '▸'; color: var(--accent2); flex-shrink: 0; font-weight: 700; }
+
+/* ═══════════════════════════════════════════
+   PARAM GRID
+═══════════════════════════════════════════ */
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+.param-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 1rem;
+  text-align: center;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.param-item:hover { background: var(--bg-card-hover); border-color: var(--border-hi); }
+.param-item .pi-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent2);
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.param-item .pi-desc {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+
+/* ═══════════════════════════════════════════
+   TABLES
+═══════════════════════════════════════════ */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+}
+.tbl thead { background: rgba(255,255,255,0.03); }
+.tbl th {
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-dim);
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.tbl td {
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ═══════════════════════════════════════════
+   TECH CARD
+═══════════════════════════════════════════ */
+.tech-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 1.75rem;
+  position: relative;
+  overflow: hidden;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.tech-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+.tech-card:hover { background: var(--bg-card-hover); border-color: var(--border-hi); }
+.tech-card-tag {
+  position: absolute;
+  top: 1.2rem; right: 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent2);
+  background: rgba(43,108,176,0.1);
+  border: 1px solid rgba(43,108,176,0.2);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+.tech-card h4 {
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.6rem;
+}
+.tech-card p { font-size: 0.92rem; line-height: 1.85; }
+
+/* ═══════════════════════════════════════════
+   PARAM DEEP-DIVE CARDS
+═══════════════════════════════════════════ */
+.param-detail {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 1.5rem;
+  transition: background var(--dur) var(--ease);
+}
+.param-detail:hover { background: var(--bg-card-hover); }
+.param-detail .pd-name {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent2);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.param-detail .pd-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+}
+.param-detail .pd-default {
+  font-size: 0.82rem;
+  color: var(--fg-dim);
+  margin-bottom: 0.5rem;
+}
+.param-detail .pd-desc {
+  font-size: 0.9rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.6rem;
+  line-height: 1.7;
+}
+.param-detail .pd-scenario {
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+  background: rgba(43,108,176,0.06);
+  border-left: 2px solid var(--accent2);
+  padding: 0.4rem 0.8rem;
+  border-radius: 0 4px 4px 0;
+  line-height: 1.6;
+}
+.param-detail .pd-note {
+  font-size: 0.78rem;
+  color: var(--amber);
+  margin-top: 0.4rem;
+}
+
+/* ═══════════════════════════════════════════
+   SCENARIO CARDS
+═══════════════════════════════════════════ */
+.scenario-card {
+  background: linear-gradient(135deg, rgba(43,108,176,0.06) 0%, rgba(43,108,176,0.02) 100%);
+  border: 1px solid rgba(43,108,176,0.15);
+  border-radius: var(--r-lg);
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: background var(--dur) var(--ease);
+}
+.scenario-card:hover { background: rgba(43,108,176,0.08); }
+.scenario-card .sc-tag {
+  position: absolute;
+  top: 0.8rem; right: 0.8rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+}
+.sc-tag-green  { background: rgba(72,187,120,0.12); color: var(--green); border: 1px solid rgba(72,187,120,0.2); }
+.sc-tag-blue   { background: rgba(43,108,176,0.12); color: var(--accent2); border: 1px solid rgba(43,108,176,0.2); }
+.sc-tag-amber  { background: rgba(236,201,75,0.12); color: var(--amber); border: 1px solid rgba(236,201,75,0.2); }
+.sc-tag-cyan   { background: rgba(56,178,172,0.12); color: var(--cyan); border: 1px solid rgba(56,178,172,0.2); }
+.sc-tag-purple { background: rgba(139,92,246,0.12); color: #a78bfa; border: 1px solid rgba(139,92,246,0.2); }
+
+.scenario-card .sc-title {
+  font-family: var(--font-head);
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-bottom: 0.2rem;
+  padding-right: 5rem;
+}
+.scenario-card .sc-model {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.7rem;
+}
+.scenario-card pre {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0.7rem 0.9rem;
+  margin: 0;
+  overflow-x: auto;
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+.scenario-card pre code { background: none; padding: 0; }
+
+/* ═══════════════════════════════════════════
+   QUICK REFERENCE
+═══════════════════════════════════════════ */
+.ref-block {
+  background: linear-gradient(135deg, rgba(72,187,120,0.06), rgba(56,178,172,0.06));
+  border: 1px solid rgba(72,187,120,0.15);
+  border-radius: var(--r-xl);
+  padding: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  margin: 2rem 0;
+}
+.ref-badge {
+  font-family: var(--font-head);
+  font-size: 3.5rem;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--accent2), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  flex-shrink: 0;
+}
+
+/* Insight block */
+.insight {
+  background: linear-gradient(135deg, rgba(43,108,176,0.08), rgba(56,178,172,0.05));
+  border-left: 3px solid var(--accent2);
+  padding: 1rem 1.5rem;
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  margin: 1.5rem 0;
+}
+.insight strong { color: var(--fg); }
+.insight .highlight { color: var(--green); font-weight: 700; }
+
+/* ═══════════════════════════════════════════
+   CODE
+═══════════════════════════════════════════ */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: rgba(43,108,176,0.12);
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: var(--fg);
+}
+pre code { background: none; padding: 0; }
+
+pre {
+  line-height: 1.7;
+}
+
+/* ═══════════════════════════════════════════
+   FOOTER
+═══════════════════════════════════════════ */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 3.5rem 0;
+  margin-top: 2rem;
+}
+.footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+}
+.footer-brand {
+  font-family: var(--font-head);
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, var(--accent2), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.footer-meta {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--fg-dim);
+  text-align: right;
+  line-height: 1.8;
+}
+.footer-links { margin-top: 0.5rem; }
+.footer-links a {
+  color: var(--accent2);
+  transition: opacity var(--dur) var(--ease);
+}
+.footer-links a:hover { opacity: 0.7; }
+
+/* ═══════════════════════════════════════════
+   FOCUS & MOTION
+═══════════════════════════════════════════ */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent2);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .param-grid { grid-template-columns: repeat(2, 1fr); }
+  .ref-block { flex-direction: column; gap: 1.5rem; text-align: center; }
+  .footer-inner { flex-direction: column; text-align: center; }
+  .footer-meta { text-align: center; }
+  .nav-links { display: none; }
+  .hero-stats { flex-direction: column; }
+  .hero-stat { border-right: none; border-bottom: 1px solid var(--border); }
+  .hero-stat:last-child { border-bottom: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Ambient blobs -->
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-brand">v<span>LLM</span></a>
+    <div class="nav-links">
+      <a href="#intro">核心原理</a>
+      <a href="#single">单节点参数</a>
+      <a href="#multi">多机分布式</a>
+      <a href="#eco">生态集成</a>
+      <a href="#scenarios">场景配置</a>
+      <a href="#ref">参数速查</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div>
+    <div class="hero-eyebrow">vLLM 运行参数完全指南</div>
+    <h1>v<span>LLM</span> <span>Parameters</span></h1>
+    <p class="hero-desc">高性能大语言模型推理服务框架。PagedAttention、连续批处理、多并行策略，从单卡到千卡集群的完整参数指南。</p>
+    <div class="hero-pills">
+      <span class="pill pill-green">PagedAttention</span>
+      <span class="pill pill-accent">200+ 模型架构</span>
+      <span class="pill pill-amber">TP / PP / EP / DP</span>
+      <span class="pill pill-cyan">LMCache 集成</span>
+      <span class="pill pill-accent">推测解码</span>
+      <span class="pill pill-green">分离式推理</span>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hs-num accent2">200+</div>
+        <div class="hs-lbl">支持的模型架构</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num green">2-4x</div>
+        <div class="hs-lbl">显存利用率提升</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num amber">2-3x</div>
+        <div class="hs-lbl">吞吐量提升</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num accent2">40+</div>
+        <div class="hs-lbl">核心运行参数</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hs-num green">3-10x</div>
+        <div class="hs-lbl">LMCache 延迟优化</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     01 · INTRO
+═══════════════════════════════════════════ -->
+<section id="intro">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">01 · 核心原理</div>
+      <h2 class="section-title">为高性能推理而生</h2>
+      <p class="section-intro">vLLM 是当前最流行的大语言模型推理服务框架。核心特性包括 PagedAttention 显存管理、连续批处理调度、多维度并行策略和丰富的量化支持。由加州大学伯克利分校开发并开源。</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-label">核心能力</div>
+        <ul class="detail-list">
+          <li><strong>PagedAttention</strong> — 虚拟块管理 KV cache，显存碎片从 60-80% 降至近乎 0</li>
+          <li><strong>连续批处理</strong> — 动态调度请求进出批次，最大化 GPU 计算利用率</li>
+          <li><strong>多并行策略</strong> — TP / PP / EP / DP 按需自由组合</li>
+          <li><strong>丰富量化</strong> — FP8 (e4m3/e5m2)、INT8 AWQ、GGUF、INT4</li>
+          <li><strong>OpenAI 兼容 API</strong> — 开箱即用，适配现有生态</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-label">版本特性演进</div>
+        <table class="tbl" style="font-size:0.85rem;">
+          <thead><tr><th>版本</th><th>特性</th></tr></thead>
+          <tbody>
+            <tr><td>v0.4+</td><td>PagedAttention V2 · 推测解码 (EAGLE / N-Gram / PARD)</td></tr>
+            <tr><td>v0.5+</td><td>分离式推理 (Disaggregated Prefill/Decode)</td></tr>
+            <tr><td>v0.6+</td><td>专家并行 EP · LMCache 集成 · Chunked Prefill</td></tr>
+            <tr><td>v0.8+</td><td>V1 引擎重构 · 多 LoRA · NUMA 绑定</td></tr>
+            <tr><td>最新</td><td>200+ 模型 · MTP 推测 · KV 传输多后端 (NIXL/UCX/GDS)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     02 · SINGLE NODE
+═══════════════════════════════════════════ -->
+<section id="single">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">02 · 单节点推理参数</div>
+      <h2 class="section-title">GPU 配置 · 内存调度 · 量化</h2>
+      <p class="section-intro">单节点是 vLLM 部署的基础形态。合理的参数配置直接影响推理性能与显存开销——错误配置可能导致 OOM 或 GPU 利用率不足。</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="tech-card">
+        <div class="tech-card-tag">GPU 配置</div>
+        <h4>显存与并行</h4>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.9rem;margin:0.75rem 0;font-size:0.85rem;overflow-x:auto;"><code><span style="color:var(--accent2);">--gpu-memory-utilization</span> 0.9      <span style="color:var(--fg-dim);"># 显存占比 0~1</span>
+<span style="color:var(--accent2);">--tensor-parallel-size</span> 4            <span style="color:var(--fg-dim);"># 张量并行度，偶数 ≤ 8</span>
+<span style="color:var(--accent2);">--dtype</span> bfloat16                     <span style="color:var(--fg-dim);"># 数据类型：bf16 / fp16 / fp32</span></code></pre>
+        <div style="font-size:0.88rem;color:var(--fg-muted);">默认值 <code style="font-size:0.82rem;">gpu-memory-utilization=0.9</code>，生产环境常用 0.9-0.95，显存不足时下调至 <code style="font-size:0.82rem;">0.8</code></div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-card-tag">内存调度</div>
+        <h4>批次与上下文</h4>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.9rem;margin:0.75rem 0;font-size:0.85rem;overflow-x:auto;"><code><span style="color:var(--accent2);">--max-model-len</span> 8192                <span style="color:var(--fg-dim);"># 最大上下文长度</span>
+<span style="color:var(--accent2);">--max-num-seqs</span> 64                    <span style="color:var(--fg-dim);"># 批次最大序列数</span>
+<span style="color:var(--accent2);">--max-num-batched-tokens</span> 8192       <span style="color:var(--fg-dim);"># 批次最大 token 数</span></code></pre>
+        <p style="font-size:0.88rem;">降低 <code>max-num-seqs</code> 减少显存压力；增大 <code>max-num-batched-tokens</code> 提升吞吐</p>
+      </div>
+    </div>
+
+    <!-- Parameter deep-dive section -->
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2.5rem 0 1.25rem;font-size:1.3rem;">参数深度解读</h3>
+
+    <div class="grid-2">
+      <div class="param-detail">
+        <div class="pd-name">--gpu-memory-utilization <span class="pd-badge">float</span></div>
+        <div class="pd-default">默认值: 0.9 · 取值范围: 0.0 ~ 1.0</div>
+        <div class="pd-desc">控制 KV cache 可用的 GPU 显存比例。剩余显存用于模型权重、激活值和临时缓冲区。此值越高，KV cache 可用显存越多，可支持更大批次和更长上下文。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>生产环境 0.9~0.95；显存不足/模型较大 0.8~0.85；调试/多模型共存 0.7~0.75。注意：设置过高 (>0.95) 可能导致 OOM 或 CUDA OOM。</div>
+        <div class="pd-note">⚠ 此值不是越高越好，需为模型权重和其他开销预留空间</div>
+      </div>
+      <div class="param-detail">
+        <div class="pd-name">--tensor-parallel-size <span class="pd-badge">int / -tp</span></div>
+        <div class="pd-default">默认值: 1 · 推荐值: 2/4/8</div>
+        <div class="pd-desc">将模型权重张量切分到多块 GPU 上并行计算。TP 是一种通信密集的并行策略，每层前向传播都需要 GPU 间同步。TP 越大单卡显存需求越低，但通信开销也越大。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>7B 模型用 1~2 卡；13~34B 用 4 卡；70B 模型用 8 卡。超过 8 卡时通信开销增速超过收益，建议配合 PP 使用。</div>
+        <div class="pd-note">⚠ 奇数不支持，需为偶数。TP 度越高，GPU 间通信延迟越显著</div>
+      </div>
+      <div class="param-detail">
+        <div class="pd-name">--max-model-len <span class="pd-badge">int</span></div>
+        <div class="pd-default">默认值: 模型配置值</div>
+        <div class="pd-desc">限制模型使用的最大上下文长度（prompt + generated tokens）。vLLM 会按此值分配 KV cache 空间，因此该值直接影响显存占用。设置为模型支持的上下文长度的子集可以节约显存。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>Stream Chat 用 4K~8K；文档分析用 32K~128K。减少此值可以显著降低显存占用，尤其适合长上下文模型但不需要长序列的场景。</div>
+      </div>
+      <div class="param-detail">
+        <div class="pd-name">--max-num-seqs <span class="pd-badge">int</span></div>
+        <div class="pd-default">默认值: 动态计算 · 推荐区间: 16~256</div>
+        <div class="pd-desc">控制单次调度批次中最多可并行处理的序列数。每个序列都需要独立的 KV cache 空间。此值影响显存占用和 GPU 计算利用率之间的平衡。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>延迟敏感（聊天）用 16~32；吞吐优先（批量推理）用 64~256；显存受限场景降低至 16 以下。较大的值可提高吞吐但增加显存压力。</div>
+      </div>
+      <div class="param-detail">
+        <div class="pd-name">--max-num-batched-tokens <span class="pd-badge">int</span></div>
+        <div class="pd-default">默认值: 动态计算 · 推荐区间: 256~32768</div>
+        <div class="pd-desc">控制单批次中最多可容纳的总 token 数（所有序列的 prompt + generation tokens 之和）。这是影响吞吐和延迟平衡的关键参数。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>TTFT（首 token 延迟）敏感场景设 256~1024；吞吐优先场景设 8192~32768；启用了 chunked prefill 后可设更高值以增加 GPU 利用率。</div>
+      </div>
+      <div class="param-detail">
+        <div class="pd-name">--dtype <span class="pd-badge">str</span></div>
+        <div class="pd-default">默认值: auto · 可选: float16 / bfloat16 / float32</div>
+        <div class="pd-desc">控制模型推理时的数据类型。bfloat16 是训练/推理的默认选择，float32 提供最高精度但显存占用翻倍。auto 会根据模型配置自动选择。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>A100/H100 用 bfloat16（最佳性能+稳定性）；V100 用 float16（不支持 bf16）；精度敏感场景用 float32（显存翻倍）。</div>
+      </div>
+      <div class="param-detail">
+        <div class="pd-name">--block-size <span class="pd-badge">int</span></div>
+        <div class="pd-default">默认值: 16</div>
+        <div class="pd-desc">PagedAttention 的虚拟内存页大小。更大的 block-size 可以提升 GPU 计算效率但会增加内部碎片。更小的 block-size 减少碎片但增加管理开销。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>标准 GPU 场景保留 16；CPU 交换/卸载场景用 32；启用了 KV 传输/分离式推理时推荐 64。</div>
+      </div>
+      <div class="param-detail">
+        <div class="pd-name">--swap-space <span class="pd-badge">int (GB)</span></div>
+        <div class="pd-default">默认值: 4</div>
+        <div class="pd-desc">设置 CPU 交换空间的容量（单位 GB）。当 GPU 显存不足以容纳所有 KV cache 时，vLLM 将部分 KV cache 交换到 CPU 内存。增加此值可提供更大的溢出缓冲区。</div>
+        <div class="pd-scenario"><strong>场景建议：</strong>标准场景保留默认 4；显存受限（如单卡运行大模型）设置为 16~32；7B 以下模型一般不需要调整。</div>
+      </div>
+    </div>
+
+    <!-- Optimization levels (prominent callout) -->
+    <div style="background:linear-gradient(135deg,rgba(52,211,153,0.08),rgba(16,185,129,0.03));border:1px solid rgba(52,211,153,0.3);border-radius:var(--r-lg);padding:1.5rem;margin:2rem 0;">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.8rem;">
+        <span style="font-size:1.3rem;">⚡</span>
+        <span style="font-family:var(--font-head);font-weight:700;font-size:1.15rem;">优化级别</span>
+        <code style="font-size:0.85rem;">--optimization-level</code>
+        <span style="background:rgba(52,211,153,0.15);color:var(--green);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.68rem;font-weight:600;margin-left:0.5rem;">vLLM 内置参数</span>
+      </div>
+      <p style="font-size:0.88rem;color:var(--fg-muted);margin:0 0 1rem;">控制 CUDA Graph 等内部优化策略的激进程度。可选值 <code>0</code>（最低）到 <code>3</code>（最高），级别越高吞吐越大，但显存占用和启动开销也相应增加。<span style="color:var(--green);font-weight:600;">默认 2</span>。</p>
+      <div class="grid-4" style="margin-bottom:0;">
+        <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;text-align:center;">
+          <div style="font-weight:700;font-size:1.1rem;color:var(--fg-dim);">0</div>
+          <div style="font-size:0.78rem;color:var(--fg-muted);margin-top:0.2rem;">禁用 CUDA Graph</div>
+          <div style="margin-top:0.4rem;"><span style="background:rgba(239,68,68,0.12);color:#ef4444;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.6rem;font-weight:600;">显存最低</span></div>
+          <div style="font-size:0.72rem;color:var(--fg-dim);margin-top:0.3rem;">调试 / 排查问题</div>
+        </div>
+        <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;text-align:center;">
+          <div style="font-weight:700;font-size:1.1rem;color:var(--fg-dim);">1</div>
+          <div style="font-size:0.78rem;color:var(--fg-muted);margin-top:0.2rem;">条件 CUDA Graph</div>
+          <div style="margin-top:0.4rem;"><span style="background:rgba(234,179,8,0.12);color:#eab308;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.6rem;font-weight:600;">折中</span></div>
+          <div style="font-size:0.72rem;color:var(--fg-dim);margin-top:0.3rem;">显存紧张但需加速</div>
+        </div>
+        <div style="background:var(--bg-deep);border:2px solid rgba(52,211,153,0.4);border-radius:var(--r-sm);padding:0.8rem;text-align:center;position:relative;">
+          <div style="position:absolute;top:-0.5rem;right:0.5rem;background:var(--green);color:#0a0a0f;padding:0.05rem 0.4rem;border-radius:3px;font-size:0.55rem;font-weight:700;">默认</div>
+          <div style="font-weight:700;font-size:1.1rem;color:var(--green);">2</div>
+          <div style="font-size:0.78rem;color:var(--fg-muted);margin-top:0.2rem;">CUDA Graph + 内存优化</div>
+          <div style="margin-top:0.4rem;"><span style="background:rgba(52,211,153,0.15);color:var(--green);padding:0.1rem 0.4rem;border-radius:3px;font-size:0.6rem;font-weight:600;">推荐生产</span></div>
+          <div style="font-size:0.72rem;color:var(--fg-dim);margin-top:0.3rem;">吞吐 & 显存均衡</div>
+        </div>
+        <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;text-align:center;">
+          <div style="font-weight:700;font-size:1.1rem;color:var(--fg-dim);">3</div>
+          <div style="font-size:0.78rem;color:var(--fg-muted);margin-top:0.2rem;">激进 CUDA Graph</div>
+          <div style="margin-top:0.4rem;"><span style="background:rgba(99,102,241,0.12);color:#818cf8;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.6rem;font-weight:600;">最高吞吐</span></div>
+          <div style="font-size:0.72rem;color:var(--fg-dim);margin-top:0.3rem;">显存充足场景</div>
+        </div>
+      </div>
+    </div>
+
+    <table class="tbl" style="margin-top:1.5rem;">
+      <thead>
+        <tr><th>参数</th><th>默认值</th><th>说明</th><th>调优方向</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>--gpu-memory-utilization</code></td><td>0.9</td><td>KV cache 显存占比 (0~1)</td><td>↓ 解决 OOM，↑ 增吞吐</td></tr>
+        <tr><td><code>--tensor-parallel-size</code></td><td>1</td><td>张量并行 GPU 数</td><td>偶数，一般 ≤ 8</td></tr>
+        <tr><td><code>--dtype</code></td><td>auto</td><td>数据类型选择</td><td>A100/H100 用 bfloat16</td></tr>
+        <tr><td><code>--max-num-seqs</code></td><td>动态</td><td>批次最大序列数</td><td>↓ 减少显存压力</td></tr>
+        <tr><td><code>--max-num-batched-tokens</code></td><td>动态</td><td>批次最大 token 数</td><td>↑ 增吞吐，↓ 降延迟</td></tr>
+        <tr><td><code>--block-size</code></td><td>16</td><td>vLLM block 大小</td><td>CPU 场景用 32</td></tr>
+        <tr><td><code>--swap-space</code></td><td>4</td><td>CPU 交换空间 (GB)</td><td>大模型可增加</td></tr>
+        <tr><td><code>--enforce-eager</code></td><td>False</td><td>禁用 CUDA graph</td><td>OOM 时启用，降显存</td></tr>
+        <tr><td><code>--optimization-level</code></td><td>2</td><td>优化级别，控制 CUDA graph 和算子融合</td><td>0 降显存 · 2 生产 · 3 最高吞吐</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2.5rem 0 1rem;font-size:1.3rem;">量化选项</h3>
+    <p style="font-size:0.92rem;color:var(--fg-muted);margin-bottom:1rem;">量化减少模型权重比特数，以少量精度损失换取大幅显存节省。GPU 架构兼容性是一个关键选择因素。</p>
+    <div class="grid-4">
+      <div class="card" style="text-align:center;">
+        <div style="font-family:var(--font-head);font-size:1.8rem;font-weight:900;color:var(--accent2);letter-spacing:-0.03em;">~40%</div>
+        <div style="font-size:0.85rem;color:var(--fg-muted);margin-top:0.3rem;">FP8 (e4m3)</div>
+        <div style="font-size:0.78rem;color:var(--fg-dim);">H100/H200 原生支持</div>
+        <div style="font-size:0.75rem;color:var(--green);margin-top:0.3rem;">精度损失极小</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-family:var(--font-head);font-size:1.8rem;font-weight:900;color:var(--green);letter-spacing:-0.03em;">~60%</div>
+        <div style="font-size:0.85rem;color:var(--fg-muted);margin-top:0.3rem;">INT8 AWQ</div>
+        <div style="font-size:0.78rem;color:var(--fg-dim);">多数 GPU 支持</div>
+        <div style="font-size:0.75rem;color:var(--green);margin-top:0.3rem;">精度损失小</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-family:var(--font-head);font-size:1.8rem;font-weight:900;color:var(--amber);letter-spacing:-0.03em;">~70%</div>
+        <div style="font-size:0.85rem;color:var(--fg-muted);margin-top:0.3rem;">GGUF</div>
+        <div style="font-size:0.78rem;color:var(--fg-dim);">CPU/GPU 混合</div>
+        <div style="font-size:0.75rem;color:var(--fg-dim);margin-top:0.3rem;">中等精度</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-family:var(--font-head);font-size:1.8rem;font-weight:900;color:var(--cyan);letter-spacing:-0.03em;">~80%</div>
+        <div style="font-size:0.85rem;color:var(--fg-muted);margin-top:0.3rem;">INT4</div>
+        <div style="font-size:0.78rem;color:var(--fg-dim);">部分 GPU 支持</div>
+        <div style="font-size:0.75rem;color:var(--amber);margin-top:0.3rem;">注意精度下降</div>
+      </div>
+    </div>
+
+    <!-- Quantization GPU compatibility -->
+    <div class="card" style="margin-top:1rem;">
+      <div class="card-label">量化 GPU 兼容性</div>
+      <table class="tbl" style="font-size:0.85rem;">
+        <thead><tr><th>量化方法</th><th>H100/H200</th><th>A100/A800</th><th>V100</th><th>RTX 4090</th><th>推荐场景</th></tr></thead>
+        <tbody>
+          <tr><td>FP8 (e4m3)</td><td style="color:var(--green);">✅ 原生</td><td style="color:var(--amber);">⚠ 模拟</td><td style="color:var(--red);">✗</td><td style="color:var(--amber);">⚠ 模拟</td><td>H100 首选量化</td></tr>
+          <tr><td>INT8 AWQ</td><td style="color:var(--green);">✅</td><td style="color:var(--green);">✅</td><td style="color:var(--green);">✅</td><td style="color:var(--green);">✅</td><td>通用生产推理</td></tr>
+          <tr><td>GGUF</td><td style="color:var(--green);">✅</td><td style="color:var(--green);">✅</td><td style="color:var(--green);">✅</td><td style="color:var(--green);">✅</td><td>CPU 卸载场景</td></tr>
+          <tr><td>INT4</td><td style="color:var(--green);">✅</td><td style="color:var(--green);">✅</td><td style="color:var(--amber);">⚠</td><td style="color:var(--green);">✅</td><td>极致显存优化</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2.5rem 0 1rem;font-size:1.3rem;">参数权衡速览</h3>
+    <div class="grid-4">
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.5rem;font-size:0.95rem;">⚡ 延迟优先</div>
+        <pre style="background:none;border:none;padding:0;font-size:0.75rem;line-height:1.5;"><code><span style="color:var(--accent2);">--max-num-batched-tokens</span> 256
+<span style="color:var(--accent2);">--enable-chunked-prefill</span>
+<span style="color:var(--accent2);">--block-size</span> 64</code></pre>
+        <div style="margin-top:0.4rem;"><span style="display:inline-block;background:rgba(43,108,176,0.12);color:var(--accent2);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;">TTFT ↓</span></div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.5rem;font-size:0.95rem;">🚀 吞吐优先</div>
+        <pre style="background:none;border:none;padding:0;font-size:0.75rem;line-height:1.5;"><code><span style="color:var(--accent2);">--max-num-batched-tokens</span> 16384
+<span style="color:var(--accent2);">--gpu-memory-utilization</span> 0.95
+<span style="color:var(--accent2);">--optimization-level</span> 2</code></pre>
+        <div style="margin-top:0.4rem;"><span style="display:inline-block;background:rgba(72,187,120,0.12);color:var(--green);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;">TPS ↑</span></div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.5rem;font-size:0.95rem;">💾 显存受限</div>
+        <pre style="background:none;border:none;padding:0;font-size:0.75rem;line-height:1.5;"><code><span style="color:var(--accent2);">--gpu-memory-utilization</span> 0.8
+<span style="color:var(--accent2);">--quantization</span> fp8
+<span style="color:var(--accent2);">--swap-space</span> 16</code></pre>
+        <div style="margin-top:0.4rem;"><span style="display:inline-block;background:rgba(72,187,120,0.12);color:var(--green);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;">OOM 防护</span></div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.5rem;font-size:0.95rem;">🔬 精度优先</div>
+        <pre style="background:none;border:none;padding:0;font-size:0.75rem;line-height:1.5;"><code><span style="color:var(--accent2);">--dtype</span> float32
+<span style="color:var(--accent2);">--enforce-eager</span>
+<span style="color:var(--accent2);">--seed</span> 42</code></pre>
+        <div style="margin-top:0.4rem;"><span style="display:inline-block;background:rgba(56,178,172,0.12);color:var(--cyan);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;">精度最高</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     03 · MULTI NODE
+═══════════════════════════════════════════ -->
+<section id="multi">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">03 · 多机分布式推理</div>
+      <h2 class="section-title">TP · PP · EP · DP</h2>
+      <p class="section-intro">vLLM 支持四种并行策略的自由组合：总 GPU = TP × PP × DP × EP。选择合适的组合方式是在成本和性能之间找到最优解的关键。</p>
+    </div>
+
+    <div class="grid-4">
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.4rem;font-size:1rem;">张量并行 (TP)</div>
+        <div style="font-size:0.88rem;color:var(--fg-muted);">单层内分割权重到不同 GPU</div>
+        <span style="display:inline-block;background:rgba(236,201,75,0.12);color:var(--amber);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;margin-top:0.4rem;">通信密集</span>
+        <div style="font-size:0.82rem;color:var(--fg-dim);margin-top:0.3rem;">单层计算需要全规约同步，一般 ≤ 8 卡</div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.4rem;font-size:1rem;">流水线并行 (PP)</div>
+        <div style="font-size:0.88rem;color:var(--fg-muted);">模型层按阶段分配到不同 GPU</div>
+        <span style="display:inline-block;background:rgba(72,187,120,0.12);color:var(--green);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;margin-top:0.4rem;">通信较轻</span>
+        <div style="font-size:0.82rem;color:var(--fg-dim);margin-top:0.3rem;">适合跨节点部署，减少节点间通信量</div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.4rem;font-size:1rem;">专家并行 (EP)</div>
+        <div style="font-size:0.88rem;color:var(--fg-muted);">MoE 层专家均匀分配到不同 GPU</div>
+        <span style="display:inline-block;background:rgba(43,108,176,0.12);color:var(--accent2);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;margin-top:0.4rem;">通信中等</span>
+        <div style="font-size:0.82rem;color:var(--fg-dim);margin-top:0.3rem;">DeepSeek-V3 / Qwen3MoE</div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:0.4rem;font-size:1rem;">数据并行 (DP)</div>
+        <div style="font-size:0.88rem;color:var(--fg-muted);">完整模型副本 × 多卡并行</div>
+        <span style="display:inline-block;background:rgba(56,178,172,0.12);color:var(--cyan);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700;margin-top:0.4rem;">无通信</span>
+        <div style="font-size:0.82rem;color:var(--fg-dim);margin-top:0.3rem;">横向扩展吞吐，无通信延迟</div>
+      </div>
+    </div>
+
+    <!-- Strategy recommendation -->
+    <div class="insight">
+      <strong>总 GPU = TP × PP × DP × EP</strong> — 并行策略编排核心公式。<br>
+      例如 <span class="highlight">TP=8 × PP=2 × DP=8 = 128 GPU</span>（16 节点，每节点 8 卡）
+    </div>
+
+    <div class="grid-2" style="margin-top:1.5rem;">
+      <div class="tech-card">
+        <div class="tech-card-tag">Ray 模式</div>
+        <h4>多节点配置（Ray 自动发现节点）</h4>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.9rem;margin:0.75rem 0;font-size:0.78rem;overflow-x:auto;"><code><span style="color:var(--fg-dim);"># 所有节点运行相同的命令，Ray 自动发现</span>
+<span style="color:var(--accent2);">--tensor-parallel-size</span> 8
+<span style="color:var(--accent2);">--pipeline-parallel-size</span> 2
+<span style="color:var(--accent2);">--distributed-executor-backend</span> ray</code></pre>
+      </div>
+      <div class="tech-card">
+        <div class="tech-card-tag">MP 模式</div>
+        <h4>多节点配置（手动指定拓扑）</h4>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.9rem;margin:0.75rem 0;font-size:0.78rem;overflow-x:auto;"><code><span style="color:var(--fg-dim);"># 主节点（node-rank 0）</span>
+<span style="color:var(--accent2);">-tp</span> 8 <span style="color:var(--accent2);">-pp</span> 2
+<span style="color:var(--accent2);">--nnodes</span> 2
+<span style="color:var(--accent2);">--node-rank</span> 0
+<span style="color:var(--accent2);">--master-addr</span> 192.168.1.100
+
+<span style="color:var(--fg-dim);"># 工作节点（node-rank 1）</span>
+<span style="color:var(--accent2);">-tp</span> 8 <span style="color:var(--accent2);">-pp</span> 2
+<span style="color:var(--accent2);">--nnodes</span> 2
+<span style="color:var(--accent2);">--node-rank</span> 1
+<span style="color:var(--accent2);">--master-addr</span> 192.168.1.100
+<span style="color:var(--accent2);">--headless</span></code></pre>
+      </div>
+    </div>
+
+    <!-- Parallel strategy advice -->
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2rem 0 1rem;font-size:1.2rem;">并行策略选型建议</h3>
+    <table class="tbl" style="font-size:0.85rem;">
+      <thead><tr><th>部署规模</th><th>推荐组合</th><th>总 GPU</th><th>适用场景</th></tr></thead>
+      <tbody>
+        <tr><td>单机 4 卡</td><td><code>TP=4</code></td><td>4</td><td>小模型多卡加速</td></tr>
+        <tr><td>单机 8 卡</td><td><code>TP=8</code></td><td>8</td><td>70B 标准部署</td></tr>
+        <tr><td>单机 8 卡</td><td><code>TP=4, PP=2</code></td><td>8</td><td>减少 TP 通信开销</td></tr>
+        <tr><td>2 节点 16 卡</td><td><code>TP=8, PP=2</code></td><td>16</td><td>跨节点推理</td></tr>
+        <tr><td>4 节点 32 卡</td><td><code>TP=8, PP=2, DP=2</code></td><td>32</td><td>中大规模高吞吐</td></tr>
+        <tr><td>16 节点 128 卡</td><td><code>TP=8, PP=2, DP=8</code></td><td>128</td><td>大规模生产集群</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid-2" style="margin-top:1.5rem;">
+      <div>
+        <h3 style="font-family:var(--font-head);font-weight:700;margin-bottom:0.8rem;font-size:1.05rem;">执行器后端</h3>
+        <table class="tbl" style="font-size:0.85rem;">
+          <thead><tr><th>后端</th><th>参数</th><th>场景</th></tr></thead>
+          <tbody>
+            <tr><td>Ray</td><td><code>--dist-executor-backend ray</code></td><td>多节点集群（默认）</td></tr>
+            <tr><td>Multiprocessing</td><td><code>--dist-executor-backend mp</code></td><td>单节点多卡</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3 style="font-family:var(--font-head);font-weight:700;margin-bottom:0.8rem;font-size:1.05rem;">NCCL 通信调优</h3>
+        <div class="card">
+          <pre style="background:none;border:none;padding:0;font-size:0.78rem;"><code><span style="color:var(--fg-dim);"># GPUDirect RDMA 容器配置</span>
+docker run --gpus all \
+    --ipc=host --shm-size=16G \
+    vllm/vllm-openai
+
+<span style="color:var(--fg-dim);"># 排查通信问题</span>
+<span style="color:var(--accent2);">NCCL_DEBUG</span>=TRACE vllm serve ...
+
+<span style="color:var(--fg-dim);"># 网络拓扑优化</span>
+<span style="color:var(--accent2);">NCCL_NET</span>=IB   <span style="color:var(--fg-dim);"># InfiniBand</span>
+<span style="color:var(--accent2);">NCCL_IB_HCA</span>=mlx5_0:1 <span style="color:var(--fg-dim);"># 指定 IB 网卡</span></code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     04 · ECOSYSTEM
+═══════════════════════════════════════════ -->
+<section id="eco">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">04 · 生态集成</div>
+      <h2 class="section-title">LMCache · KV 传输 · 推测解码 · API 生态</h2>
+      <p class="section-intro">vLLM 的生态集成能力大幅扩展了推理场景：LMCache 分布式 KV Cache 实现 3-10x 延迟优化，多种推测解码方法覆盖不同需求，完善的 API 兼容性适配现有工具链。</p>
+    </div>
+
+    <!-- LMCache -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-label">LMCache 分布式 KV Cache</div>
+        <div style="margin-bottom:0.75rem;text-align:center;font-size:0.95rem;">
+          <span style="display:inline-block;background:rgba(43,108,176,0.1);border:1px solid rgba(43,108,176,0.2);border-radius:6px;padding:0.5rem 1rem;">📤 Prefill</span>
+          <span style="color:var(--accent2);margin:0 0.5rem;">→ KV 传输 →</span>
+          <span style="display:inline-block;background:rgba(43,108,176,0.1);border:1px solid rgba(43,108,176,0.2);border-radius:6px;padding:0.5rem 1rem;">📥 Decode</span>
+        </div>
+        <ul class="detail-list">
+          <li><strong>Prefill 节点</strong> — <code>pd_role: sender</code>，缓冲区 1GB</li>
+          <li><strong>Decode 节点</strong> — <code>pd_role: receiver</code>，缓冲区 2GB</li>
+          <li><strong>传输通道</strong> — NIXL / NCCL / GDS 后端</li>
+          <li><strong>性能提升</strong> — 多轮对话 <strong style="color:var(--green);">3-10x</strong> 延迟降低</li>
+          <li><strong>适用场景</strong> — RAG 对话、有状态应用、长会话推理</li>
+        </ul>
+        <div class="insight" style="margin:0.75rem 0 0;font-size:0.82rem;">
+          <strong>两种配置方式</strong>：简单场景仅设环境变量即可，不需要 YAML 文件；分离式 PD 场景需 YAML 文件通过 <code>LMCACHE_CONFIG_FILE</code> 引用
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:1rem;">
+          <div class="card-label">方式一：纯环境变量（简单场景）</div>
+          <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;margin:0.5rem 0;font-size:0.72rem;overflow-x:auto;"><code><span style="color:var(--fg-dim);"># 仅用环境变量，无需 YAML 文件</span>
+<span style="color:var(--accent2);">LMCACHE_CHUNK_SIZE</span>=256 \
+<span style="color:var(--accent2);">LMCACHE_REMOTE_URL</span>=redis://127.0.0.1:6379 \
+<span style="color:var(--accent2);">LMCACHE_LOG_LEVEL</span>=INFO \
+vllm serve &lt;model&gt; \
+  --kv-transfer-config '{
+    "kv_connector":"LMCacheConnectorV1Dynamic",
+    "kv_role":"kv_both"
+  }'</code></pre>
+        </div>
+        <div class="card">
+          <div class="card-label">方式二：YAML 配置文件（分离式 PD）</div>
+          <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;margin:0.5rem 0;font-size:0.72rem;overflow-x:auto;"><code><span style="color:var(--fg-dim);"># lmcache.yaml (Prefill 发送节点)</span>
+<span style="color:var(--accent2);">local_cpu</span>: False
+<span style="color:var(--accent2);">enable_pd</span>: True
+<span style="color:var(--accent2);">transfer_channel</span>: nixl
+<span style="color:var(--accent2);">pd_role</span>: sender
+<span style="color:var(--accent2);">pd_buffer_size</span>: 1073741824
+<span style="color:var(--accent2);">pd_buffer_device</span>: cuda
+<span style="color:var(--accent2);">nixl_backends</span>: [UCX]
+
+<span style="color:var(--fg-dim);"># 启动</span>
+LMCACHE_CONFIG_FILE=./lmcache.yaml vllm serve ...</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- LMCache env vars table -->
+    <div class="card" style="margin-top:1rem;">
+      <div class="card-label">LMCache 完整环境变量</div>
+      <table class="tbl" style="font-size:0.82rem;">
+        <thead><tr><th>变量</th><th>默认值</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>LMCACHE_CONFIG_FILE</code></td><td>None</td><td>YAML 配置文件路径（分离式 PD 必需）</td></tr>
+          <tr><td><code>LMCACHE_CHUNK_SIZE</code></td><td><code>256</code></td><td>KV cache 存储的 token 分块大小</td></tr>
+          <tr><td><code>LMCACHE_REMOTE_URL</code></td><td>None</td><td>远程存储 URL，支持 Redis、S3 等后端</td></tr>
+          <tr><td><code>LMCACHE_LOG_LEVEL</code></td><td><code>INFO</code></td><td>日志级别：DEBUG / INFO / WARNING</td></tr>
+          <tr><td><code>LMCACHE_FORCE_SKIP_SAVE</code></td><td>False</td><td>跳过 KV cache 保存（调试用）</td></tr>
+          <tr><td><code>LMCACHE_OFFLOAD_RPC_PORT</code></td><td><code>100</code></td><td>Offload RPC 端口</td></tr>
+          <tr><td><code>LMCACHE_RESP_HOST</code></td><td>None</td><td>Redis RESP 主机地址</td></tr>
+          <tr><td><code>LMCACHE_RESP_PORT</code></td><td>None</td><td>Redis RESP 端口</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- KV Transfer config -->
+    <div class="card" style="margin-top:1rem;">
+      <div class="card-label">KV Transfer 配置详解</div>
+      <table class="tbl" style="font-size:0.85rem;">
+        <thead><tr><th>连接器</th><th>配置</th><th>kv_role</th><th>传输方式</th><th>场景</th></tr></thead>
+        <tbody>
+          <tr><td>LMCacheConnectorV1</td><td><code>kv_connector: "LMCacheConnectorV1"</code></td><td>kv_both</td><td>LMCache 分布式缓存</td><td>多轮对话加速</td></tr>
+          <tr><td>P2pNcclConnector</td><td><code>kv_connector: "P2pNcclConnector"</code></td><td>producer / consumer</td><td>GPU 间 NCCL 直连</td><td>单机分离式推理</td></tr>
+          <tr><td>NixlConnector</td><td><code>kv_connector: "NixlConnector"</code></td><td>producer / consumer</td><td>网络传输 (UCX/GDS)</td><td>跨节点分离式推理</td></tr>
+        </tbody>
+      </table>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+        <div>
+          <h4 style="font-family:var(--font-head);font-weight:700;font-size:0.95rem;margin-bottom:0.5rem;">Prefill 实例 (vLLM)</h4>
+          <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.7rem;font-size:0.7rem;overflow-x:auto;"><code><span style="color:var(--accent2);">--kv-transfer-config</span> '{
+  "kv_connector":"P2pNcclConnector",
+  "kv_role":"kv_producer",
+  "kv_buffer_size":"1e9",
+  "kv_port":"21001"
+}'</code></pre>
+        </div>
+        <div>
+          <h4 style="font-family:var(--font-head);font-weight:700;font-size:0.95rem;margin-bottom:0.5rem;">Decode 实例 (vLLM)</h4>
+          <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.7rem;font-size:0.7rem;overflow-x:auto;"><code><span style="color:var(--accent2);">--kv-transfer-config</span> '{
+  "kv_connector":"P2pNcclConnector",
+  "kv_role":"kv_consumer",
+  "kv_buffer_size":"8e9",
+  "kv_port":"22001"
+}'</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Speculative Decoding -->
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2.5rem 0 1rem;font-size:1.3rem;">推测解码 (Speculative Decoding)</h3>
+    <p style="font-size:0.92rem;color:var(--fg-muted);margin-bottom:1rem;">推测解码使用一个较小的草稿模型快速生成候选 token，再由目标模型验证，在保证输出质量的同时降低延迟。核心参数 <code>num_speculative_tokens</code> 控制每步提议 token 数。</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-label">方法对比</div>
+        <table class="tbl" style="font-size:0.85rem;">
+          <thead><tr><th>方法</th><th>延迟</th><th>额外模型</th><th>低 QPS</th><th>高 QPS</th></tr></thead>
+          <tbody>
+            <tr><td><strong>EAGLE</strong></td><td><span style="color:var(--green);">高收益</span></td><td>是</td><td style="color:var(--green);">最佳</td><td>中高</td></tr>
+            <tr><td><strong>EAGLE3</strong></td><td><span style="color:var(--green);">高收益</span></td><td>是</td><td style="color:var(--green);">最佳</td><td>中高</td></tr>
+            <tr><td><strong>PARD</strong></td><td><span style="color:var(--green);">高收益</span></td><td>是</td><td>高</td><td>中高</td></tr>
+            <tr><td><strong>Draft Model</strong></td><td>高收益</td><td>是</td><td>高</td><td>中</td></tr>
+            <tr><td><strong>N-Gram</strong></td><td>低中</td><td>否</td><td>低</td><td>中</td></tr>
+            <tr><td><strong>Suffix</strong></td><td>低中</td><td>否</td><td>低</td><td>中</td></tr>
+            <tr><td><strong>MTP</strong></td><td><span style="color:var(--green);">高收益</span></td><td>视模型</td><td>高</td><td>中高</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:1rem;">
+          <div class="card-label">推荐: EAGLE</div>
+          <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;font-size:0.75rem;overflow-x:auto;"><code><span style="color:var(--accent2);">--speculative-config</span> '{
+  "method":"eagle",
+  "model":"yuhuili/EAGLE-LLaMA3-8B",
+  "num_speculative_tokens":3,
+  "draft_tensor_parallel_size":1
+}'</code></pre>
+        </div>
+        <div class="card">
+          <div class="card-label">轻量方案: N-Gram</div>
+          <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;font-size:0.75rem;overflow-x:auto;"><code><span style="color:var(--accent2);">--speculative-config</span> '{
+  "method":"ngram",
+  "num_speculative_tokens":4,
+  "prompt_lookup_min":2,
+  "prompt_lookup_max":5
+}'</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- OpenAI API / HuggingFace / Monitoring -->
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2.5rem 0 1rem;font-size:1.3rem;">OpenAI 兼容 API</h3>
+    <p style="font-size:0.92rem;color:var(--fg-muted);margin-bottom:1rem;">vLLM 提供完整的 OpenAI API 兼容接口，支持 Chat Completions、Completions、Embeddings 等主流端点，可直接替换 OpenAI API 调用。</p>
+
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-label">API 端点</div>
+        <ul class="detail-list">
+          <li><code>/v1/chat/completions</code> — 聊天补全</li>
+          <li><code>/v1/completions</code> — 文本补全</li>
+          <li><code>/v1/embeddings</code> — 向量嵌入</li>
+          <li><code>/v1/models</code> — 模型列表</li>
+          <li><code>/health</code> — 健康检查</li>
+          <li><code>/metrics</code> — Prometheus 指标</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-label">HuggingFace 集成</div>
+        <ul class="detail-list">
+          <li>直接加载 HF Hub 模型：<code>--model Qwen/Qwen2.5-7B</code></li>
+          <li>本地缓存优先，自动下载</li>
+          <li><code>--trust-remote-code</code> — 允许 HuggingFace 加载模型仓库中的自定义 Python 代码（模型架构、分词器等）。部分新模型使用 transformers 未内置的自定义架构，需要通过此参数授权执行仓库中的 modeling 文件。<span style="color:var(--amber);">安全提醒：请确保模型来源可信</span></li>
+          <li><code>--hf-config-path</code> 指定配置文件</li>
+          <li><code>--hf-model-pattern</code> 模型加载过滤</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-label">监控与可观测性</div>
+        <ul class="detail-list">
+          <li><strong>Prometheus</strong> — <code>/metrics</code> 端点暴露，支持自定义标签</li>
+          <li><code>vllm:num_requests_running</code> — 当前运行请求数</li>
+          <li><code>vllm:kv_cache_usage_perc</code> — KV Cache 使用率</li>
+          <li><code>vllm:time_to_first_token_seconds</code> — TTFT 延迟</li>
+          <li><code>vllm:e2e_request_latency_seconds</code> — 端到端延迟</li>
+          <li><strong>Grafana</strong> — 官方 Dashboard 模板</li>
+          <li><strong>OpenTelemetry</strong> — 链路追踪</li>
+          <li><strong>Logging</strong> — <code>--log-level</code> 控制日志级别</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Kubernetes / LangChain -->
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2rem 0 1rem;font-size:1.2rem;">平台集成</h3>
+    <div class="grid-3">
+      <div class="tech-card">
+        <div class="tech-card-tag">Kubernetes</div>
+        <h4>容器化部署</h4>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.7rem;margin:0.5rem 0;font-size:0.72rem;overflow-x:auto;"><code><span style="color:var(--fg-dim);"># vLLM 官方 Docker 镜像</span>
+docker pull vllm/vllm-openai
+
+<span style="color:var(--fg-dim);"># K8s 关键配置</span>
+resources:
+  nvidia.com/gpu: 8
+env:
+- name: NCCL_IB_HCA
+  value: mlx5_0
+volumeMounts:
+- mountPath: /dev/shm
+  name: dshm
+  emptyDir:
+    medium: Memory
+    sizeLimit: "16Gi"</code></pre>
+      </div>
+      <div class="tech-card">
+        <div class="tech-card-tag">LangChain</div>
+        <h4>框架集成</h4>
+        <div style="font-size:0.88rem;color:var(--fg-muted);margin-bottom:0.6rem;">通过 OpenAI 兼容 API 直接接入：</div>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.7rem;font-size:0.72rem;overflow-x:auto;"><code><span style="color:var(--fg-dim);"># LangChain 调用</span>
+ChatOpenAI(
+  base_url="http://localhost:8000/v1",
+  api_key="not-needed",
+  model="Qwen2.5-7B"
+)
+
+<span style="color:var(--fg-dim);"># LlamaIndex</span>
+Vllm(model="Qwen2.5-7B")</code></pre>
+      </div>
+      <div class="tech-card">
+        <div class="tech-card-tag">Ray</div>
+        <h4>集群管理</h4>
+        <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.7rem;margin:0.5rem 0;font-size:0.72rem;overflow-x:auto;"><code><span style="color:var(--fg-dim);"># Ray 集群模式</span>
+RAY_DASHBOARD_ADDR=127.0.0.1:8265 \
+vllm serve &lt;model&gt; \
+  --distributed-executor-backend ray
+
+<span style="color:var(--fg-dim);"># 查看集群状态</span>
+ray status
+ray list nodes</code></pre>
+      </div>
+    </div>
+
+    <!-- Prometheus Metrics -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.8rem;margin-top:2rem;">
+      <h3 style="font-family:var(--font-head);font-weight:700;font-size:1.3rem;margin:0 0 0.5rem;">Prometheus 指标参考</h3>
+      <p style="color:var(--fg-muted);font-size:0.92rem;margin-bottom:1.2rem;">vLLM 在 <code>/metrics</code> 端点暴露丰富的 Prometheus 指标，覆盖引擎状态、请求 SLO、KV Cache 效率等维度，可直接接入 Grafana 监控大屏。生产环境建议搭配 <code>--log-level info</code> 和 <code>--kv-cache-metrics-sample</code> 开启 KV 块级指标。</p>
+
+      <!-- Server-level Gauges & Counters -->
+      <h4 style="font-family:var(--font-head);font-weight:600;font-size:1rem;margin:1.5rem 0 0.6rem;color:var(--accent2);">📊 服务器级别指标</h4>
+      <div class="param-table-wrapper" style="overflow-x:auto;">
+        <table class="param-table" style="font-size:0.82rem;width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);white-space:nowrap;">指标名称</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);white-space:nowrap;">类型</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">含义</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">监控目的</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:num_requests_running</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--emerald);">Gauge</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">当前正在运行的请求数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">引擎负载饱和度</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:num_requests_swapped</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--emerald);">Gauge</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">被 swap 到 CPU 的请求数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">显存压力信号</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:num_requests_waiting</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--emerald);">Gauge</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">排队等待的请求数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">请求堆积程度</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:kv_cache_usage_perc</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--emerald);">Gauge</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">KV Cache 使用百分比</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">显存瓶颈预警（>0.9 风险）</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:prefix_cache_hits</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--blue);">Counter</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Prefix Cache 命中数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">前缀复用效率</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:prefix_cache_queries</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--blue);">Counter</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Prefix Cache 查询总数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">计算命中率 = hits / queries</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:prompt_tokens_total</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--blue);">Counter</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">累计处理的 Prompt Token 数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">总体流量规模</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:generation_tokens_total</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--blue);">Counter</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">累计生成的 Token 数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">总体输出量</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:request_success_total</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--blue);">Counter</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">累计成功请求数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">服务可用性</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Request-level Histograms -->
+      <h4 style="font-family:var(--font-head);font-weight:600;font-size:1rem;margin:1.8rem 0 0.6rem;color:var(--accent2);">⏱ 请求级别指标（Histogram）</h4>
+      <p style="color:var(--fg-muted);font-size:0.82rem;margin-bottom:0.6rem;">Histogram 类型指标提供 <code>_count</code>、<code>_sum</code> 和 <code>_bucket</code>，可按百分位（p50/p90/p99）计算延迟 SLO。</p>
+      <div class="param-table-wrapper" style="overflow-x:auto;">
+        <table class="param-table" style="font-size:0.82rem;width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);white-space:nowrap;">指标名称</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">含义</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">典型告警阈值</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:time_to_first_token_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">首 Token 延迟（TTFT）</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">p99 > 5s 告警</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:inter_token_latency_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Token 间延迟（TPOT）</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">p99 > 200ms 告警</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:e2e_request_latency_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">端到端请求延迟</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">视业务场景</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:request_prompt_tokens</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">每个请求的 Prompt Token 数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">超长请求分布</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:request_generation_tokens</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">每个请求的生成 Token 数</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">max_tokens 分布</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:request_prefill_time_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Prefill 阶段耗时</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">长 Context 场景关注</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:request_decode_time_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Decode 阶段耗时</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">长生成场景关注</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- KV Cache Residency -->
+      <h4 style="font-family:var(--font-head);font-weight:600;font-size:1rem;margin:1.8rem 0 0.6rem;color:var(--accent2);">🗃 KV Cache 驻留指标</h4>
+      <p style="color:var(--fg-muted);font-size:0.82rem;margin-bottom:0.6rem;">需要 <code>--kv-cache-metrics-sample</code> 参数开启，用于分析缓存效率和内存压力。</p>
+      <div class="param-table-wrapper" style="overflow-x:auto;">
+        <table class="param-table" style="font-size:0.82rem;width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);white-space:nowrap;">指标名称</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">含义</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">分析价值</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:kv_block_lifetime_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">KV Block 从创建到释放的生存时间</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">缓存压力 & 分页效率</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:kv_block_idle_before_evict_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Block 被逐出前的空闲时间</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Cache 策略有效性</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">vllm:kv_block_reuse_gap_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">Block 两次复用之间的间隔</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">前缀复用率</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- HTTP Metrics -->
+      <h4 style="font-family:var(--font-head);font-weight:600;font-size:1rem;margin:1.8rem 0 0.6rem;color:var(--accent2);">🌐 HTTP 指标</h4>
+      <p style="color:var(--fg-muted);font-size:0.82rem;margin-bottom:0.6rem;">由 <code>prometheus_fastapi_instrumentator</code> 自动采集，反映 API 网关层健康状况。</p>
+      <div class="param-table-wrapper" style="overflow-x:auto;">
+        <table class="param-table" style="font-size:0.82rem;width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);white-space:nowrap;">指标名称</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">类型</th>
+              <th style="text-align:left;padding:0.5rem 0.8rem;background:rgba(52,211,153,0.08);border-bottom:1px solid var(--border);">含义</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">http_requests_total</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--blue);">Counter</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">HTTP 请求总数（按 method/path/status 分）</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">http_request_size_bytes</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--emerald);">Gauge</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">请求体大小（按 method/path 分）</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">http_response_size_bytes</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--emerald);">Gauge</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">响应体大小（按 method/path 分）</td>
+            </tr>
+            <tr>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--font-mono);font-size:0.75rem;white-space:nowrap;">http_request_duration_seconds</td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--amber);">Histogram</span></td>
+              <td style="padding:0.45rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04);">HTTP 请求处理延迟（按 method/path 分）</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Grafana & Prometheus Config -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.5rem;">
+        <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:1rem;">
+          <div style="font-weight:600;margin-bottom:0.4rem;font-size:0.9rem;">Prometheus 抓取配置</div>
+          <pre style="font-size:0.72rem;background:transparent;border:none;padding:0;margin:0;"><code>scrape_configs:
+  - job_name: 'vllm'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: /metrics</code></pre>
+        </div>
+        <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:1rem;">
+          <div style="font-weight:600;margin-bottom:0.4rem;font-size:0.9rem;">Grafana 查询示例</div>
+          <pre style="font-size:0.72rem;background:transparent;border:none;padding:0;margin:0;"><code># p99 TTFT
+histogram_quantile(0.99,
+  rate(vllm:time_to_first_token_seconds_bucket[5m]))
+
+# KV Cache 使用率
+vllm:kv_cache_usage_perc
+
+# 请求吞吐量
+rate(vllm:request_success_total[5m])</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     05 · SCENARIOS
+═══════════════════════════════════════════ -->
+<section id="scenarios">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">05 · 场景化配置</div>
+      <h2 class="section-title">十一种典型场景及参数选择理由</h2>
+      <p class="section-intro">每个场景说明优化目标、参数选择理由和完整配置。关键在于理解"为什么这样设置"——知其然，更要知其所以然。</p>
+    </div>
+
+    <!-- Category 1 -->
+    <h3 style="font-family:var(--font-head);font-weight:700;font-size:1.3rem;margin:2rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);">一、开发与轻量部署</h3>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-green">开发测试</span>
+      <div class="sc-title">场景 1：小模型单卡（≤7B）</div>
+      <div class="sc-model">Qwen2.5-7B · Llama-3.1-8B · 单张 A100/RTX 4090</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--gpu-memory-utilization 0.9</code></strong>：保留 10% 显存给模型权重和临时缓冲区。7B 模型权重约 14GB（bf16），KV cache 和其余开销之间需要留出余量，0.9 是稳妥的起点。</li>
+          <li><strong><code>--max-num-seqs 64</code></strong>：开发测试场景并发请求量一般不高，64 足以支撑多轮并发测试。调低此值可降低显存压力。</li>
+          <li><strong><code>--enable-prefix-caching</code></strong>：开启前缀缓存后，相同 system prompt 的 KV cache 可复用，开发阶段反复测试相同 prompt 时显著减少 Prefill 计算。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve Qwen/Qwen2.5-7B-Instruct \
+  --gpu-memory-utilization 0.9 \
+  --max-num-seqs 64 \
+  --enable-prefix-caching</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：低成本快速验证 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> TP=1 单卡运行，无需设置 tensor-parallel-size
+      </div>
+    </div>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-amber">低资源</span>
+      <div class="sc-title">场景 2：边缘/低资源部署</div>
+      <div class="sc-model">低显存 GPU · 受限环境 · CPU Offloading</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--gpu-memory-utilization 0.7</code></strong>：仅分配 70% 显存给 KV cache，预留更多空间给模型权重。边缘设备显存有限，宁可降低吞吐也要避免 OOM。</li>
+          <li><strong><code>--enforce-eager</code></strong>：禁用 CUDA graph 优化。CUDA graph 需要额外显存来缓存计算图，禁用后以速度换显存，适合显存极度受限场景。</li>
+          <li><strong><code>--swap-space 16</code></strong>：将 16GB CPU 内存作为 KV cache 溢出缓冲区。当 GPU 显存不足时将部分 KV cache 换出到 CPU，牺牲速度保可用性。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve &lt;model&gt; \
+  --enforce-eager \
+  --gpu-memory-utilization 0.7 \
+  --swap-space 16 \
+  --max-num-seqs 16</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：OOM 防护 · 稳定运行 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> swap 过大可能影响推理速度，需平衡
+      </div>
+    </div>
+
+    <!-- Category 2 -->
+    <h3 style="font-family:var(--font-head);font-weight:700;font-size:1.3rem;margin:2.5rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);">二、在线推理（延迟敏感）</h3>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-green">低延迟</span>
+      <div class="sc-title">场景 3：延迟敏感—聊天应用</div>
+      <div class="sc-model">低 QPS · 实时对话 · TTFT 关键</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--speculative-config EAGLE</code></strong>：推测解码用草稿模型快速生成候选 token，目标模型只需验证，减少串行解码步数。低 QPS 场景下草稿模型不会争抢 GPU，收益最显著。</li>
+          <li><strong><code>--max-num-batched-tokens 256</code></strong>：限制批次 token 数上限，确保每个请求不必等待队列中其他请求的 token 处理完。值越小，单个请求的首 token 延迟（TTFT）越低。</li>
+          <li>聊天场景特点是请求到达间隔大（低 QPS），每个请求对响应速度敏感。降低 TP 也有帮助（TP=4 vs TP=8 通信开销更小）。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve &lt;model&gt; \
+  --speculative-config '{
+    "method":"eagle",
+    "model":"yuhuili/EAGLE-LLaMA3-8B",
+    "num_speculative_tokens":3
+  }' \
+  --max-num-batched-tokens 256 \
+  --tensor-parallel-size 4</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：TTFT ↓ · ITL ↓ &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> 推测解码需要额外草稿模型显存，显存紧张时优先用 N-Gram
+      </div>
+    </div>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-blue">生产推理</span>
+      <div class="sc-title">场景 4：大模型多卡（70B）</div>
+      <div class="sc-model">Llama-3.1-70B · Qwen2.5-72B · 8×A100/H100</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--tensor-parallel-size 8</code></strong>：70B 模型权重约 140GB（bf16），单张 A100(80GB) 无法容纳。8 卡 TP 将权重切分到每卡约 17.5GB，同时 KV cache 也可分摊到各卡。</li>
+          <li><strong><code>--gpu-memory-utilization 0.95</code></strong>：8×80GB 总显存 640GB，预留 5% 给模型权重以外开销已足够。高比值让 KV cache 有更大空间支撑高并发。</li>
+          <li><strong><code>--max-num-batched-tokens 8192</code></strong>：兼顾延迟和吞吐的平衡点。低于 8192 则 GPU 利用率不足，高于此值 TTFT 会明显增加。</li>
+          <li><strong><code>--dtype bfloat16</code></strong>：A100/H100 原生支持 bf16，相比 fp16 有更好的数值稳定性。fp32 显存翻倍，不推荐。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve meta-llama/Llama-3.1-70B-Instruct \
+  --tensor-parallel-size 8 \
+  --gpu-memory-utilization 0.95 \
+  --max-num-batched-tokens 8192 \
+  --dtype bfloat16 \
+  --optimization-level 2</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：高吞吐 · 稳定生产 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> 确保 8 卡之间使用 NVLink/NVSwitch，避免 PCIe 通信瓶颈
+      </div>
+    </div>
+
+    <!-- Category 3 -->
+    <h3 style="font-family:var(--font-head);font-weight:700;font-size:1.3rem;margin:2.5rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);">三、批量处理（吞吐优先）</h3>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-blue">高吞吐</span>
+      <div class="sc-title">场景 5：吞吐优先—高 QPS 批量推理</div>
+      <div class="sc-model">批量处理 · 离线推理 · 高并发 API</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--max-num-batched-tokens 16384</code></strong>：大批次让 GPU 计算单元满载。vLLM 的连续批处理在批次足够大时 GPU 利用率从 40% 提升到 90%+。</li>
+          <li><strong><code>--enable-chunked-prefill</code></strong>：将长 prompt 切块，与 decode 交错执行，避免单个长 prompt 的 Prefill 阻塞后续 decode。</li>
+          <li><strong><code>--gpu-memory-utilization 0.95</code></strong>：尽可能多的显存用于 KV cache，以支持更大的并发批次。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve &lt;model&gt; \
+  --max-num-batched-tokens 16384 \
+  --enable-chunked-prefill \
+  --gpu-memory-utilization 0.95 \
+  --max-num-seqs 128 \
+  --optimization-level 2</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：TPS ↑ · GPU 满载 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> 吞吐提升以增加 TTFT 为代价，不适合实时交互
+      </div>
+    </div>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-cyan">长上下文</span>
+      <div class="sc-title">场景 6：长上下文处理</div>
+      <div class="sc-model">128K 上下文 · 文档分析 · 代码库理解</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--max-model-len 131072</code></strong>：显式设置为 128K。注意 KV cache 随上下文长度线性增长，128K 约消耗 40-80GB 显存（取决于模型）。</li>
+          <li><strong><code>--enable-chunked-prefill</code></strong>：长 prompt 的 Prefill 计算量巨大，分块处理避免单次 Prefill 长时间占用 GPU。</li>
+          <li><strong><code>--max-num-batched-tokens 4096</code></strong>：长上下文下每个请求本身 token 数就大，批次上限设太高易 OOM。4096 在长序列和 GPU 利用率之间取得平衡。</li>
+          <li><strong><code>--block-size 64</code></strong>：大 block 减少 PagedAttention 的内存管理开销。长序列时 block 管理开销显著，64 比默认 16 减少 75% 的管理操作。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve &lt;model&gt; \
+  --max-model-len 131072 \
+  --enable-chunked-prefill \
+  --max-num-batched-tokens 4096 \
+  --block-size 64 \
+  --gpu-memory-utilization 0.9</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：长序列稳定 · 显存控制 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> 128K 上下文会消耗约 40-80GB 显存（取决于模型大小）
+      </div>
+    </div>
+
+    <!-- Category 4 -->
+    <h3 style="font-family:var(--font-head);font-weight:700;font-size:1.3rem;margin:2.5rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);">四、MoE 与量化优化</h3>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-purple">MoE</span>
+      <div class="sc-title">场景 7：MoE 模型推理</div>
+      <div class="sc-model">DeepSeek-V3 · Qwen3MoE · Llama-4</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--enable-expert-parallel</code></strong>：将 MoE 层的不同 expert 分配到不同 GPU，每卡只计算其负责的 expert，大幅降低单卡计算量和显存需求。</li>
+          <li><strong><code>--tensor-parallel-size 8</code></strong>：将 attention 和 shared expert 等非 MoE 部分用 TP 切分。EP + TP 组合是 MoE 推理的标准做法。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve deepseek-ai/DeepSeek-V3 \
+  --enable-expert-parallel \
+  --tensor-parallel-size 8 \
+  --gpu-memory-utilization 0.9 \
+  --dtype bfloat16</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：EP 均匀分配 · 高效路由 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> EP 要求所有 GPU 型号相同，确保 expert 负载均衡
+      </div>
+    </div>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-cyan">量化部署</span>
+      <div class="sc-title">场景 8：FP8 量化部署（H100）</div>
+      <div class="sc-model">H100/H200 专用 · 显存节省 40% · 精度无损</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--quantization fp8</code></strong>：将权重从 bf16 转为 fp8（e4m3），大小减半。H100 的 FP8 Tensor Core 原生支持，计算速度不降反升。精度损失约 0.1-0.5%。</li>
+          <li><strong><code>--kv-cache-dtype fp8_e4m3</code></strong>：KV cache 也使用 FP8 存储，进一步减半。e4m3 格式在 LLM 场景下精度表现良好。</li>
+          <li><strong><code>--gpu-memory-utilization 0.95</code></strong>：FP8 量化后显存余量更充裕，可以支撑更大的并发批次。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve &lt;model&gt; \
+  --quantization fp8 \
+  --kv-cache-dtype fp8_e4m3 \
+  --gpu-memory-utilization 0.95 \
+  --tensor-parallel-size 8 \
+  --dtype bfloat16</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：显存节省 40% · 精度无损 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> FP8 量化仅 H100/H200 有原生加速，A100 只能模拟运行
+      </div>
+    </div>
+
+    <!-- Category 5 -->
+    <h3 style="font-family:var(--font-head);font-weight:700;font-size:1.3rem;margin:2.5rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);">五、分布式推理与缓存加速</h3>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-amber">分布式</span>
+      <div class="sc-title">场景 9：多节点大规模推理</div>
+      <div class="sc-model">16 节点 × 128 GPU · 千卡集群</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--tensor-parallel-size 8</code></strong>：限制在单节点内，利用 NVLink 高速通信。TP 通信密集，跨网络执行会严重降速。</li>
+          <li><strong><code>--pipeline-parallel-size 2</code></strong>：PP 跨节点通信量远小于 TP，适合跨机部署。PP=2 将模型层分两段，节点间只需传输中间激活。</li>
+          <li><strong><code>--data-parallel-size 8</code></strong>：DP 无通信开销，每个副本独立处理请求。8 个 DP 副本线性扩展吞吐 8 倍。</li>
+          <li><strong><code>--distributed-executor-backend ray</code></strong>：多节点必须使用 Ray 作为分布式后端，负责节点发现和任务调度。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve &lt;model&gt; \
+  --tensor-parallel-size 8 \
+  --pipeline-parallel-size 2 \
+  --data-parallel-size 8 \
+  --distributed-executor-backend ray \
+  --gpu-memory-utilization 0.9</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 总 GPU = 8 × 2 × 8 = 128 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> 节点间建议使用 InfiniBand，否则 PP 传输可能成为瓶颈
+      </div>
+    </div>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-green">缓存加速</span>
+      <div class="sc-title">场景 10：LMCache 缓存加速</div>
+      <div class="sc-model">多轮对话 · RAG 场景 · 有状态推理</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>LMCACHE_CONFIG_FILE</code></strong>：指定 LMCache 配置，定义 KV cache 存储后端（GPU/CPU/磁盘/远程）。对话场景优先 GPU 或 CPU 内存以降低读取延迟。</li>
+          <li><strong><code>"kv_connector":"LMCacheConnectorV1"</code></strong>：将 KV cache 写入 LMCache 的分布式存储。多轮对话中历史 KV cache 从缓存直接读取，无需重新 Prefill。</li>
+          <li>3-10x 延迟降低的原因：每轮只有新增 prompt 需要 Prefill，历史 KV cache 从缓存加载。轮次越多，节省越明显。</li>
+        </ul>
+      </div>
+
+      <pre><code>LMCACHE_CONFIG_FILE=./lmcache.yaml \
+vllm serve &lt;model&gt; \
+  --kv-transfer-config '{
+    "kv_connector":"LMCacheConnectorV1Dynamic",
+    "kv_role":"kv_both",
+    "kv_connector_module_path":
+     "lmcache.integration.vllm.lmcache_connector_v1"
+  }'</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：3-10x 多轮对话延迟降低 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> 需要安装 lmcache 包并启动 LMCache 服务
+      </div>
+    </div>
+
+    <!-- Category 6 -->
+    <h3 style="font-family:var(--font-head);font-weight:700;font-size:1.3rem;margin:2.5rem 0 1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);">六、多模态推理</h3>
+
+    <div class="scenario-card" style="margin-bottom:1.5rem;">
+      <span class="sc-tag sc-tag-purple">视觉</span>
+      <div class="sc-title">场景 11：视觉语言模型</div>
+      <div class="sc-model">LLaVA · Qwen-VL · Pixtral</div>
+
+      <div style="margin:0.8rem 0;">
+        <div style="font-weight:600;margin-bottom:0.4rem;color:var(--accent2);font-size:0.95rem;">参数选择理由</div>
+        <ul style="font-size:0.9rem;color:var(--fg-muted);line-height:1.8;padding-left:1.2rem;">
+          <li><strong><code>--trust-remote-code</code></strong>：部分模型（包括多模态、新架构模型）的配置中引用了 HuggingFace 仓库内的自定义 Python 代码，如 <code>modeling_llava.py</code>、<code>tokenization_qwen.py</code> 等。transformers 默认禁止执行远程代码以防止安全风险，此参数授权加载。不仅多模态需要，DeepSeek-V3、Qwen2.5 等使用自定义模型架构的也需启用。请确保模型来源可信。</li>
+          <li><strong><code>--max-model-len 8192</code></strong>：图像编码后产生大量视觉 token（一张图约 256-1024 tokens），8K 上下文在理解和 token 消耗间取得平衡。</li>
+          <li><strong><code>--limit-mm-per-prompt</code></strong>：限制每轮图片/视频数量，防止多张高分辨率图片导致显存爆炸。</li>
+        </ul>
+      </div>
+
+      <pre><code>vllm serve &lt;model&gt; \
+  --trust-remote-code \
+  --max-model-len 8192 \
+  --limit-mm-per-prompt '{
+    "image":5,"video":1
+  }' \
+  --gpu-memory-utilization 0.9</code></pre>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--fg-dim);">
+        <span style="color:var(--green);">✓</span> 优化目标：多模态输入 · 图片理解 &nbsp;|&nbsp;
+        <span style="color:var(--amber);">⚠</span> 图片分辨率越高，视觉 token 越多，需注意 max-model-len 限制
+      </div>
+    </div>
+
+    <div class="insight" style="margin-top:2rem;">
+      <strong>最佳实践</strong>：先单卡测试参数 → 多卡性能调优 → 多节点生产部署，<span class="highlight">逐步推进</span>。每次只调整 1~2 个参数，观察指标变化后再进行下一步。建议记录每次参数组合的 TTFT、ITL、TPS 指标，用数据驱动决策。
+    </div>
+  </div>
+</section>
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════
+     06 · REFERENCE
+═══════════════════════════════════════════ -->
+<section id="ref">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">06 · 参数速查</div>
+      <h2 class="section-title">完整参考手册</h2>
+      <p class="section-intro">涵盖单节点、多节点、生态集成的全部核心参数与常用环境变量，快速定位最佳配置。</p>
+    </div>
+
+    <div class="ref-block">
+      <div class="ref-badge">40+</div>
+      <div>
+        <h4 style="font-family:var(--font-head);font-size:1.25rem;font-weight:800;margin-bottom:0.3rem;">核心运行参数 + 环境变量</h4>
+        <p style="font-size:0.92rem;">覆盖从显存管理到分布式通信的完整推理栈</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div class="card-label">单节点推理参数</div>
+      <table class="tbl" style="font-size:0.82rem;">
+        <thead>
+          <tr><th>参数名</th><th>默认值</th><th>可选值</th><th>说明</th><th style="white-space:nowrap;">建议值</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>--model</code></td>
+            <td>必需</td>
+            <td>模型名 / HuggingFace 路径</td>
+            <td>指定要加载的模型名称或路径</td>
+            <td><code>Qwen/Qwen2.5-7B</code></td>
+          </tr>
+          <tr>
+            <td><code>--gpu-memory-utilization</code></td>
+            <td><code>0.9</code></td>
+            <td><code>0.0 ~ 1.0</code></td>
+            <td>KV cache 占用 GPU 显存比例</td>
+            <td>生产 0.9~0.95，OOM 时 0.8</td>
+          </tr>
+          <tr>
+            <td><code>--tensor-parallel-size</code></td>
+            <td><code>1</code></td>
+            <td>偶数，≤ 8</td>
+            <td>张量并行 GPU 数量</td>
+            <td>7B=1~2，13~34B=4，70B=8</td>
+          </tr>
+          <tr>
+            <td><code>--dtype</code></td>
+            <td><code>auto</code></td>
+            <td>auto / float16 / bfloat16 / float32</td>
+            <td>推理数据类型</td>
+            <td>A100/H100 用 bfloat16</td>
+          </tr>
+          <tr>
+            <td><code>--max-model-len</code></td>
+            <td>模型默认</td>
+            <td>int，≤ 模型最大上下文</td>
+            <td>最大上下文长度（prompt + 生成）</td>
+            <td>对话 8K，文档 32K~128K</td>
+          </tr>
+          <tr>
+            <td><code>--max-num-seqs</code></td>
+            <td>动态计算</td>
+            <td><code>16 ~ 256</code></td>
+            <td>批次最大并行序列数</td>
+            <td>延迟敏感 16~32，吞吐 64~256</td>
+          </tr>
+          <tr>
+            <td><code>--max-num-batched-tokens</code></td>
+            <td>动态计算</td>
+            <td><code>256 ~ 65536</code></td>
+            <td>批次最大 token 总数</td>
+            <td>延迟低 256，吞吐高 16384</td>
+          </tr>
+          <tr>
+            <td><code>--quantization</code></td>
+            <td>None</td>
+            <td>fp8 / fp8_e4m3 / fp8_e5m2 / awq / gguf / squeezellm</td>
+            <td>模型权重量化方法</td>
+            <td>H100 用 fp8，通用用 awq</td>
+          </tr>
+          <tr>
+            <td><code>--kv-cache-dtype</code></td>
+            <td>auto</td>
+            <td>auto / fp8_e4m3 / fp8_e5m2</td>
+            <td>KV cache 存储数据类型</td>
+            <td>H100+fp8 时用 fp8_e4m3</td>
+          </tr>
+          <tr>
+            <td><code>--block-size</code></td>
+            <td><code>16</code></td>
+            <td><code>8 / 16 / 32 / 64</code></td>
+            <td>PagedAttention 内存块大小</td>
+            <td>GPU 默认 16，CPU 32，长序列 64</td>
+          </tr>
+          <tr>
+            <td><code>--swap-space</code></td>
+            <td><code>4</code></td>
+            <td>int（单位 GB）</td>
+            <td>KV cache CPU 交换空间</td>
+            <td>大模型 16~32</td>
+          </tr>
+          <tr>
+            <td><code>--enforce-eager</code></td>
+            <td>False</td>
+            <td>flag</td>
+            <td>禁用 CUDA graph，减少显存</td>
+            <td>OOM 时启用</td>
+          </tr>
+          <tr>
+            <td><code>--optimization-level</code></td>
+            <td><code>2</code></td>
+            <td>0: 无 / 1: 部分 / 2: 完整(默认) / 3: 激进</td>
+            <td>优化级别，控制 CUDA graph 和算子融合</td>
+            <td>默认 2；显存紧张 0；吞吐极致 3</td>
+          </tr>
+          <tr>
+            <td><code>--enable-prefix-caching</code></td>
+            <td>False</td>
+            <td>flag</td>
+            <td>启用自动前缀 KV cache 复用</td>
+            <td>重复 prompt 场景启用</td>
+          </tr>
+          <tr>
+            <td><code>--enable-chunked-prefill</code></td>
+            <td>auto</td>
+            <td>flag</td>
+            <td>将长 prefill 分块执行，避免阻塞</td>
+            <td>吞吐优先场景启用</td>
+          </tr>
+          <tr>
+            <td><code>--seed</code></td>
+            <td>None</td>
+            <td>int</td>
+            <td>随机种子，保证可复现性</td>
+            <td>调试用 42</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div class="card-label">多节点分布式参数</div>
+      <table class="tbl" style="font-size:0.82rem;">
+        <thead>
+          <tr><th>参数名</th><th>默认值</th><th>可选值</th><th>说明</th><th style="white-space:nowrap;">建议值</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>--nnodes</code></td>
+            <td><code>1</code></td>
+            <td>int</td>
+            <td>总节点数。<strong style="color:var(--amber);">Ray 后端自动检测</strong>，仅 mp 后端需显式声明</td>
+            <td>2~16</td>
+          </tr>
+          <tr>
+            <td><code>--node-rank</code></td>
+            <td><code>0</code></td>
+            <td><code>0 ~ nnodes-1</code></td>
+            <td>当前节点编号。<strong style="color:var(--amber);">Ray 后端自动分配</strong>，仅 mp 后端需显式声明</td>
+            <td>主节点 0，工作节点 1+</td>
+          </tr>
+          <tr>
+            <td><code>--master-addr</code></td>
+            <td><code>localhost</code></td>
+            <td>IP 地址</td>
+            <td>主节点地址。<strong style="color:var(--amber);">仅 mp 后端需要</strong>，Ray 后端通过 Ray 集群发现</td>
+            <td>主节点内网 IP</td>
+          </tr>
+          <tr>
+            <td><code>--master-port</code></td>
+            <td><code>2222</code></td>
+            <td>int（端口号）</td>
+            <td>主节点通信端口。<strong style="color:var(--amber);">仅 mp 后端需要</strong></td>
+            <td>默认 2222</td>
+          </tr>
+          <tr>
+            <td><code>--pipeline-parallel-size</code></td>
+            <td><code>1</code></td>
+            <td>int</td>
+            <td>流水线并行度，跨节点分割层</td>
+            <td>2~4（跨节点推荐 2）</td>
+          </tr>
+          <tr>
+            <td><code>--tensor-parallel-size</code></td>
+            <td><code>1</code></td>
+            <td>偶数 ≤ 8</td>
+            <td>张量并行度，单节点内分割权重</td>
+            <td>8（利用 NVLink）</td>
+          </tr>
+          <tr>
+            <td><code>--data-parallel-size</code></td>
+            <td><code>1</code></td>
+            <td>int</td>
+            <td>数据并行度，模型副本数</td>
+            <td>按扩展需求设定</td>
+          </tr>
+          <tr>
+            <td><code>--distributed-executor-backend</code></td>
+            <td><code>ray</code></td>
+            <td>ray / mp</td>
+            <td>分布式执行器后端</td>
+            <td>多节点用 ray，单机多卡用 mp</td>
+          </tr>
+          <tr>
+            <td><code>--headless</code></td>
+            <td>False</td>
+            <td>flag</td>
+            <td>工作节点模式（不启动 API 服务）</td>
+            <td>工作节点必须启用</td>
+          </tr>
+          <tr>
+            <td><code>--numa-bind</code></td>
+            <td>False</td>
+            <td>flag</td>
+            <td>自动绑定 NUMA 节点优化性能</td>
+            <td>多插槽服务器启用</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div class="card-label">生态集成参数</div>
+      <table class="tbl" style="font-size:0.82rem;">
+        <thead>
+          <tr><th>参数名</th><th>默认值</th><th>可选值</th><th>说明</th><th style="white-space:nowrap;">建议值</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>--kv-transfer-config</code></td>
+            <td>None</td>
+            <td>JSON 字符串</td>
+            <td>KV 传输配置：连接器类型、节点角色、缓冲区大小等，完整 JSON 结构见下方</td>
+            <td>见下方配置详解</td>
+          </tr>
+          <tr>
+            <td><code>--speculative-config</code></td>
+            <td>None</td>
+            <td>JSON 字符串</td>
+            <td>推测解码配置：方法、草稿模型、候选 token 数等，完整 JSON 结构见下方</td>
+            <td>见下方配置详解</td>
+          </tr>
+          <tr>
+            <td><code>--enable-expert-parallel</code></td>
+            <td>False</td>
+            <td>flag</td>
+            <td>MoE 模型启用专家并行</td>
+            <td>DeepSeek-V3 等 MoE 模型启用</td>
+          </tr>
+          <tr>
+            <td><code>--served-model-name</code></td>
+            <td>model 名称</td>
+            <td>string</td>
+            <td>API 中暴露的模型名</td>
+            <td>自定义别名</td>
+          </tr>
+          <tr>
+            <td><code>--trust-remote-code</code></td>
+            <td>False</td>
+            <td>flag</td>
+            <td>信任 HuggingFace 远程自定义代码。<span style="color:var(--amber);">安全风险：会执行仓库中的 Python 文件</span></td>
+            <td>新架构模型、多模态模型需要</td>
+          </tr>
+          <tr>
+            <td><code>--limit-mm-per-prompt</code></td>
+            <td>None</td>
+            <td>JSON</td>
+            <td>限制每轮多模态输入数量</td>
+            <td><code>{"image":5,"video":1}</code></td>
+          </tr>
+          <tr>
+            <td><code>--host</code></td>
+            <td><code>0.0.0.0</code></td>
+            <td>IP 地址</td>
+            <td>API 服务绑定地址</td>
+            <td>默认 0.0.0.0</td>
+          </tr>
+          <tr>
+            <td><code>--port</code></td>
+            <td><code>8000</code></td>
+            <td>int</td>
+            <td>API 服务端口</td>
+            <td>默认 8000</td>
+          </tr>
+          <tr>
+            <td><code>--api-server-count</code></td>
+            <td><code>1</code></td>
+            <td>int</td>
+            <td>API 服务器进程数，多进程提高并发</td>
+            <td>高并发可 ≥ 2</td>
+          </tr>
+          <tr>
+            <td><code>--log-level</code></td>
+            <td>INFO</td>
+            <td>DEBUG / INFO / WARNING / ERROR</td>
+            <td>日志级别</td>
+            <td>生产 INFO，排查用 DEBUG</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- kv-transfer-config JSON detail -->
+    <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:1.2rem;margin-bottom:1.5rem;">
+      <div style="font-weight:700;margin-bottom:0.5rem;font-size:0.95rem;"><code>--kv-transfer-config</code> 完整 JSON 结构</div>
+      <table class="tbl" style="font-size:0.78rem;width:100%;">
+        <thead><tr><th>子字段</th><th>类型</th><th>必填</th><th>说明</th><th>可选值 / 示例</th></tr></thead>
+        <tbody>
+          <tr><td><code>kv_connector</code></td><td>string</td><td>是</td><td>KV 传输连接器类型</td><td><code>LMCacheConnectorV1Dynamic</code> / <code>P2pNcclConnector</code> / <code>NixlConnector</code></td></tr>
+          <tr><td><code>kv_role</code></td><td>string</td><td>是</td><td>本节点角色</td><td><code>kv_producer</code>(Prefill) / <code>kv_consumer</code>(Decode) / <code>kv_both</code></td></tr>
+          <tr><td><code>kv_rank</code></td><td>int</td><td>否</td><td>节点逻辑编号（手动指定）</td><td><code>0</code>(Prefill) / <code>1</code>(Decode)</td></tr>
+          <tr><td><code>kv_connector_module_path</code></td><td>string</td><td>按连接器</td><td>自定义连接器的 Python 模块导入路径</td><td><code>lmcache.integration.vllm.lmcache_connector_v1</code></td></tr>
+          <tr><td><code>kv_buffer_size</code></td><td>string</td><td>否</td><td>传输缓冲区大小</td><td><code>1GB</code> / <code>2GB</code> / <code>512MB</code></td></tr>
+          <tr><td><code>kv_rank_override</code></td><td>int</td><td>否</td><td>覆盖自动分配的 kv_rank</td><td><code>0</code> ~ <code>N-1</code></td></tr>
+          <tr><td><code>kv_ip</code></td><td>string</td><td>Nixl 需要</td><td>Nixl 连接的目标 IP</td><td><code>192.168.1.100</code></td></tr>
+          <tr><td><code>kv_port</code></td><td>int</td><td>Nixl 需要</td><td>Nixl 连接的目标端口</td><td><code>12345</code></td></tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:1rem;font-weight:700;font-size:0.9rem;">典型配置示例</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-top:0.5rem;">
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">LMCache 集成（kv_both）</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>--kv-transfer-config '{
+  "kv_connector": "LMCacheConnectorV1Dynamic",
+  "kv_role": "kv_both",
+  "kv_connector_module_path":
+    "lmcache.integration.vllm.lmcache_connector_v1"
+}'</code></pre>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">分离式 Prefill 节点</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>--kv-transfer-config '{
+  "kv_connector": "P2pNcclConnector",
+  "kv_role": "kv_producer",
+  "kv_buffer_size": "1GB"
+}'</code></pre>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">分离式 Decode 节点</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>--kv-transfer-config '{
+  "kv_connector": "NixlConnector",
+  "kv_role": "kv_consumer",
+  "kv_buffer_size": "2GB",
+  "kv_ip": "192.168.1.100",
+  "kv_port": 12345
+}'</code></pre>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">LMCache + PD 分离</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>LMCACHE_CONFIG_FILE=./lmcache.yaml \
+--kv-transfer-config '{
+  "kv_connector": "LMCacheConnectorV1Dynamic",
+  "kv_role": "kv_producer",
+  "kv_connector_module_path":
+    "lmcache.integration.vllm.lmcache_connector_v1"
+}'</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- speculative-config JSON detail -->
+    <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:1.2rem;margin-bottom:1.5rem;">
+      <div style="font-weight:700;margin-bottom:0.5rem;font-size:0.95rem;"><code>--speculative-config</code> 完整 JSON 结构</div>
+      <table class="tbl" style="font-size:0.78rem;width:100%;">
+        <thead><tr><th>子字段</th><th>类型</th><th>适用方法</th><th>说明</th><th>可选值 / 示例</th></tr></thead>
+        <tbody>
+          <tr><td><code>method</code></td><td>string</td><td>全部</td><td>推测解码方法</td><td><code>eagle</code> / <code>eagle3</code> / <code>pard</code> / <code>ngram</code> / <code>suffix</code> / <code>mtp</code></td></tr>
+          <tr><td><code>model</code></td><td>string</td><td>EAGLE/PARD</td><td>草稿模型路径或名称</td><td><code>EAGLE-LLaMA3-8B</code> / <code>draft-model-path</code></td></tr>
+          <tr><td><code>num_speculative_tokens</code></td><td>int</td><td>全部</td><td>每步推测的候选 token 数</td><td><code>3</code> ~ <code>8</code>，推荐 <code>5</code></td></tr>
+          <tr><td><code>draft_tensor_parallel_size</code></td><td>int</td><td>EAGLE</td><td>草稿模型的 TP 度</td><td><code>1</code> ~ <code>8</code>，默认 1</td></tr>
+          <tr><td><code>prompt_lookup_min</code></td><td>int</td><td>N-Gram</td><td>N-Gram 最小匹配长度</td><td><code>2</code></td></tr>
+          <tr><td><code>prompt_lookup_max</code></td><td>int</td><td>N-Gram</td><td>N-Gram 最大匹配长度</td><td><code>5</code></td></tr>
+          <tr><td><code>max_draft_len</code></td><td>int</td><td>全部</td><td>草稿序列最大长度</td><td><code>512</code> ~ <code>2048</code></td></tr>
+          <tr><td><code>spacy_draft</code></td><td>bool</td><td>Suffix</td><td>启用 spaCy 句式匹配</td><td><code>true</code> / <code>false</code></td></tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:1rem;font-weight:700;font-size:0.9rem;">典型配置示例</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-top:0.5rem;">
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">EAGLE（需额外草稿模型）</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>--speculative-config '{
+  "method": "eagle",
+  "model": "EAGLE-LLaMA3-8B",
+  "num_speculative_tokens": 5,
+  "draft_tensor_parallel_size": 1
+}'</code></pre>
+          <div style="font-size:0.7rem;color:var(--fg-muted);margin-top:0.3rem;">加速比最高（2-3x），需额外显存</div>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">N-Gram（无需额外模型）</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>--speculative-config '{
+  "method": "ngram",
+  "num_speculative_tokens": 5,
+  "prompt_lookup_min": 2,
+  "prompt_lookup_max": 5
+}'</code></pre>
+          <div style="font-size:0.7rem;color:var(--fg-muted);margin-top:0.3rem;">零额外显存，适合重复性高的场景</div>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">MTP（DeepSeek-V3 原生）</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>--speculative-config '{
+  "method": "mtp",
+  "num_speculative_tokens": 3
+}'</code></pre>
+          <div style="font-size:0.7rem;color:var(--fg-muted);margin-top:0.3rem;">使用模型原生 MTP head，无需额外加载</div>
+        </div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.3rem;font-size:0.82rem;">PARD（并行解码）</div>
+          <pre style="font-size:0.7rem;background:none;border:none;padding:0;margin:0;"><code>--speculative-config '{
+  "method": "pard",
+  "model": "draft-model",
+  "num_speculative_tokens": 5
+}'</code></pre>
+          <div style="font-size:0.7rem;color:var(--fg-muted);margin-top:0.3rem;">类似 EAGLE 的并行推测方案</div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-family:var(--font-head);font-weight:700;margin:2.5rem 0 1rem;font-size:1.25rem;">常见问题排查</h3>
+    <p style="font-size:0.9rem;color:var(--fg-muted);margin-bottom:1.2rem;">以下按现象分类，每个问题列出根因、诊断方法和解决方案，由简到繁逐步推进。</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+
+      <!-- OOM -->
+      <div style="background:var(--bg-card);border:1px solid rgba(239,68,68,0.25);border-radius:var(--r-lg);padding:1.2rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem;">
+          <span style="font-size:1.3rem;">💥</span>
+          <span style="font-weight:700;font-size:1rem;color:#ef4444;">显存不足（OOM）</span>
+        </div>
+        <div style="font-size:0.82rem;color:var(--fg-muted);margin-bottom:0.6rem;">
+          <strong>根因：</strong>KV cache + 模型权重 + 中间激活超出 GPU 显存总量。
+        </div>
+        <div style="font-size:0.82rem;margin-bottom:0.6rem;">
+          <strong style="color:var(--accent2);">诊断：</strong>
+          <code style="font-size:0.72rem;">nvidia-smi</code> 查看显存使用率；<code>vllm:kv_cache_usage_perc</code> 监控指标 &gt; 0.9 触发预警。
+        </div>
+        <div style="font-size:0.82rem;">
+          <strong style="color:var(--green);">解决方案：</strong>
+        </div>
+        <ul style="font-size:0.8rem;margin:0.3rem 0 0;padding-left:1rem;line-height:1.8;">
+          <li><strong>第一步</strong>：<code>--gpu-memory-utilization 0.8</code> 降低显存占比</li>
+          <li><strong>第二步</strong>：<code>--max-num-seqs 32</code> 减少并发批大小</li>
+          <li><strong>第三步</strong>：<code>--quantization fp8</code> 或 AWQ 量化权重</li>
+          <li><strong>第四步</strong>：<code>--swap-space 16</code> 增加 CPU 交换空间</li>
+          <li><strong>第五步</strong>：<code>--enforce-eager</code> 禁用 CUDA graph（等价 optimization-level 0）</li>
+          <li><strong>终极</strong>：增加 GPU 数，扩大 TP/PP 度分散显存</li>
+        </ul>
+      </div>
+
+      <!-- Latency -->
+      <div style="background:var(--bg-card);border:1px solid rgba(234,179,8,0.25);border-radius:var(--r-lg);padding:1.2rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem;">
+          <span style="font-size:1.3rem;">🐢</span>
+          <span style="font-weight:700;font-size:1rem;color:#eab308;">延迟过高（TTFT / TPOT）</span>
+        </div>
+        <div style="font-size:0.82rem;color:var(--fg-muted);margin-bottom:0.6rem;">
+          <strong>根因：</strong>Prefill 阶段计算量大或 decode 阶段 GPU 利用率不足。
+        </div>
+        <div style="font-size:0.82rem;margin-bottom:0.6rem;">
+          <strong style="color:var(--accent2);">诊断：</strong>TTFT 高 → prefill 瓶颈；TPOT 高 → decode 瓶颈。关注 <code>vllm:time_to_first_token_seconds</code> 和 <code>vllm:inter_token_latency_seconds</code> 的 p99 分位。
+        </div>
+        <div style="font-size:0.82rem;">
+          <strong style="color:var(--green);">解决方案：</strong>
+        </div>
+        <ul style="font-size:0.8rem;margin:0.3rem 0 0;padding-left:1rem;line-height:1.8;">
+          <li><strong>TTFT 高</strong>：<code>--enable-chunked-prefill</code> 将长 prefill 切分；<code>--max-num-batched-tokens 256</code> 限制批大小</li>
+          <li><strong>TPOT 高</strong>：设置 <code>--optimization-level 2</code> 启用 CUDA Graph；<code>--block-size 64</code> 减少 block 管理开销</li>
+          <li><strong>推测解码</strong>：EAGLE 2-3x 加速 decode；N-Gram 零开销方案</li>
+          <li><strong>减少 TP 度</strong>：<code>--tensor-parallel-size 4</code> → 2（通信开销可能超计算加速收益）</li>
+          <li><strong>分离式推理</strong>：Prefill/Decode 分节点部署，各自独立优化</li>
+        </ul>
+      </div>
+
+      <!-- Throughput -->
+      <div style="background:var(--bg-card);border:1px solid rgba(99,102,241,0.25);border-radius:var(--r-lg);padding:1.2rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem;">
+          <span style="font-size:1.3rem;">📉</span>
+          <span style="font-weight:700;font-size:1rem;color:#818cf8;">吞吐过低（TPS）</span>
+        </div>
+        <div style="font-size:0.82rem;color:var(--fg-muted);margin-bottom:0.6rem;">
+          <strong>根因：</strong>GPU 利用率不足、批大小过小或 KV cache 复用率低。
+        </div>
+        <div style="font-size:0.82rem;margin-bottom:0.6rem;">
+          <strong style="color:var(--accent2);">诊断：</strong>查看 <code>vllm:num_requests_running</code> 是否未达上限；<code>nvidia-smi</code> 检查 GPU 计算/显存利用率 &lt; 80%。
+        </div>
+        <div style="font-size:0.82rem;">
+          <strong style="color:var(--green);">解决方案：</strong>
+        </div>
+        <ul style="font-size:0.8rem;margin:0.3rem 0 0;padding-left:1rem;line-height:1.8;">
+          <li><strong>增大批大小</strong>：<code>--max-num-batched-tokens 16384</code> + <code>--max-num-seqs 128</code></li>
+          <li><strong>Prefix Cache</strong>：<code>--enable-prefix-caching</code> 复用公共前缀（对话历史、System Prompt）</li>
+          <li><strong>数据并行</strong>：<code>--data-parallel-size 4</code> 或 <code>8</code> 横向扩展</li>
+          <li><strong>优化级别</strong>：<code>--optimization-level 2</code>（默认）启用 CUDA Graph + 算子融合</li>
+          <li><strong>Chunked Prefill</strong>：<code>--enable-chunked-prefill</code> 避免 prefill 阻塞 decode</li>
+          <li><strong>多进程 API</strong>：<code>--api-server-count 2</code> 提高 HTTP 并发处理能力</li>
+        </ul>
+      </div>
+
+      <!-- Communication -->
+      <div style="background:var(--bg-card);border:1px solid rgba(236,201,75,0.25);border-radius:var(--r-lg);padding:1.2rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem;">
+          <span style="font-size:1.3rem;">🔗</span>
+          <span style="font-weight:700;font-size:1rem;color:#eab308;">通信瓶颈（多节点）</span>
+        </div>
+        <div style="font-size:0.82rem;color:var(--fg-muted);margin-bottom:0.6rem;">
+          <strong>根因：</strong>跨节点 NCCL 通信时延过高，TP 通信密集放大瓶颈。
+        </div>
+        <div style="font-size:0.82rem;margin-bottom:0.6rem;">
+          <strong style="color:var(--accent2);">诊断：</strong><code>NCCL_DEBUG=TRACE</code> 查看通信拓扑和带宽；<code>nvlink-status</code> 检查 NVLink 连接；<code>ibstatus</code> 检查 InfiniBand 链路。
+        </div>
+        <div style="font-size:0.82rem;">
+          <strong style="color:var(--green);">解决方案：</strong>
+        </div>
+        <ul style="font-size:0.8rem;margin:0.3rem 0 0;padding-left:1rem;line-height:1.8;">
+          <li><strong>硬件层</strong>：GPUDirect RDMA 直通；Docker 加 <code>--ipc=host --shm-size=16G</code>；启用 InfiniBand</li>
+          <li><strong>通信层</strong>：设置 <code>NCCL_IB_HCA=mlx5_0</code> 指定 IB 网卡；<code>NCCL_NET=IB</code> 强制 IB 协议</li>
+          <li><strong>策略层</strong>：TP ≤ 8 避免跨节点 TP；增大 PP 减少跨节点通信量；优先在同节点内完成 TP</li>
+          <li><strong>替代方案</strong>：用 DP 替代 TP 做横向扩展；EP 对 MoE 模型更高效</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Quick reference -->
+    <div style="background:linear-gradient(135deg,rgba(52,211,153,0.06),rgba(16,185,129,0.02));border:1px solid rgba(52,211,153,0.2);border-radius:var(--r-lg);padding:1.2rem;margin-top:1.2rem;">
+      <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.5rem;">📌 快速排查路线</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.5rem;font-size:0.75rem;text-align:center;">
+        <div style="background:var(--bg-deep);border-radius:var(--r-sm);padding:0.5rem;">
+          <div style="font-weight:600;">OOM</div>
+          <div style="color:var(--fg-muted);font-size:0.68rem;margin-top:0.2rem;">↓显存占比 → 量化</div>
+        </div>
+        <div style="background:var(--bg-deep);border-radius:var(--r-sm);padding:0.5rem;">
+          <div style="font-weight:600;">TTFT 高</div>
+          <div style="color:var(--fg-muted);font-size:0.68rem;margin-top:0.2rem;">chunked prefill ←</div>
+        </div>
+        <div style="background:var(--bg-deep);border-radius:var(--r-sm);padding:0.5rem;">
+          <div style="font-weight:600;">TPOT 高</div>
+          <div style="color:var(--fg-muted);font-size:0.68rem;margin-top:0.2rem;">CUDA Graph → EAGLE</div>
+        </div>
+        <div style="background:var(--bg-deep);border-radius:var(--r-sm);padding:0.5rem;">
+          <div style="font-weight:600;">TPS 低</div>
+          <div style="color:var(--fg-muted);font-size:0.68rem;margin-top:0.2rem;">增批大小 → DP 扩展</div>
+        </div>
+        <div style="background:var(--bg-deep);border-radius:var(--r-sm);padding:0.5rem;">
+          <div style="font-weight:600;">通信慢</div>
+          <div style="color:var(--fg-muted);font-size:0.68rem;margin-top:0.2rem;">RDMA → 减TP → 增PP</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">vLLM</div>
+        <div style="font-family:var(--font-mono);font-size:0.85rem;color:var(--fg-dim);margin-top:0.4rem;">高性能 LLM 推理服务框架</div>
+      </div>
+      <div class="footer-meta">
+        <div>运行参数完全指南 · 2026年4月</div>
+        <div class="footer-links">
+          <a href="https://docs.vllm.ai">docs.vllm.ai</a> ·
+          <a href="https://github.com/vllm-project/vllm">github.com/vllm-project/vllm</a> ·
+          <a href="https://docs.lmcache.ai">docs.lmcache.ai</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
