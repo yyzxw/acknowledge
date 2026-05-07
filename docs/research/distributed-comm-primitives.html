@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分布式通信原语与 vLLM 并行策略</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', 'PingFang SC', sans-serif; background: #f8f9fa; }
+    .slideshow { height: 100vh; width: 100vw; position: relative; overflow: hidden; }
+    .slide { display: none; width: 100%; height: 100%; padding: 30px 50px; position: absolute; top: 0; left: 0; overflow-y: auto; }
+    .slide.active { display: flex; flex-direction: column; }
+    .slide-cover { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); justify-content: center; align-items: center; text-align: center; color: white; }
+    .slide-cover h1 { font-size: 2.8rem; margin-bottom: 16px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+    .slide-cover .subtitle { font-size: 1.2rem; opacity: 0.9; }
+    .slide-cover .tag { margin-top: 22px; padding: 8px 18px; background: rgba(255,255,255,0.1); border-radius: 18px; font-size: 0.9rem; }
+    h1 { font-size: 1.9rem; color: #1a1a2e; margin-bottom: 18px; border-bottom: 4px solid #0f3460; padding-bottom: 10px; }
+    h2 { font-size: 1.3rem; color: #16213e; margin: 15px 0 10px 0; }
+    h3 { font-size: 1rem; color: #0f3460; margin: 10px 0 6px 0; }
+    .concept-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 20px; border-radius: 10px; margin: 10px 0; }
+    .concept-box h3 { color: white; margin-top: 0; }
+    .concept-box p { font-size: 0.95rem; line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.9rem; }
+    th, td { border: 1px solid #ddd; padding: 7px 9px; text-align: left; }
+    th { background: #0f3460; color: white; }
+    tr:nth-child(even) { background: #f0f4f8; }
+    ul { margin: 8px 0 8px 20px; font-size: 0.95rem; line-height: 1.5; }
+    .mermaid { background: white; border-radius: 8px; padding: 12px; margin: 10px 0; box-shadow: 0 2px 6px rgba(0,0,0,0.1); text-align: center; }
+    .code-block { background: #1e1e1e; color: #d4d4d4; padding: 10px 15px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.85rem; margin: 10px 0; overflow-x: auto; white-space: pre; }
+    .analogy { background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+    .analogy-title { font-weight: bold; color: #856404; margin-bottom: 5px; font-size: 0.9rem; }
+    .nav { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 100; }
+    .nav button { padding: 8px 20px; font-size: 0.85rem; cursor: pointer; background: #0f3460; color: white; border: none; border-radius: 16px; transition: all 0.3s; }
+    .nav button:hover { background: #16213e; transform: scale(1.05); }
+    .progress { position: fixed; top: 0; left: 0; height: 4px; background: linear-gradient(90deg, #0f3460, #667eea); transition: width 0.3s; z-index: 100; }
+    .slide-number { position: fixed; bottom: 20px; right: 32px; font-size: 0.8rem; color: #666; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .card { background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #0f3460; box-shadow: 0 2px 5px rgba(0,0,0,0.08); }
+    .highlight { color: #667eea; font-weight: bold; }
+    .two-cols { display: flex; gap: 22px; }
+    .two-cols > div { flex: 1; }
+    .formula { background: #e8f4f8; padding: 8px 12px; border-radius: 5px; font-family: monospace; margin: 8px 0; font-size: 0.9rem; }
+    .key-point { background: #e8f5e9; border-left: 4px solid #4caf50; padding: 10px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+    .warning { background: #fff3e0; border-left: 4px solid #ff9800; padding: 10px 15px; margin: 10px 0; border-radius: 0 6px 6px 0; }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="slideshow" id="slideshow">
+
+    <!-- Slide 1: Cover -->
+    <div class="slide slide-cover active">
+      <h1>分布式通信原语与 vLLM 并行策略</h1>
+      <div class="subtitle">深入理解 AllReduce, AllToAll, TP, DP, PP, EP</div>
+      <div class="tag">技术分享 Meetup</div>
+    </div>
+
+    <!-- Slide 2: TOC -->
+    <div class="slide">
+      <h1>目录</h1>
+      <div class="grid-2">
+        <div class="card">
+          <h3>通信原语</h3>
+          <ul>
+            <li>6 大通信原语详解</li>
+            <li>AllReduce 与 Ring 算法</li>
+            <li>AllToAll 全交换</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>并行策略与通信量</h3>
+          <ul>
+            <li>TP/DP/PP/EP 通信详情</li>
+            <li>Prefill-Decode 分离</li>
+            <li>通信量计算公式</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card" style="margin-top: 15px;">
+        <h3>总结</h3>
+        <ul>
+          <li>通信量对比</li>
+          <li>并行策略选择指南</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Slide 3: All Primitives Overview -->
+    <div class="slide">
+      <h1>📡 分布式通信原语：全景图</h1>
+
+      <table>
+        <tr><th>原语</th><th>定义</th><th>类比</th></tr>
+        <tr><td><strong>Broadcast</strong></td><td>一个节点 → 所有节点</td><td>广播通知</td></tr>
+        <tr><td><strong>Reduce</strong></td><td>所有节点 → 一个节点</td><td>汇总报表</td></tr>
+        <tr><td><strong>AllReduce</strong></td><td>所有节点同步获得归约结果</td><td>大家报数，都知道总数</td></tr>
+        <tr><td><strong>Gather</strong></td><td>收集数据（不合并）</td><td>收作业</td></tr>
+        <tr><td><strong>AllToAll</strong></td><td>每个节点给所有节点发不同数据</td><td>互相握手</td></tr>
+        <tr><td><strong>Send/Recv</strong></td><td>两节点双向通信</td><td>两人通话</td></tr>
+      </table>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="analogy">
+          <div class="analogy-title">💡 理解 AllReduce</div>
+          <p>AllReduce = Reduce + Broadcast。先汇总，再把结果同步给所有人。</p>
+        </div>
+        <div class="analogy">
+          <div class="analogy-title">💡 理解 ReduceScatter</div>
+          <p>ReduceScatter = Reduce + Scatter。归约后分片，每人拿一块。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 4: AllReduce -->
+    <div class="slide">
+      <h1>🔄 AllReduce = 归约 + 同步广播</h1>
+
+      <div class="concept-box">
+        <h3>🌐 AllReduce = 所有机器一起做归约，结果同步给所有人</h3>
+        <p>所有节点不仅参与计算，最后还<strong>同步</strong>获得相同的结果！</p>
+      </div>
+
+      <div class="mermaid">
+flowchart LR
+    D0["🖥️ 节点0: 3"] & D1["🖥️ 节点1: 5"] & D2["🖥️ 节点2: 2"] & D3["🖥️ 节点3: 8"] --> AR["🔄 AllReduce<br/>(求和)"]
+    AR --> R["结果: 18"]
+    R --> R0["18 ✓"] & R1["18 ✓"] & R2["18 ✓"] & R3["18 ✓"]
+      </div>
+
+      <div class="grid-2" style="margin-top: 12px;">
+        <div class="card">
+          <h3>通信量公式</h3>
+          <div class="code-block">Ring AllReduce:
+总通信量 ≈ 2M (与机器数无关)
+
+其中 M = 数据大小</div>
+        </div>
+        <div class="card">
+          <h3>应用场景</h3>
+          <ul>
+            <li><strong>TP</strong>: 每层计算后同步</li>
+            <li><strong>DP 训练</strong>: 梯度同步</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 5: AllToAll -->
+    <div class="slide">
+      <h1>🔄 AllToAll = 全交换</h1>
+
+      <div class="concept-box">
+        <h3>📡 AllToAll = 每个人都给每个人发不同的消息</h3>
+        <p>AllReduce 是"大家做同样的事，得到同样的结果"。AllToAll 是"大家交换数据，每个人都给其他人发不同的东西"。</p>
+      </div>
+
+      <div class="mermaid">
+flowchart LR
+    G0["GPU0<br/>[a0|a1|a2|a3]"] -->|"a1→GPU1"| G1["GPU1<br/>[b0|b1|b2|b3]"]
+    G1 -->|"b2→GPU2"| G2["GPU2<br/>[c0|c1|c2|c3]"]
+    G2 -->|"c3→GPU3"| G3["GPU3<br/>[d0|d1|d2|d3]"]
+    G3 -->|"d0→GPU0"| G0
+      </div>
+
+      <div class="grid-2" style="margin-top: 12px;">
+        <div class="card">
+          <h3>通信量</h3>
+          <div class="code-block">总通信量: N² × M 字节
+每人发送: (N-1) × M 字节</div>
+        </div>
+        <div class="card">
+          <h3>主要用途</h3>
+          <ul>
+            <li><strong>MoE 模型</strong>: Token 路由到专家</li>
+            <li>数据重分区</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 6: vLLM Overview -->
+    <div class="slide">
+      <h1>⚙️ vLLM 并行策略概览</h1>
+
+      <div class="mermaid">
+flowchart TB
+    AR["🔄 AllReduce"] --> TP["📦 TP"]
+    A2A["📡 AllToAll"] --> EP["👥 EP"]
+    P2P["📨 Send/Recv"] --> PP["🔗 PP"]
+    NONE["❌ 无通信"] --> DP["📋 DP"]
+
+    subgraph Info["通信模式"]
+        TPL["Tensor Parallel: 每层2次 AllReduce"]
+        EPL["Expert Parallel: AllToAll 路由"]
+        PPL["Pipeline Parallel: P2P 传激活"]
+        DPL["Data Parallel: 推理无通信"]
+    end
+      </div>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>一句话总结</h3>
+          <ul>
+            <li><strong>TP</strong> = AllReduce</li>
+            <li><strong>EP</strong> = AllToAll</li>
+            <li><strong>PP</strong> = Send/Recv</li>
+            <li><strong>DP 推理</strong> = 无通信</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>关键问题</h3>
+          <ul>
+            <li>通信量多大？</li>
+            <li>传什么内容？</li>
+            <li>Prefill vs Decode 有何不同？</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 7: TP Communication Details -->
+    <div class="slide">
+      <h1>📦 Tensor Parallel (TP) 通信详情</h1>
+
+      <div class="concept-box">
+        <h3>💡 核心：每层计算后需要 AllReduce 同步</h3>
+        <p>TP 把同一层权重分到不同 GPU，每 GPU 算完后要把结果汇总（AllReduce）。</p>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <h3>通信内容</h3>
+          <table>
+            <tr><th>阶段</th><th>通信类型</th><th>传输内容</th></tr>
+            <tr><td>Forward</td><td>AllReduce</td><td>局部输出 → 完整输出</td></tr>
+            <tr><td>Backward</td><td>AllReduce</td><td>局部梯度 → 完整梯度</td></tr>
+          </table>
+        </div>
+        <div>
+          <h3>通信量公式</h3>
+          <div class="code-block"># Forward (单层)
+C_TP_fwd = 2 × B × S × H / P
+
+# Backward (单层)
+C_TP_bwd = 2 × C_TP_fwd
+
+B=batch, S=seq_len, H=hidden, P=TP degree</div>
+        </div>
+      </div>
+
+      <div class="key-point" style="margin-top: 12px;">
+        <strong>⚠️ 关键：</strong>TP 通信量与 batch size × sequence length 成正比，与 GPU 数成反比。
+      </div>
+    </div>
+
+    <!-- Slide 8: TP Prefill vs Decode -->
+    <div class="slide">
+      <h1>📦 TP: Prefill vs Decode 通信差异</h1>
+
+      <table>
+        <tr><th>维度</th><th>Prefill</th><th>Decode</th></tr>
+        <tr><td><strong>输入形状</strong></td><td>[B, S_prompt, H]</td><td>[1, 1, H] 逐 token</td></tr>
+        <tr><td><strong>通信量</strong></td><td>大 (S_prompt 长)</td><td>小 (每次 1 token)</td></tr>
+        <tr><td><strong>AllReduce 次数</strong></td><td>每层 1 次</td><td>每层 1 次</td></tr>
+        <tr><td><strong>瓶颈</strong></td><td>带宽敏感</td><td>延迟敏感</td></tr>
+      </table>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>Prefill 特点</h3>
+          <ul>
+            <li>一次性处理整个 prompt</li>
+            <li>序列长，通信量大</li>
+            <li>适合高带宽互联 (NVLink)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Decode 特点</h3>
+          <ul>
+            <li>逐 token 生成</li>
+            <li>每次通信量小但频繁</li>
+            <li>对延迟更敏感</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="warning" style="margin-top: 12px;">
+        <strong>💡 实际影响：</strong>Prefill 阶段 TP 通信开销明显，Decode 阶段相对较小。Decode 时如果用 Ring Attention，还需要额外传递 K/V 块。
+      </div>
+    </div>
+
+    <!-- Slide 9: DP Communication Details -->
+    <div class="slide">
+      <h1>📋 Data Parallel (DP) 通信详情</h1>
+
+      <div class="concept-box">
+        <h3>💡 核心：推理时无通信，训练时用 AllReduce 同步梯度</h3>
+        <p>每个 GPU 持有完整模型副本，处理不同 batch。</p>
+      </div>
+
+      <div class="grid-2">
+        <div>
+          <h3>通信内容</h3>
+          <table>
+            <tr><th>阶段</th><th>通信类型</th><th>传输内容</th></tr>
+            <tr><td>推理</td><td>无</td><td>无</td></tr>
+            <tr><td>训练</td><td>AllReduce</td><td>梯度</td></tr>
+            <tr><td>DP Attention</td><td>AllReduce</td><td>K/V 激活</td></tr>
+          </table>
+        </div>
+        <div>
+          <h3>通信量</h3>
+          <div class="code-block"># 梯度同步
+C_DP = model_size × bytes
+
+# 7B 模型 (FP16): ~14 GB
+# 70B 模型 (FP16): ~140 GB
+
+# DP Attention (K/V)
+C_DP_attn = 2 × B × S × H × bytes</div>
+        </div>
+      </div>
+
+      <div class="key-point" style="margin-top: 12px;">
+        <strong>✅ DP 推理优势：</strong>完全无 GPU 间通信！每个 GPU 独立处理请求，线性扩展吞吐量。
+      </div>
+    </div>
+
+    <!-- Slide 10: DP Attention -->
+    <div class="slide">
+      <h1>📋 DP Attention 的特殊通信</h1>
+
+      <div class="concept-box">
+        <h3>🔍 问题：跨 GPU 的 Attention 计算需要同步 K/V</h3>
+        <p>当使用 DP Attention 时，不同 GPU 处理不同请求，但 Attention 需要完整的 K/V。</p>
+      </div>
+
+      <div class="mermaid">
+flowchart LR
+    Q0["🖥️ GPU0 Q"] --> A["🔢 Attention 计算"]
+    K0["🖥️ GPU0 K"] -->|"AllReduce"| Kfull["完整 K"]
+    V0["🖥️ GPU0 V"] -->|"AllReduce"| Vfull["完整 V"]
+    Q1["🖥️ GPU1 Q"] --> A
+    K1["🖥️ GPU1 K"] -->|"AllReduce"| Kfull
+    V1["🖥️ GPU1 V"] -->|"AllReduce"| Vfull
+      </div>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>为什么需要？</h3>
+          <ul>
+            <li>不同 GPU 处理不同请求</li>
+            <li>Attention 需要跨 batch 的 K/V</li>
+            <li>DeepSeek 等 MLA 模型尤其需要</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>vLLM DP Attention</h3>
+          <ul>
+            <li>KV Cache 分片存储</li>
+            <li>避免完整 KV 在 GPU 间复制</li>
+            <li>节省 MLA 模型内存</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 11: PP Communication Details -->
+    <div class="slide">
+      <h1>🔗 Pipeline Parallel (PP) 通信详情</h1>
+
+      <div class="concept-box">
+        <h3>💡 核心：阶段之间用 Send/Recv 传递激活值</h3>
+        <p>PP 把不同层的 GPU 直连，只在边界传输数据。</p>
+      </div>
+
+      <div class="mermaid">
+flowchart LR
+    G0["🖥️ GPU0<br/>Layer 0-19"] -->|"激活值"| G1["🖥️ GPU1<br/>Layer 20-39"]
+    G1 -->|"激活值"| G2["🖥️ GPU2<br/>Layer 40-59"]
+    G2 -->|"激活值"| G3["🖥️ GPU3<br/>Layer 60-79"]
+      </div>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>通信内容</h3>
+          <table>
+            <tr><th>方向</th><th>传输内容</th><th>大小估算</th></tr>
+            <tr><td>Forward</td><td>激活值 X_out</td><td>B × S × H_next</td></tr>
+            <tr><td>Backward</td><td>梯度</td><td>B × S × H_current</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>通信量</h3>
+          <div class="code-block"># 单层传输
+C_PP = B × S × H × bytes
+
+# 仅在阶段边界传输
+# 通信量远小于 TP</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 12: PP Prefill vs Decode -->
+    <div class="slide">
+      <h1>🔗 PP: Prefill vs Decode 通信差异</h1>
+
+      <div class="concept-box">
+        <h3>💡 Prefill 和 Decode 在 PP 中通信模式类似，但数据量差异大</h3>
+      </div>
+
+      <table>
+        <tr><th>维度</th><th>Prefill</th><th>Decode</th></tr>
+        <tr><td><strong>传输数据</strong></td><td>完整 prompt 激活</td><td>单 token 激活</td></tr>
+        <tr><td><strong>通信频率</strong></td><td>一次（完整序列）</td><td>N 次（N 个 token）</td></tr>
+        <tr><td><strong>KV Cache</strong></td><td>生成并存储</td><td>读取历史 + 生成新</td></tr>
+        <tr><td><strong>瓶颈</strong></td><td>计算密集</td><td>访存密集</td></tr>
+      </table>
+
+      <div class="warning" style="margin-top: 15px;">
+        <strong>⚠️ PP 的问题：</strong>如果 Prefill 和 Decode 混在同一个 PP 流水线中，会相互阻塞——Prefill 的长序列会等待 Decode 的单 token 交互。
+      </div>
+
+      <div class="key-point">
+        <strong>💡 解决方案：</strong>PD 分离！把 Prefill 和 Decode 分到不同的 GPU 集群。
+      </div>
+    </div>
+
+    <!-- Slide 13: EP Communication Details -->
+    <div class="slide">
+      <h1>👥 Expert Parallel (EP) 通信详情</h1>
+
+      <div class="concept-box">
+        <h3>💡 核心：MoE 模型用 AllToAll 路由 Token 到专家</h3>
+        <p>每个 token 只激活 top-k 个专家，专家分布在不同 GPU。</p>
+      </div>
+
+      <div class="mermaid">
+sequenceDiagram
+    participant T as 📋 Token
+    participant R as 🎯 Router
+    participant G0 as 🖥️ GPU0
+    participant G1 as 🖥️ GPU1
+
+    T->>R: 选择 Expert-0, Expert-1
+    R->>G0: AllToAll Dispatch
+    R->>G1: AllToAll Dispatch
+    G0->>G0: Expert-0 计算
+    G1->>G1: Expert-1 计算
+    G0->>T: AllToAll Combine
+    G1->>T: AllToAll Combine
+      </div>
+
+      <div class="grid-2" style="margin-top: 12px;">
+        <div class="card">
+          <h3>通信内容</h3>
+          <div class="code-block"># AllToAll 发送: Token 到 Expert GPU
+# AllToAll 接收: 结果返回原 GPU
+
+C_EP = 2 × tokens × topk × expert_size</div>
+        </div>
+        <div class="card">
+          <h3>EP 挑战</h3>
+          <ul>
+            <li>负载均衡（专家选择动态）</li>
+            <li>AllToAll 通信量大</li>
+            <li>需要高速互联</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 14: EP Prefill vs Decode -->
+    <div class="slide">
+      <h1>👥 EP: Prefill vs Decode 通信差异</h1>
+
+      <table>
+        <tr><th>维度</th><th>Prefill</th><th>Decode</th></tr>
+        <tr><td><strong>Token 数量</strong></td><td>长序列 (S 个)</td><td>单 token</td></tr>
+        <tr><td><strong>AllToAll 规模</strong></td><td>大（同时路由多 token）</td><td>小（单 token）</td></tr>
+        <tr><td><strong>通信量</strong></td><td>大</td><td>小</td></tr>
+        <tr><td><strong>负载均衡</strong></td><td>更易不均衡</td><td>需更好均衡策略</td></tr>
+      </table>
+
+      <div class="key-point" style="margin-top: 15px;">
+        <strong>📊 EP 通信量公式：</strong>
+        <div class="code-block">C_EP = 2 × batch × seq × topk × expert_size
+
+# Prefill: seq = prompt_length (可能数千)
+# Decode: seq = 1</div>
+      </div>
+
+      <div class="analogy" style="margin-top: 12px;">
+        <div class="analogy-title">💡 形象理解</div>
+        <p>Prefill 像一次派对上把几千人分配到不同桌子；Decode 像每次只来一个人去握手。通信量差异巨大！</p>
+      </div>
+    </div>
+
+    <!-- Slide 15: PD Separation Introduction -->
+    <div class="slide">
+      <h1>🔀 Prefill-Decode (PD) 分离</h1>
+
+      <div class="concept-box">
+        <h3>💡 核心思想：把 Prefill 和 Decode 分到不同的 GPU 集群</h3>
+        <p>因为它们的资源需求和通信模式完全不同！</p>
+      </div>
+
+      <div class="mermaid">
+flowchart LR
+    subgraph Prefill["📦 Prefill 集群"]
+        P["高算力 GPU<br/>TP × DP"]
+    end
+
+    subgraph Transfer["⬇️ KV Cache 传输"]
+        KV["Network"]
+    end
+
+    subgraph Decode["🎯 Decode 集群"]
+        D["高带宽 GPU<br/>大 Batch DP"]
+    end
+
+    P -->|"KV Cache"| KV
+    KV -->|"传输"| D
+      </div>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>Prefill 集群特点</h3>
+          <ul>
+            <li><strong>计算密集</strong> (FLOPs 瓶颈)</li>
+            <li>需要 TP 提升算力</li>
+            <li>处理长序列 prompt</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Decode 集群特点</h3>
+          <ul>
+            <li><strong>带宽密集</strong> (Memory BW 瓶颈)</li>
+            <li>需要大 batch DP</li>
+            <li>逐 token 生成</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 16: PD Separation Why -->
+    <div class="slide">
+      <h1>🔀 为什么需要 PD 分离？</h1>
+
+      <div class="grid-2">
+        <div>
+          <h3>Prefill 阶段</h3>
+          <table>
+            <tr><th>特性</th><th>描述</th></tr>
+            <tr><td>计算</td><td>矩阵乘法密集</td></tr>
+            <tr><td>序列</td><td>一次性处理整个 prompt</td></tr>
+            <tr><td>瓶颈</td><td>算力 (FLOPs)</td></tr>
+            <tr><td>内存</td><td>激活值大</td></tr>
+          </table>
+        </div>
+        <div>
+          <h3>Decode 阶段</h3>
+          <table>
+            <tr><th>特性</th><th>描述</th></tr>
+            <tr><td>计算</td><td>轻量但访存密集</td></tr>
+            <tr><td>序列</td><td>逐 token 生成</td></tr>
+            <tr><td>瓶颈</td><td>带宽 (Memory BW)</td></tr>
+            <tr><td>内存</td><td>KV Cache 访问</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="warning" style="margin-top: 15px;">
+        <strong>❌ 传统方式的问题：</strong>Prefill 和 Decode 混在同一个集群，互相干扰——长序列 Prefill 会阻塞 Decode 的低延迟响应。
+      </div>
+
+      <div class="key-point" style="margin-top: 12px;">
+        <strong>✅ PD 分离的优势：</strong>
+        <ul>
+          <li>资源隔离：各用最适合的 GPU 配置</li>
+          <li>调度灵活：可分别优化</li>
+          <li>带宽利用率：Decode batch 可放到最大</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Slide 17: PD Separation Communication -->
+    <div class="slide">
+      <h1>🔀 PD 分离的节点间通信</h1>
+
+      <div class="concept-box">
+        <h3>📡 主要通信：KV Cache 传输</h3>
+        <p>Prefill 完成后，需要把生成的 KV Cache 传输到 Decode 集群。</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>KV Cache 大小计算</h3>
+          <div class="code-block"># 单 token 单层
+KV = 2 × num_heads × head_dim
+    = 2 × H (FP16)
+
+# 完整序列
+KV_total = B × S × 2 × H × num_layers
+
+# 示例: LLaMA-7B, 4096 token, FP16
+# H=8192, layers=32
+# KV = 1 × 4096 × 2 × 8192 × 32
+#   ≈ 2 GB</div>
+        </div>
+        <div class="card">
+          <h3>通信优化</h3>
+          <ul>
+            <li><strong>压缩传输</strong>: FP8 或更低精度</li>
+            <li><strong>流水线</strong>: Prefill 输出后立即开始 Decode</li>
+            <li><strong>部分传输</strong>: 只传必要部分</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="warning" style="margin-top: 12px;">
+        <strong>⚠️ 关键瓶颈：</strong>KV Cache 跨节点传输量巨大，是 PD 分离的主要开销。需要高速网络 (InfiniBand/NVLink Switch)。
+      </div>
+    </div>
+
+    <!-- Slide 18: PD Parallel Strategy -->
+    <div class="slide">
+      <h1>🔀 PD 分离适用的并行策略</h1>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>📦 Prefill 节点</h3>
+          <table>
+            <tr><th>并行方式</th><th>原因</th></tr>
+            <tr><td><strong>TP</strong></td><td>计算密集，提升单节点算力</td></tr>
+            <tr><td><strong>DP</strong></td><td>多 prompt 并行，提高吞吐</td></tr>
+            <tr><td><strong>PP</strong></td><td>超大模型可分层（较少用）</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>🎯 Decode 节点</h3>
+          <table>
+            <tr><th>并行方式</th><th>原因</th></tr>
+            <tr><td><strong>DP</strong></td><td>Decode batch 并行，吞吐关键</td></tr>
+            <tr><td><strong>EP</strong></td><td>MoE 模型专用</td></tr>
+            <tr><td><strong>序列并行</strong></td><td>长上下文减少显存压力</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="key-point" style="margin-top: 15px;">
+        <strong>💡 推荐配置：</strong>
+        <ul>
+          <li>Prefill: TP × DP (高算力利用率)</li>
+          <li>Decode: 纯 DP (最大化 batch size)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Slide 19: Communication Comparison -->
+    <div class="slide">
+      <h1>📊 通信量综合对比</h1>
+
+      <table>
+        <tr><th>策略</th><th>通信原语</th><th>传输内容</th><th>通信量级</th></tr>
+        <tr><td><strong>TP</strong></td><td>AllReduce</td><td>激活值/梯度</td><td>O(B×S×H/P)</td></tr>
+        <tr><td><strong>DP (训练)</strong></td><td>AllReduce</td><td>梯度</td><td>O(model_size)</td></tr>
+        <tr><td><strong>DP (推理)</strong></td><td>无</td><td>无</td><td>0</td></tr>
+        <tr><td><strong>PP</strong></td><td>Send/Recv</td><td>激活值</td><td>O(B×S×H)</td></tr>
+        <tr><td><strong>EP</strong></td><td>AllToAll</td><td>Token + Expert 输出</td><td>O(tokens×topk×expert)</td></tr>
+        <tr><td><strong>PD 分离</strong></td><td>Network</td><td>KV Cache</td><td>O(B×S×H×layers)</td></tr>
+      </table>
+
+      <div class="mermaid" style="margin-top: 15px;">
+pie title 带宽需求排序
+    "TP" : 40
+    "EP" : 35
+    "PD分离 KV传输" : 30
+    "PP" : 20
+    "DP推理" : 0
+      </div>
+    </div>
+
+    <!-- Slide 20: Selection Guide -->
+    <div class="slide">
+      <h1>🎯 并行策略选择指南</h1>
+
+      <div class="mermaid">
+flowchart TD
+    A{"模型能放入<br/>单GPU?"} -->|是| B{"需要更高<br/>吞吐?"}
+    A -->|否| C{"是 MoE?"}
+    B -->|是| D["✅ DP (推理无通信)"]
+    B -->|否| E["单GPU运行"]
+    C -->|是| F["✅ EP + TP/DP"]
+    C -->|否| G{"需要<br/>跨节点?"}
+    G -->|是| H["✅ TP + PP"]
+    G -->|否| I["✅ TP (NVLink)"]
+      </div>
+
+      <div class="card" style="margin-top: 18px;">
+        <h3>📋 PD 分离特殊场景</h3>
+        <table>
+          <tr><th>场景</th><th>推荐方案</th></tr>
+          <tr><td>低延迟 Decode</td><td>PD 分离 + Decode 纯 DP</td></tr>
+          <tr><td>长序列 Prefill</td><td>PD 分离 + Prefill TP×DP</td></tr>
+          <tr><td>超长上下文</td><td>PD 分离 + Decode 序列并行</td></tr>
+        </table>
+      </div>
+
+      <div class="concept-box" style="margin-top: 12px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+        <h3>💡 选择口诀</h3>
+        <p><strong>单卡能放 → DP</strong>（无通信）<br>
+        <strong>大模型 → TP</strong>（AllReduce）<br>
+        <strong>MoE → EP</strong>（AllToAll）<br>
+        <strong>跨节点 → TP+PP</strong><br>
+        <strong>极低延迟 → PD 分离</strong></p>
+      </div>
+    </div>
+
+    <!-- Slide 21: Summary -->
+    <div class="slide">
+      <h1>📝 总结</h1>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>📡 通信原语</h3>
+          <ul>
+            <li><strong>AllReduce</strong>: 归约 + 同步广播</li>
+            <li><strong>AllToAll</strong>: 全交换 (MoE 路由)</li>
+            <li><strong>Send/Recv</strong>: P2P (PP 阶段边界)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>⚙️ 并行策略</h3>
+          <table style="font-size: 0.85rem;">
+            <tr><th>策略</th><th>通信</th><th>特点</th></tr>
+            <tr><td>TP</td><td>AllReduce</td><td>层内分片</td></tr>
+            <tr><td>DP</td><td>无(推理)</td><td>副本扩展</td></tr>
+            <tr><td>PP</td><td>Send/Recv</td><td>流水线</td></tr>
+            <tr><td>EP</td><td>AllToAll</td><td>MoE专用</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 15px;">
+        <h3>🔀 PD 分离核心价值</h3>
+        <ul>
+          <li>Prefill: <strong>计算密集</strong> → TP × DP</li>
+          <li>Decode: <strong>带宽密集</strong> → 大 Batch DP</li>
+          <li>分离后各自优化，效率最大化</li>
+        </ul>
+      </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <h3>📊 关键公式</h3>
+        <div class="grid-3">
+          <div class="formula">TP: 2×B×S×H/P</div>
+          <div class="formula">EP: 2×tokens×topk×expert</div>
+          <div class="formula">PD: B×S×2×H×layers</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="nav">
+    <button onclick="prevSlide()">上一页</button>
+    <button onclick="nextSlide()">下一页</button>
+  </div>
+  <div class="slide-number" id="slideNumber">1 / 21</div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    const progress = document.getElementById('progress');
+    const slideNumber = document.getElementById('slideNumber');
+
+    async function renderMermaid() {
+      const unrendered = document.querySelectorAll('.slide.active .mermaid:not([data-rendered])');
+      for (const el of unrendered) {
+        el.setAttribute('data-rendered', 'true');
+        try {
+          const id = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+          const { svg } = await mermaid.render(id, el.textContent);
+          el.innerHTML = svg;
+        } catch (e) { console.error(e); }
+      }
+    }
+
+    function showSlide(n) {
+      if (n < 0) n = 0;
+      if (n >= totalSlides) n = totalSlides - 1;
+      currentSlide = n;
+      slides.forEach((s, i) => s.classList.toggle('active', i === currentSlide));
+      progress.style.width = ((currentSlide + 1) / totalSlides * 100) + '%';
+      slideNumber.textContent = (currentSlide + 1) + ' / ' + totalSlides;
+      renderMermaid();
+    }
+
+    function nextSlide() { showSlide(currentSlide + 1); }
+    function prevSlide() { showSlide(currentSlide - 1); }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+      if (e.key === 'ArrowLeft') prevSlide();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (e.target.tagName !== 'BUTTON') {
+        const x = e.clientX / window.innerWidth;
+        if (x > 0.7) nextSlide();
+        else if (x < 0.3) prevSlide();
+      }
+    });
+
+    showSlide(0);
+  </script>
+</body>
+</html>
