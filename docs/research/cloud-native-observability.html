@@ -107,7 +107,6 @@ flowchart TB
 
     subgraph PROCESS["数据处理层"]
         OTelC["OTel Collector<br/>接收→处理→转发"]
-        LS["Logstash<br/>Grok 解析"]
     end
 
     subgraph STORE["存储层"]
@@ -122,7 +121,7 @@ flowchart TB
     end
 
     A1 --> FB & OTelS
-    FB --> LS --> ES --> KB
+    FB --> ES --> KB
     OTelS --> OTelC
     OTelC --> PRO --> G
     OTelC --> ES
@@ -547,78 +546,11 @@ GET /nginx-logs/_search
   </div>
 </div>
 
-<!-- ============= Slide 14: Logstash ============= -->
-<div class="slide">
-  <h1>⚙️ Logstash — 日志加工厂</h1>
-  <p>Logstash 的核心模型是 Pipeline：<strong>输入 → 过滤 → 输出</strong></p>
-  <div class="mermaid">
-flowchart LR
-    I["Input<br/>beats/tcp/syslog"] --> F["Filter<br/>grok/date/mutate/geoip"]
-    F --> O["Output<br/>es/kafka/s3/csv"]
-  </div>
-  <div class="grid-2">
-    <div>
-      <h3>完整配置：Nginx 日志解析</h3>
-      <div class="code-block">input {
-  beats { port => 5044 }
-}
-
-filter {
-  # Grok：把一行 nginx 日志拆成字段
-  grok {
-    match => {
-      "message" => "%{IP:client_ip} %{HTTPDATE:timestamp} %{WORD:method} %{URIPATHPARAM:uri} %{NUMBER:status_code} %{NUMBER:bytes}"
-    }
-  }
-
-  # 设置时间字段
-  date {
-    match => ["timestamp", "dd/MMM/yyyy:HH:mm:ss Z"]
-    target => "@timestamp"
-  }
-
-  # 经纬度
-  geoip { source => "client_ip" }
-
-  # 类型转换
-  mutate {
-    convert => {
-      "status_code" => "integer"
-      "bytes" => "integer"
-    }
-    rename => { "bytes" => "response_size" }
-  }
-}
-
-output {
-  elasticsearch {
-    hosts => ["localhost:9200"]
-    index => "nginx-logs-%{+YYYY.MM.dd}"
-  }
-}</div>
-    </div>
-    <div>
-      <h3>Grok 常用模式速查</h3>
-      <table>
-        <tr><th>模式</th><th>匹配</th></tr>
-        <tr><td>IP</td><td>192.168.1.1</td></tr>
-        <tr><td>URIPATHPARAM</td><td>/api/v1/users?id=1</td></tr>
-        <tr><td>HTTPDATE</td><td>07/May/2025:12:00:00 +0000</td></tr>
-        <tr><td>NUMBER</td><td>200, 3.14</td></tr>
-        <tr><td>WORD</td><td>abc, GET, POST</td></tr>
-        <tr><td>GREEDYDATA</td><td>匹配任意内容</td></tr>
-      </table>
-      <div class="info-box"><strong>💡 在线调试：</strong>用 <code>grokdebugger.com</code> 贴一行日志测试 Grok 模式是否正确。</div>
-      <div class="warning"><strong>⚠️ 注意内存：</strong>Logstash 基于 JVM，单实例 ~1GB 内存。轻量场景用 Fluent Bit（~650KB）替代。</div>
-    </div>
-  </div>
-</div>
-
 <!-- ============= Slide 15: Fluent Bit ============= -->
 <div class="slide">
   <h1>💨 Fluent Bit — 轻量日志采集</h1>
   <div class="grid-2">
-    <div class="concept-box" style="background:linear-gradient(135deg,#059669,#10b981)"><h3>⚡ 核心优势</h3><p>C 语言编写，内存 ~650KB（空闲）<br>Fluentd: ~40MB · Logstash: ~1GB+<br>性能是 Fluentd 的 10~40 倍</p></div>
+    <div class="concept-box" style="background:linear-gradient(135deg,#059669,#10b981)"><h3>⚡ 核心优势</h3><p>C 语言编写，内存 ~650KB（空闲）<br>Fluentd: ~40MB<br>性能是 Fluentd 的 10~40 倍<br>支持 Grok 正则解析（Nginx/Apache 等 200+ 内置模式）</p></div>
     <div><h3>6 阶段 Pipeline</h3><div class="mermaid">flowchart LR
 I["INPUT"]-->P["PARSER"]-->F["FILTER"]-->B["BUFFER"]-->R["ROUTING"]-->O["OUTPUT"]</div></div>
   </div>
@@ -657,10 +589,10 @@ I["INPUT"]-->P["PARSER"]-->F["FILTER"]-->B["BUFFER"]-->R["ROUTING"]-->O["OUTPUT"
     match        *
     format       json_lines</div>
   <table>
-    <tr><th></th><th>Fluent Bit</th><th>Fluentd</th><th>Logstash</th></tr>
-    <tr><td>内存</td><td><strong>~650 KB</strong></td><td>~40 MB</td><td>~1 GB</td></tr>
-    <tr><td>语言</td><td>C</td><td>Ruby</td><td>JRuby (JVM)</td></tr>
-    <tr><td>适用场景</td><td>K8s DaemonSet / 边缘</td><td>数据中心</td><td>复杂 Pipeline</td></tr>
+    <tr><th></th><th>Fluent Bit</th><th>Fluentd</th></tr>
+    <tr><td>内存</td><td><strong>~650 KB</strong></td><td>~40 MB</td></tr>
+    <tr><td>语言</td><td>C</td><td>Ruby</td></tr>
+    <tr><td>适用场景</td><td>K8s DaemonSet / 边缘</td><td>数据中心 / 企业</td></tr>
   </table>
 </div>
 
@@ -1126,7 +1058,7 @@ flowchart LR
   <h1>🔄 第 5 章 · 项目关系与场景选型</h1>
   <div class="grid-2">
     <div class="card" style="border-left-color:#ef4444"><h3>⚔️ 竞争关系</h3><ul>
-      <li><strong>Fluent Bit vs Logstash：</strong>内存差 1000 倍（650KB vs 1GB）。简单场场景直接 FB，复杂 Grok 解析用 Logstash</li>
+      <li><strong>Fluent Bit vs Logstash（已淘汰）：</strong>FB 650KB vs LS 1GB+，新项目统一用 FB。200+ 内置 Grok 模式足够覆盖日志解析需求</li>
       <li><strong>OTel Collector vs Fluent Bit：</strong>OTel 要统一三信号，FB 专精日志。最新 FB v3 也开始支持 Traces/Metrics</li>
       <li><strong>Kibana vs Grafana：</strong>Kibana 绑定 ES 生态，Grafana 万能画图板。很多公司两个都用</li>
     </ul></div>
