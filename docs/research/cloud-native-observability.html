@@ -383,7 +383,7 @@ li { margin-bottom: var(--space-2); }
     <li><a href="#sec-1">云原生可观测性全景概览</a></li>
     <li><a href="#sec-2">ELK Stack 深度分析</a></li>
     <li><a href="#sec-3">Grafana + Prometheus 生态</a></li>
-    <li><a href="#sec-4">OpenTelemetry + Fluent Bit</a></li>
+    <li><a href="#sec-4">OpenTelemetry + Fluent Bit + Jaeger</a></li>
     <li><a href="#sec-5">项目间关系与生态对比</a></li>
     <li><a href="#sec-6">查询语言入门详解</a></li>
     <li><a href="#sec-ui">工具 UI 实操入门</a></li>
@@ -398,7 +398,7 @@ li { margin-bottom: var(--space-2); }
   <!-- 封面区域 -->
   <h2>云原生可观测项目深度研究</h2>
   <p style="font-size: var(--text-lg); color: var(--text-secondary); margin-bottom: var(--space-1);">
-    覆盖 12 个核心开源项目 · 全景式对比分析 · 选型决策指南
+    覆盖 7 个核心开源项目 · 深度对比分析 · 实操入门指导
   </p>
   <p style="color: var(--text-muted); font-size: var(--text-sm); margin-bottom: var(--space-8);">
     报告日期：2026-05-07
@@ -407,13 +407,14 @@ li { margin-bottom: var(--space-2); }
   <!-- 研究范围 -->
   <h3>研究范围</h3>
   <div class="card">
-    <p>本报告对云原生可观测性领域的 12 个核心开源项目进行深度研究，覆盖日志管理、指标监控、分布式追踪、数据采集与可视化五大技术方向：</p>
+    <p>本报告聚焦 7 个核心项目，覆盖可观测性的完整链路：</p>
     <ul>
-      <li><strong>日志管理</strong>：Elasticsearch、Logstash、Kibana（ELK Stack）、Loki</li>
-      <li><strong>指标监控</strong>：Prometheus、Thanos、Grafana Mimir</li>
-      <li><strong>分布式追踪</strong>：OpenTelemetry、Jaeger、Tempo</li>
-      <li><strong>数据采集</strong>：Fluent Bit、Vector</li>
-      <li><strong>可视化与告警</strong>：Grafana、Alertmanager</li>
+      <li><strong>全文搜索与日志存储：</strong>Elasticsearch</li>
+      <li><strong>可视化与分析：</strong>Kibana、Grafana</li>
+      <li><strong>指标采集与告警：</strong>Prometheus</li>
+      <li><strong>统一数据采集标准：</strong>OpenTelemetry</li>
+      <li><strong>轻量日志采集：</strong>Fluent Bit</li>
+      <li><strong>分布式追踪：</strong>Jaeger</li>
     </ul>
   </div>
 
@@ -426,8 +427,8 @@ li { margin-bottom: var(--space-2); }
   </div>
 
   <div class="highlight-panel">
-    <h4>Grafana LGTM 堆栈形成三信号闭环标准</h4>
-    <p>Loki（日志）+ Grafana（可视化）+ Tempo（追踪）+ Mimir（指标）构成完整闭环，提供从数据采集到仪表盘的一站式体验，成为新兴项目事实上的对标基准。</p>
+    <h4>Grafana + Prometheus 是监控领域的"黄金组合"</h4>
+    <p>Grafana + Prometheus 是云原生可观测性最广泛采用的"黄金组合"，OpenTelemetry 正在成为统一数据采集标准。</p>
   </div>
 
   <div class="highlight-panel">
@@ -445,12 +446,13 @@ li { margin-bottom: var(--space-2); }
   <div class="toc">
     <ol>
       <li><a href="#sec-1">云原生可观测性全景概览</a></li>
-      <li><a href="#sec-2">日志管理：ELK Stack 深度分析</a></li>
-      <li><a href="#sec-3">指标监控：Prometheus 与 Mimir</a></li>
-      <li><a href="#sec-4">分布式追踪：OpenTelemetry 与 Tempo</a></li>
-      <li><a href="#sec-5">数据采集：Fluent Bit 与 Vector</a></li>
-      <li><a href="#sec-6">可视化与告警体系</a></li>
-      <li><a href="#sec-7">趋势洞察与选型建议</a></li>
+      <li><a href="#sec-2">ELK Stack 深度分析</a></li>
+      <li><a href="#sec-3">Prometheus + Grafana</a></li>
+      <li><a href="#sec-4">OpenTelemetry + Fluent Bit + Jaeger</a></li>
+      <li><a href="#sec-5">项目间关系与生态对比</a></li>
+      <li><a href="#sec-6">查询语言入门详解</a></li>
+      <li><a href="#sec-ui">工具 UI 实操入门</a></li>
+      <li><a href="#sec-7">部署模式与总结建议</a></li>
     </ol>
   </div>
 
@@ -557,7 +559,7 @@ li { margin-bottom: var(--space-2); }
   <!-- 项目领域覆盖矩阵 -->
   <h3>项目领域覆盖矩阵</h3>
 
-  <p>以下矩阵展示了 12 个核心开源项目在 6 个可观测性领域的覆盖程度（★ 至 ★★★★★）。星级越高，代表该项目在该领域的能力越完善。</p>
+  <p>以下矩阵展示了本报告聚焦的 7 个核心项目在 6 个可观测性领域的覆盖程度（★ 至 ★★★★）。</p>
 
   <div class="table-wrapper">
     <table>
@@ -567,27 +569,24 @@ li { margin-bottom: var(--space-2); }
           <th><span class="tag tag-metrics">Metrics</span></th>
           <th><span class="tag tag-logs">Logging</span></th>
           <th><span class="tag tag-traces">Traces</span></th>
-          <th><span class="tag tag-profile">Profiling</span></th>
           <th><span class="tag tag-viz">可视化</span></th>
           <th><span class="tag tag-search">全文搜索</span></th>
+          <th>数据采集</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td><strong>Prometheus</strong></td><td>★★★★★</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★★☆☆☆</td><td>★★☆☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>Grafana</strong></td><td>★★★★☆</td><td>★★★☆☆</td><td>★★★☆☆</td><td>★★☆☆☆</td><td>★★★★★</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>ELK</strong></td><td>★★☆☆☆</td><td>★★★★★</td><td>★★☆☆☆</td><td>★☆☆☆☆</td><td>★★★★☆</td><td>★★★★★</td></tr>
-        <tr><td><strong>Loki</strong></td><td>★☆☆☆☆</td><td>★★★★★</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★★★☆☆</td><td>★★★☆☆</td></tr>
-        <tr><td><strong>Jaeger</strong></td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★★★★★</td><td>★☆☆☆☆</td><td>★★☆☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>Tempo</strong></td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★★★★★</td><td>★☆☆☆☆</td><td>★★☆☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>OpenTelemetry</strong></td><td>★★★★☆</td><td>★★★★☆</td><td>★★★★★</td><td>★★★☆☆</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>Fluent Bit</strong></td><td>★★☆☆☆</td><td>★★★★★</td><td>★★☆☆☆</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>Thanos</strong></td><td>★★★★★</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★★☆☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>Mimir</strong></td><td>★★★★★</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★★☆☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>Pyroscope</strong></td><td>★★☆☆☆</td><td>★☆☆☆☆</td><td>★★☆☆☆</td><td>★★★★★</td><td>★★★☆☆</td><td>★☆☆☆☆</td></tr>
-        <tr><td><strong>Cortex</strong></td><td>★★★★★</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★☆☆☆☆</td><td>★★☆☆☆</td><td>★☆☆☆☆</td></tr>
+        <tr><td><strong>Elasticsearch</strong></td><td>★★</td><td>★★★★</td><td>★</td><td>★</td><td>★★★★</td><td>—</td></tr>
+        <tr><td><strong>Kibana</strong></td><td>★★</td><td>★★★★</td><td>★</td><td>★★★★</td><td>★★★★</td><td>—</td></tr>
+        <tr><td><strong>Prometheus</strong></td><td>★★★★</td><td>—</td><td>—</td><td>★★</td><td>—</td><td>★★★★</td></tr>
+        <tr><td><strong>Grafana</strong></td><td>★★★★</td><td>★★</td><td>★★</td><td>★★★★</td><td>—</td><td>—</td></tr>
+        <tr><td><strong>OpenTelemetry</strong></td><td>★★★</td><td>★★★</td><td>★★★★</td><td>—</td><td>—</td><td>★★★★</td></tr>
+        <tr><td><strong>Fluent Bit</strong></td><td>★★</td><td>★★★★</td><td>★★</td><td>—</td><td>—</td><td>★★★★</td></tr>
+        <tr><td><strong>Jaeger</strong></td><td>—</td><td>—</td><td>★★★★</td><td>★★</td><td>—</td><td>—</td></tr>
       </tbody>
     </table>
   </div>
+
+  <p>此外，Loki（日志）、Tempo（追踪）、Mimir/Thanos（长期存储）、Pyroscope（持续分析）等也是生态中的重要项目，有兴趣可自行了解。</p>
 
   <!-- 核心趋势 -->
   <h3>核心趋势</h3>
@@ -607,7 +606,7 @@ li { margin-bottom: var(--space-2); }
     </div>
     <div class="card">
       <h4>对象存储成为后端基石</h4>
-      <p>Thanos、Mimir、Loki、Tempo 等新一代可观测性后端均以对象存储（S3 / GCS / MinIO）为底层存储，替代传统的本地盘模式。对象存储的低成本与高扩展性使长期数据留存成为可行，推动 <strong>Observability as Data Lake</strong> 范式。</p>
+      <p>新一代可观测性后端均以对象存储（S3 / GCS / MinIO）为底层存储，替代传统的本地盘模式。对象存储的低成本与高扩展性使长期数据留存成为可行。</p>
     </div>
   </div>
 </section>
@@ -1278,7 +1277,7 @@ logging.level: info</code></pre>
 
   <!-- ===== 架构概览 ===== -->
   <h3>生态架构</h3>
-  <p>Grafana 生态以 Grafana Labs 为核心，围绕 Prometheus（指标）、Loki（日志）、Tempo（追踪）三条产品线构建，配合 Mimir（长期存储）与 Pyroscope（性能分析）形成完整的 CNCF 原生可观测性栈。</p>
+  <p>Grafana 生态以 Grafana Labs 为核心，其中 Prometheus 是指标采集的事实标准，Grafana 作为统一可视化层可对接 40+ 数据源。</p>
 
   <!-- ===== Prometheus ===== -->
   <h3>Prometheus 指标系统</h3>
@@ -1341,102 +1340,11 @@ logging.level: info</code></pre>
     </div>
   </div>
 
-  <!-- ===== Loki ===== -->
-  <h3>Loki 日志聚合</h3>
-
-  <p>Loki 是 Grafana Labs 推出的日志聚合系统，采用 <strong>标签驱动</strong> 的存储架构。日志数据通过标签（与 Prometheus 标签体系一致）进行索引，日志内容本身存储为压缩块，而非全文索引，大幅降低存储成本。</p>
-
-  <p><strong>核心设计理念：</strong>仅索引元数据（标签），不索引日志内容。查询时先通过标签选择日志流，再对匹配的日志内容进行行过滤或正则匹配。</p>
-
-  <h4>LogQL 示例</h4>
-
-  <p><strong>流选择器 + 行过滤</strong> — 筛选应用 <code class="inline-code">nginx</code> 中包含 <code class="inline-code">error</code> 关键字的日志行：</p>
-<pre><code>{app="nginx"} |= "error"</code></pre>
-
-  <p><strong>日志速率</strong> — 计算 nginx 日志每秒产生速率，可用于与指标系统中的错误率进行关联验证：</p>
-<pre><code>rate({app="nginx"}[5m])</code></pre>
-
-  <!-- ===== Tempo ===== -->
-  <h3>Tempo 分布式追踪</h3>
-
-  <p>Tempo 是 Grafana Labs 的分布式追踪后端，支持 OpenTelemetry、Jaeger、Zipkin 等多种协议的数据写入。其核心特点包括：</p>
-
-  <ul>
-    <li><strong>对象存储后端：</strong>使用 S3/GCS/Azure Blob 等廉价对象存储，无需专有索引引擎</li>
-    <li><strong>TraceQL 查询语言：</strong>通过 TraceQL 可以按 Span 属性、持续时间、服务名称等维度检索追踪</li>
-    <li><strong>TraceID 检索：</strong>支持通过 traceID 快速定位特定请求的全链路追踪数据</li>
-    <li><strong>链路关联：</strong>与 Loki 集成，实现日志到追踪的无缝跳转——日志中携带 traceID，一键跳转至 Tempo 追踪详情</li>
-  </ul>
-
-  <!-- ===== Mimir ===== -->
-  <h3>Mimir 长期存储</h3>
-
-  <p>Mimir 是 Prometheus 的长期指标存储方案，提供水平扩展、多租户、对象存储后端（S3/GCS）等功能。核心价值在于：</p>
-
-  <ul>
-    <li><strong>Prometheus API 兼容：</strong>现有 Grafana 仪表盘和 PromQL 查询无需任何改造即可对接 Mimir</li>
-    <li><strong>水平扩展：</strong>通过微服务架构分离读写路径，各组件可独立扩缩容</li>
-    <li><strong>压缩与降采样：</strong>自动对历史数据进行压缩降采样，平衡存储成本与查询性能</li>
-    <li><strong>多租户隔离：</strong>支持多团队共享一套 Mimir 集群，租户间数据隔离</li>
-  </ul>
-
-  <!-- ===== 生态对比 ===== -->
-  <h3>组件总览</h3>
-
-  <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>组件</th>
-          <th>信号类型</th>
-          <th>查询语言</th>
-          <th>存储后端</th>
-          <th>关键特性</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Prometheus</td>
-          <td>Metrics</td>
-          <td>PromQL</td>
-          <td>本地 TSDB</td>
-          <td>Pull 模型、告警规则、服务发现</td>
-        </tr>
-        <tr>
-          <td>Grafana</td>
-          <td>统一可视化</td>
-          <td>多数据源</td>
-          <td>无（仅配置）</td>
-          <td>Dashboard、Explore、Alerting</td>
-        </tr>
-        <tr>
-          <td>Loki</td>
-          <td>Logs</td>
-          <td>LogQL</td>
-          <td>对象存储</td>
-          <td>标签索引、压缩存储、低 TCO</td>
-        </tr>
-        <tr>
-          <td>Tempo</td>
-          <td>Traces</td>
-          <td>TraceQL</td>
-          <td>对象存储</td>
-          <td>TraceID 检索、OTel 兼容、链路关联</td>
-        </tr>
-        <tr>
-          <td>Mimir</td>
-          <td>Metrics</td>
-          <td>PromQL</td>
-          <td>对象存储</td>
-          <td>水平扩展、多租户、长期存储</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <p style="color: var(--text-muted); font-style: italic;">Grafana 生态还包括 Loki（标签驱动日志聚合）、Tempo（分布式追踪）、Mimir（Prometheus 长期存储）等项目，与 Grafana 原生集成，感兴趣可自行深入了解，本报告不再展开。</p>
 
   <!-- ===== 关键结论 ===== -->
   <div class="highlight-panel">
-    <p><strong>关键结论：</strong>Grafana + Prometheus 生态通过统一的标签体系和查询语言（PromQL/LogQL/TraceQL），实现了指标、日志、追踪三大信号的无缝关联。运维人员可以在 Grafana 中从一个 Dashboard 面板直接跳转到相关日志和追踪详情，极大缩短故障排查的 MTTR（平均修复时间）。对于新建云原生可观测性平台，Grafana 生态是目前社区最活跃、集成度最高的开源选择。</p>
+    <p><strong>核心定位：</strong>Prometheus 负责指标采集与告警，Grafana 负责统一可视化（支持 40+ 数据源）。两者配合是云原生可观测性最广泛采用的"黄金组合"。</p>
   </div>
 
 </section>
@@ -1447,9 +1355,9 @@ logging.level: info</code></pre>
   <!-- ============================================ -->
   <!-- Section Header -->
   <!-- ============================================ -->
-  <h2>OpenTelemetry + Fluent Bit</h2>
+  <h2>OpenTelemetry + Fluent Bit + Jaeger</h2>
   <p>
-    OpenTelemetry 和 Fluent Bit 是现代云原生可观测性栈中采集层的核心支柱。前者定义了标准化数据模型与采集规范，后者提供了极致轻量的日志收集能力。两者共同构成了从数据产生到管道传输的基础设施层。
+    OpenTelemetry 和 Fluent Bit 是现代云原生可观测性栈中采集层的核心支柱。前者定义了标准化数据模型与采集规范，后者提供了极致轻量的日志收集能力。Jaeger 则与 OTel 深度集成，作为分布式追踪的后端存储与查询方案。三者共同构成了从数据产生到管道传输的基础设施层。
   </p>
 
   <!-- ============================================ -->
@@ -1928,41 +1836,6 @@ service:
     <p><strong>关键洞察：</strong>两者正在趋同。OTel Collector 补充日志能力，Fluent Bit 扩展 Metrics/Traces。未来趋势可能是 OTel 作为标准协议层定义数据模型，Fluent Bit 作为高性能实现引擎——两者从竞争走向互补。</p>
   </div>
 
-  <!-- ── 竞争组 3: Thanos vs Cortex vs Mimir ── -->
-  <h4><span class="tag tag-metrics">Metrics</span> Thanos vs Cortex vs Mimir</h4>
-  <p>Prometheus 长期存储的三大开源方案，解决 Prometheus 单点存储和长期数据保留的核心痛点。</p>
-
-  <div class="compare-grid">
-    <div class="compare-item">
-      <h4>Thanos</h4>
-      <p><strong>社区：</strong>CNCF 毕业项目，独立社区维护</p>
-      <p><strong>架构：</strong>可选组件（Sidecar / Store / Compactor / Ruler）</p>
-      <p><strong>存储后端：</strong>对象存储（S3 / GCS / MinIO）</p>
-      <p><strong>关键特性：</strong>组件灵活可裁剪，无写放大，适合已有 Prometheus 集群的平滑扩展</p>
-      <p><strong>部署复杂度：</strong>中等</p>
-    </div>
-    <div class="compare-item">
-      <h4>Cortex</h4>
-      <p><strong>社区：</strong>CNCF 毕业项目，已由 Mimir 接替</p>
-      <p><strong>架构：</strong>微服务 + 无共享架构</p>
-      <p><strong>存储后端：</strong>对象存储 + 本地缓存</p>
-      <p><strong>关键特性：</strong>多租户原生、写放大问题突出</p>
-      <p><strong>部署复杂度：</strong>高</p>
-    </div>
-    <div class="compare-item">
-      <h4>Mimir</h4>
-      <p><strong>社区：</strong>Grafana Labs 主导，Cortex 继任者</p>
-      <p><strong>架构：</strong>微服务 + 无共享（继承 Cortex）</p>
-      <p><strong>存储后端：</strong>对象存储 + 块压缩优化</p>
-      <p><strong>关键特性：</strong>简化运维、水平扩展、Grafana 深度集成、解决写放大</p>
-      <p><strong>部署复杂度：</strong>较低（相对 Cortex）</p>
-    </div>
-  </div>
-
-  <div class="highlight-panel">
-    <p><strong>关键洞察：</strong>Mimir 是 Cortex 的进化版，解决了 Cortex 严重的写放大和运维复杂度问题。Grafana Labs 的全力投入使其成为当前 Prometheus 长期存储的首选方案。Thanos 的"胶水式"集成仍适用于已有大规模 Prometheus 部署的场景，但新项目建议直接选用 Mimir。</p>
-  </div>
-
   <!-- ── 竞争组 4: Prometheus vs Elasticsearch ── -->
   <h4><span class="tag tag-metrics">Metrics</span> Prometheus vs <span class="tag tag-search">Search</span> Elasticsearch</h4>
   <p>两者严格来说并非直接竞争对手——Prometheus 是指标采集和存储的王者，Elasticsearch 是日志搜索和分析的王者。但它们在大型可观测性平台中经常被放在一起比较。</p>
@@ -1988,7 +1861,7 @@ service:
     <p><strong>关键洞察：</strong>两者形成了"各司其职"的格局——指标用 Prometheus，日志用 ES。真正的竞争不在工具层面，而在更高维度的生态之战：Prometheus 所在的 LGTM 生态 vs Elasticsearch 所在的 ELK 生态。</p>
   </div>
 
-  <!-- ── 竞争组 5: ELK vs LGTM vs OTel 生态 ── -->
+  <!-- ── 竞争组 4: ELK vs OTel 生态 ── -->
   <h4><span class="tag tag-viz">Ecosystem</span> ELK vs LGTM vs OTel 生态</h4>
   <p>三大生态体系形成三足鼎立，分别代表了商业公司主导（Elastic / Grafana Labs）和社区标准主导（CNCF OTel）三种不同的可观测性策略。</p>
 
@@ -2038,7 +1911,7 @@ service:
         <span class="tag tag-traces">Traces</span>
         <span class="tag tag-viz">Viz</span>
       </div>
-      <p>Grafana Labs 定义的"完整可观测性平台"组合。Prometheus 采集指标，Loki 采集日志，Tempo 采集链路，Mimir 提供指标长期存储，Grafana 统一可视化。五个组件在数据流上完全互补，形成从采集到展示的完整闭环。</p>
+      <p>Prometheus 负责指标采集与告警，Grafana 负责统一可视化（对接 Prometheus、ES、Loki 等 40+ 数据源）。五个组件在数据流上完全互补，形成从采集到展示的完整闭环。</p>
     </div>
     <div class="card">
       <h4>OTel Collector + 任意后端</h4>
@@ -2168,7 +2041,7 @@ service:
   <h2>6. 查询语言入门详解</h2>
 
   <p>
-    可观测性三大支柱——日志、指标、链路——各自拥有专用的查询语言。Elasticsearch Query DSL（JSON 风格）、PromQL（Prometheus 的函数式查询）、LogQL（Loki 的日志查询）是该领域最广泛使用的三种语言。掌握它们是构建可观测性平台的基本功。本章以"入门教程"的形式逐一拆解其完整语法与示例。
+    可观测性三大支柱——日志、指标、链路——各自拥有专用的查询语言。Elasticsearch Query DSL（JSON 风格）和 PromQL（Prometheus 的函数式查询）是该领域最核心的两种查询语言。此外 Grafana Loki 提供 LogQL、Grafana Tempo 提供 TraceQL 用于各自领域的查询。掌握它们是构建可观测性平台的基本功。本章以"入门教程"的形式逐一拆解其完整语法与示例。
   </p>
 
   <!-- ============================================ -->
@@ -2318,44 +2191,15 @@ service:
   <pre><code>http_requests_total offset 1h</code></pre>
 
   <!-- ============================================ -->
-  <!-- 6.3 LogQL                                    -->
-  <!-- ============================================ -->
-  <h3>6.3 LogQL</h3>
-
-  <p>
-    LogQL 是 Grafana Loki 的日志查询语言，语法深受 PromQL 影响，但针对日志行内容处理做了扩展。其基本结构为：<strong>日志流选择器 + 行过滤器 + 解析器/格式化器 + 区间聚合</strong>。
-  </p>
-
-  <h4>6.3.1 Log Stream Selector — 日志流选择器</h4>
-  <p>与 PromQL 的标签选择器一致，先通过标签筛选日志流（即日志来源）。</p>
-  <pre><code>{job="nginx", env="prod"}</code></pre>
-
-  <h4>6.3.2 Line Filter — 行过滤器</h4>
-  <p>
-    在流选择器后通过管道符 <code class="inline-code">|</code> 追加过滤器。支持精确包含（<code class="inline-code">|=</code>）、排除（<code class="inline-code">!=</code>）、正则匹配（<code class="inline-code">|=~</code> 和 <code class="inline-code">!~</code>）。
-  </p>
-  <pre><code>{job="nginx"} |= "error" |~ "5[0-9]{2}"</code></pre>
-
-  <h4>6.3.3 Parser — 解析与格式化</h4>
-  <p>
-    <code class="inline-code">| json</code> 将 JSON 格式的日志行解析为键值对，便于后续过滤与展示。<code class="inline-code">| logfmt</code> 处理 logfmt 格式。<code class="inline-code">| line_format</code> 可重写日志行内容。
-  </p>
-  <pre><code>{app="web"} | json
-| line_format "{{.method}} {{.status}}"</code></pre>
-
-  <h4>6.3.4 Range Aggregation — 区间聚合</h4>
-  <p>与 PromQL 的 Range Vector 类似，LogQL 也支持对日志条目进行速率计算，实现日志指标的等价能力。</p>
-  <pre><code>rate({app="nginx"}[5m])</code></pre>
+  <!-- 6.3 LogQL（简述） -->
+  <h3>6.3 LogQL（Grafana Loki 日志查询）</h3>
+  <p>LogQL 是 Loki 的日志查询语言，语法深受 PromQL 影响。基本结构：<code class="inline-code">{标签选择器} |="关键词"</code>。支持流选择器、行过滤器、json/logfmt 解析器和区间聚合。详细语法可参考 Loki 官方文档，本报告不再展开。</p>
 
   <!-- ============================================ -->
   <!-- 6.4 三种语言综合对比                          -->
   <!-- ============================================ -->
-  <h3>6.4 三种语言特性对比</h3>
-
-  <p>
-    下表从数据模型、查询入口、过滤方式、聚合能力等多个维度横向对比三种语言，帮助读者根据场景选择合适工具。
-  </p>
-
+    <h3>6.4 两种核心语言对比</h3>
+  <p>以下表格从多个维度横向对比 ES DSL 和 PromQL 两种核心查询语言。</p>
   <div class="table-wrapper">
     <table>
       <thead>
@@ -2363,7 +2207,6 @@ service:
           <th>对比维度</th>
           <th>ES Query DSL</th>
           <th>PromQL</th>
-          <th>LogQL</th>
         </tr>
       </thead>
       <tbody>
@@ -2371,116 +2214,76 @@ service:
           <td><strong>数据对象</strong></td>
           <td>JSON 文档（日志 / 指标 / 链路）</td>
           <td>时间序列（Timeseries）</td>
-          <td>日志行（Log Lines）</td>
-        </tr>
-        <tr>
-          <td><strong>查询入口</strong></td>
-          <td>HTTP POST <code class="inline-code">_search</code></td>
-          <td>HTTP GET /api/v1/query</td>
-          <td>HTTP GET /loki/api/v1/query_range</td>
         </tr>
         <tr>
           <td><strong>查询格式</strong></td>
           <td>JSON 结构化</td>
           <td>函数式表达式</td>
-          <td>管道式表达式</td>
         </tr>
         <tr>
           <td><strong>字段筛选</strong></td>
-          <td><code class="inline-code">term</code> / <code class="inline-code">match</code> / <code class="inline-code">range</code></td>
-          <td>标签选择器 <code class="inline-code">{job="x"}</code></td>
-          <td>流选择器 + 行过滤 <code class="inline-code">{job="x"} |= "err"</code></td>
+          <td><code>term</code> / <code>match</code> / <code>range</code></td>
+          <td>标签选择器 <code>{job="x"}</code></td>
         </tr>
         <tr>
-          <td><strong>时间范围</strong></td>
-          <td><code class="inline-code">range</code> 过滤 <code class="inline-code">@timestamp</code></td>
-          <td>HTTP 参数 <code class="inline-code">start</code> / <code class="inline-code">end</code></td>
-          <td>HTTP 参数 <code class="inline-code">start</code> / <code class="inline-code">end</code></td>
-        </tr>
-        <tr>
-          <td><strong>速率 / 增长率</strong></td>
+          <td><strong>速率计算</strong></td>
           <td>无原生支持（需脚本化）</td>
-          <td><code class="inline-code">rate()</code> / <code class="inline-code">irate()</code> / <code class="inline-code">increase()</code></td>
-          <td><code class="inline-code">rate()</code> / <code class="inline-code">count_over_time()</code></td>
+          <td><code>rate()</code> / <code>irate()</code> / <code>increase()</code></td>
         </tr>
         <tr>
           <td><strong>分组聚合</strong></td>
-          <td><code class="inline-code">terms</code> / <code class="inline-code">date_histogram</code></td>
-          <td><code class="inline-code">sum by()</code> / <code class="inline-code">avg by()</code></td>
-          <td><code class="inline-code">sum by()</code> / <code class="inline-code">avg by()</code></td>
+          <td><code>terms</code> / <code>date_histogram</code></td>
+          <td><code>sum by()</code> / <code>avg by()</code></td>
         </tr>
         <tr>
-          <td><strong>分位数计算</strong></td>
-          <td><code class="inline-code">percentiles</code> 聚合</td>
-          <td><code class="inline-code">histogram_quantile()</code></td>
-          <td><code class="inline-code">quantile_over_time()</code></td>
+          <td><strong>分位数</strong></td>
+          <td><code>percentiles</code> 聚合</td>
+          <td><code>histogram_quantile()</code></td>
         </tr>
         <tr>
           <td><strong>全文搜索</strong></td>
-          <td><strong>核心能力</strong> — <code class="inline-code">match</code> / <code class="inline-code">match_phrase</code></td>
+          <td><strong>核心能力</strong> — <code>match</code> / <code>match_phrase</code></td>
           <td>不支持</td>
-          <td><code class="inline-code">|=</code> / <code class="inline-code">|=~</code> 行内匹配</td>
         </tr>
         <tr>
           <td><strong>典型工具</strong></td>
           <td>Elasticsearch, Kibana</td>
-          <td>Prometheus, Grafana, Thanos</td>
-          <td>Loki, Grafana</td>
+          <td>Prometheus, Grafana</td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <!-- ============================================ -->
-  <!-- 6.5 学习要点                                 -->
-  <!-- ============================================ -->
+  <!-- 学习要点 -->
   <h3>6.5 学习要点</h3>
-
-  <div class="card-grid-3">
+  <div class="card-grid">
     <div class="card">
       <h4>ES Query DSL</h4>
       <ul>
         <li>JSON 格式，适合机器生成和解析</li>
-        <li><code class="inline-code">match</code> 作分词搜索，<code class="inline-code">term</code> 作精确查找</li>
-        <li><code class="inline-code">bool</code> 四种子句是组合查询核心</li>
+        <li><code>match</code> 作分词搜索，<code>term</code> 作精确查找</li>
+        <li><code>bool</code> 四种子句是组合查询核心</li>
         <li>聚合（Aggs）将 ES 从搜索引擎升级为分析引擎</li>
       </ul>
     </div>
-
     <div class="card">
       <h4>PromQL</h4>
       <ul>
-        <li>纯函数式风格，支持链式运算</li>
-        <li>区分 Instant Vector 和 Range Vector</li>
-        <li><code class="inline-code">rate</code> / <code class="inline-code">irate</code> / <code class="inline-code">increase</code> 三选一需理解场景差异</li>
-        <li><code class="inline-code">histogram_quantile</code> 是 SLO 监控的基础</li>
-      </ul>
-    </div>
-
-    <div class="card">
-      <h4>LogQL</h4>
-      <ul>
-        <li>管道式语法，每一步处理一行日志</li>
-        <li>流选择器先筛来源，行过滤器再筛内容</li>
-        <li><code class="inline-code">| json</code> / <code class="inline-code">| logfmt</code> 将非结构化日志结构化</li>
-        <li>LogQL 的区间聚合使其兼具指标查询能力</li>
+        <li>核心思维：先选指标 + 标签，再用函数变换</li>
+        <li><code>rate(http_requests_total[5m])</code> 是最常用的模式</li>
+        <li><code>sum by(service)</code> 实现分组聚合，<code>topk</code> 取 Top N</li>
+        <li><code>histogram_quantile</code> 从直方图计算 P99 延迟</li>
       </ul>
     </div>
   </div>
 
-  <!-- ============================================ -->
-  <!-- 6.6 实用参考卡片                              -->
-  <!-- ============================================ -->
   <div class="highlight-panel">
     <p><strong>速记口诀：</strong></p>
     <ul>
       <li><strong>ES DSL</strong> —— JSON 写查询，match 做搜索，term 做匹配，bool 搭积木，aggs 出统计</li>
       <li><strong>PromQL</strong> —— 指标名 + 标签选数据，函数 + 括号做变换，by 分组，rate 算速率，histogram_quantile 求分位</li>
-      <li><strong>LogQL</strong> —— 大括号选流，管道符过滤，json/logfmt 解析，rate 算日志指标</li>
     </ul>
-  </div>
-
-</section>
+  </div></section>
 
 
 <!-- ============================================ -->
@@ -2628,51 +2431,9 @@ service:
     </div>
   </div>
 
-  <!-- 6.5.4 Loki + Tempo -->
+  <!-- 6.5.4 Loki + Tempo（简述） -->
   <h3>6.5.4 Loki（日志）与 Tempo（追踪）</h3>
-  <p>Loki 和 Tempo 都通过 Grafana 查询，没有独立 UI。在 Grafana 中添加对应的数据源即可。</p>
-
-  <div class="card-grid">
-    <div class="card">
-      <h4>📋 Loki 查日志（Grafana Explore）</h4>
-      <ol style="font-size: var(--text-sm);">
-        <li>Explore → 数据源选 <strong>Loki</strong></li>
-        <li>Builder 模式：下拉选 label 构建查询</li>
-        <li>Code 模式：手写 <code>{app="nginx"} |= "error"</code></li>
-        <li>结果按时间排列，点击展开详情</li>
-        <li>切到 Graph 视图看日志速率指标</li>
-      </ol>
-    </div>
-    <div class="card">
-      <h4>🔬 Tempo 查 Trace（Grafana Explore）</h4>
-      <ol style="font-size: var(--text-sm);">
-        <li>Explore → 数据源选 <strong>Tempo</strong></li>
-        <li>三种查询方式：
-          <ul>
-            <li><strong>Search</strong> — 按 service/span name</li>
-            <li><strong>TraceQL</strong> — <code>{ duration > 500ms }</code></li>
-            <li><strong>TraceID</strong> — 直接粘贴 ID</li>
-          </ul>
-        </li>
-        <li>结果展示为水瀑布图（Waterfall）</li>
-      </ol>
-    </div>
-    <div class="card">
-      <h4>🔗 三信号联动</h4>
-      <p>Grafana 最强之处：Trace→Logs→Metrics 互跳。</p>
-      <ul style="font-size: var(--text-sm);">
-        <li>Prometheus 指标异常 → 跳 Tempo 查 trace</li>
-        <li>Trace 中点击 span → 跳 Loki 看日志</li>
-        <li>在 Explore 中一站式切换数据源</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="highlight-panel">
-    <p><strong>📖 学习路线建议：</strong>① Prometheus UI 的 <code>/graph</code> 练 PromQL → ② Grafana 配 Prometheus 数据源建第一个 Dashboard → ③ 加 Loki 数据源在同一页面查日志 → ④ 配 Tempo 实现全链路追踪 → ⑤ 边用 Kibana Dev Tools 练 ES DSL。UI 是工具的"面子"，理解数据模型才是"里子"。</p>
-  </div>
-
-</section>
+  <p>Loki 和 Tempo 通过 Grafana Explore 查询。在 Grafana 中添加 Loki 数据源即可用 LogQL 查日志，添加 Tempo 数据源即可按 TraceID 或 TraceQL 查追踪。它们的 UI 操作逻辑与 Prometheus 类似——选数据源、写查询、看结果。Grafana Explore 支持三信号联动：从指标异常跳追踪、从追踪跳日志。</p></section>
 
 
 <section id="sec-7" data-section="recommendations">
@@ -2697,7 +2458,7 @@ service:
       <h4>企业方案</h4>
       <p style="font-size: var(--text-sm); color: var(--text-muted); margin-bottom: var(--space-3);">适合中大型团队或对可靠性的要求高的场景</p>
       <p><strong>高可用日志：</strong> ELK Stack + Kafka 缓冲层</p>
-      <p><strong>全栈可观测：</strong> LGTM Stack（Loki + Grafana + Tempo + Mimir）</p>
+      <p><strong>全栈可观测：</strong> Grafana + Prometheus + OpenTelemetry（指标+可视化+统一采集）</p>
       <p style="margin-top: var(--space-3); font-size: var(--text-sm);">多节点集群、消息队列削峰填谷、数据副本与故障转移，适合日均 PB 级数据量。</p>
     </div>
 
