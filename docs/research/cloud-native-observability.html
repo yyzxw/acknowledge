@@ -386,6 +386,7 @@ li { margin-bottom: var(--space-2); }
     <li><a href="#sec-4">OpenTelemetry + Fluent Bit</a></li>
     <li><a href="#sec-5">项目间关系与生态对比</a></li>
     <li><a href="#sec-6">查询语言入门详解</a></li>
+    <li><a href="#sec-ui">工具 UI 实操入门</a></li>
     <li><a href="#sec-7">部署模式与总结建议</a></li>
   </ol>
 </nav>
@@ -2477,6 +2478,198 @@ service:
       <li><strong>PromQL</strong> —— 指标名 + 标签选数据，函数 + 括号做变换，by 分组，rate 算速率，histogram_quantile 求分位</li>
       <li><strong>LogQL</strong> —— 大括号选流，管道符过滤，json/logfmt 解析，rate 算日志指标</li>
     </ul>
+  </div>
+
+</section>
+
+
+<!-- ============================================ -->
+<!-- Section 6.5: UI 实操入门 -->
+<!-- ============================================ -->
+<section id="sec-ui" data-section="finding" style="--section-accent: var(--primary);">
+
+  <h2>工具 UI 实操入门</h2>
+  <p>前面的章节介绍了各工具的架构和查询语言。但要真正上手，你需要熟悉它们的 UI 界面。以下从零开始讲解 5 个核心工具的可视化操作——学会之后就能自己探索数据了。</p>
+
+  <!-- 6.5.1 Kibana -->
+  <h3>6.5.1 Kibana — ES 的可视化门户</h3>
+  <p>访问 <code class="inline-code">http://localhost:5601</code> 进入 Kibana。左侧导航栏是核心入口。</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h4>🔍 Discover</h4>
+      <p>搜索和浏览 ES 中的原始数据。</p>
+      <ol style="font-size: var(--text-sm);">
+        <li>左侧菜单 → <strong>Discover</strong></li>
+        <li>顶部选数据视图（Data View），如 <code>logs-*</code></li>
+        <li>搜索栏输入 KQL，如 <code>status: &gt;= 400</code></li>
+        <li>右侧时间轴显示分布，下方是文档列表</li>
+        <li>点击文档展开所有字段</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>📊 Dashboard</h4>
+      <p>组合多个可视化图表。</p>
+      <ol style="font-size: var(--text-sm);">
+        <li>左侧 → <strong>Dashboard → Create</strong></li>
+        <li>点击 <strong>Create visualization</strong></li>
+        <li>用 <strong>Lens</strong> 拖拽字段到 X/Y 轴</li>
+        <li>拖到 Breakdown 按字段分组</li>
+        <li>保存后仪表盘自动刷新</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>🔧 Dev Tools</h4>
+      <p>直接向 ES 发 REST 请求，调试查询。</p>
+      <ol style="font-size: var(--text-sm);">
+        <li>左侧 → <strong>Dev Tools → Console</strong></li>
+        <li>输入 <code>GET /_search { "query": { "match_all": {} } }</code></li>
+        <li>点击 ▶ 执行，右侧看 JSON 结果</li>
+        <li>支持自动补全，<code>GET /&lt;Tab&gt;</code> 列出索引</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>⚙️ Stack Management</h4>
+      <p>管理索引、Data View、用户权限。</p>
+      <ul style="font-size: var(--text-sm);">
+        <li><strong>Index Management</strong> — 查看/删除索引</li>
+        <li><strong>Data Views</strong> — 创建数据视图</li>
+        <li><strong>Alerts</strong> — 设置告警规则</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight-panel">
+    <p><strong>⚠️ 新手常见坑：</strong>Discover 搜不出数据？三步检查：(1) Stack Management → Data Views 确认索引模式匹配；(2) 右上角时间范围改到 <code>Last 15 minutes</code>；(3) 索引如果刚创建还没写入数据，等 1 分钟再搜。</p>
+  </div>
+
+  <!-- 6.5.2 Grafana -->
+  <h3>6.5.2 Grafana — 统一可视化层</h3>
+  <p>访问 <code class="inline-code">http://localhost:3000</code>，默认账号 <code class="inline-code">admin/admin</code>。Grafana 不存数据，需要先配数据源。</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h4>🔌 添加数据源</h4>
+      <ol style="font-size: var(--text-sm);">
+        <li>齿轮图标 → <strong>Data Sources</strong></li>
+        <li><strong>Add data source</strong> → 选 Prometheus</li>
+        <li>URL 填 <code>http://localhost:9090</code></li>
+        <li><strong>Save & Test</strong> → 绿灯即成功</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>📈 建 Dashboard</h4>
+      <ol style="font-size: var(--text-sm);">
+        <li><code>+</code> 图标 → <strong>New Dashboard</strong></li>
+        <li><strong>Add visualization</strong> → 选数据源</li>
+        <li>输入 PromQL：<code>rate(http_requests_total[5m])</code></li>
+        <li>右侧设 Title/Unit/Legend</li>
+        <li><strong>Apply → Save</strong></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>🧪 Explore 模式</h4>
+      <p>不用建 Dashboard 也能查数据。</p>
+      <ul style="font-size: var(--text-sm);">
+        <li>罗盘图标 → <strong>Explore</strong></li>
+        <li>选数据源（支持 Mixed 查多个）</li>
+        <li>输入查询，结果实时展示</li>
+        <li>Table/Graph 视图切换</li>
+        <li>可 <strong>Add to dashboard</strong></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>🔔 Alerting</h4>
+      <ol style="font-size: var(--text-sm);">
+        <li>铃铛图标 → <strong>Alert rules</strong></li>
+        <li><strong>New alert rule</strong> → 选数据源</li>
+        <li>条件：<code>WHEN last() IS ABOVE 0</code></li>
+        <li>通知：Slack/Email/Webhook</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="highlight-panel">
+    <p><strong>💡 核心概念：</strong>Grafana 是"查询+展示"引擎，不存数据。数据存在 Prometheus/Loki/ES 等后端。重启 Grafana 不会丢 Dashboard 配置，但后端挂了就看不了数据。右上角的 <strong>Time range</strong> 控制所有图表的时间范围，<strong>Variables</strong> 可以创建下拉筛选器按 service 名过滤。</p>
+  </div>
+
+  <!-- 6.5.3 Prometheus -->
+  <h3>6.5.3 Prometheus — 自带 Web UI</h3>
+  <p>Prometheus 自带简洁的 Web UI，访问 <code class="inline-code">http://localhost:9090</code>。</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h4>📝 Expression Browser</h4>
+      <p>路径 <code>/graph</code>，PromQL 调试场。</p>
+      <ul style="font-size: var(--text-sm);">
+        <li>输入 <code>up</code> → 所有目标在线状态</li>
+        <li>输入 <code>rate(http_requests_total[5m])</code> → 请求速率</li>
+        <li><strong>Table</strong> 看精确值，<strong>Graph</strong> 看趋势</li>
+        <li>支持自动补全，<code>Shift+Enter</code> 执行</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>🎯 Targets 页面</h4>
+      <p>路径 <code>/targets</code>，采集状态一览。</p>
+      <ul style="font-size: var(--text-sm);">
+        <li><span style="color: var(--success);">● UP</span> — 采集正常</li>
+        <li><span style="color: var(--error);">● DOWN</span> — 无法连接</li>
+        <li>每行显示 Job/Endpoint/最后抓取时间/错误</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>⚙️ Status 菜单</h4>
+      <ul style="font-size: var(--text-sm);">
+        <li><strong>Service Discovery</strong> — 查看如何发现目标（调试 K8s ServiceMonitor）</li>
+        <li><strong>Configuration</strong> — 当前生效的 <code>prometheus.yml</code></li>
+        <li><strong>Flags</strong> — 启动参数</li>
+        <li><strong>Runtime</strong> — goroutine 数、存储使用量</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 6.5.4 Loki + Tempo -->
+  <h3>6.5.4 Loki（日志）与 Tempo（追踪）</h3>
+  <p>Loki 和 Tempo 都通过 Grafana 查询，没有独立 UI。在 Grafana 中添加对应的数据源即可。</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <h4>📋 Loki 查日志（Grafana Explore）</h4>
+      <ol style="font-size: var(--text-sm);">
+        <li>Explore → 数据源选 <strong>Loki</strong></li>
+        <li>Builder 模式：下拉选 label 构建查询</li>
+        <li>Code 模式：手写 <code>{app="nginx"} |= "error"</code></li>
+        <li>结果按时间排列，点击展开详情</li>
+        <li>切到 Graph 视图看日志速率指标</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>🔬 Tempo 查 Trace（Grafana Explore）</h4>
+      <ol style="font-size: var(--text-sm);">
+        <li>Explore → 数据源选 <strong>Tempo</strong></li>
+        <li>三种查询方式：
+          <ul>
+            <li><strong>Search</strong> — 按 service/span name</li>
+            <li><strong>TraceQL</strong> — <code>{ duration > 500ms }</code></li>
+            <li><strong>TraceID</strong> — 直接粘贴 ID</li>
+          </ul>
+        </li>
+        <li>结果展示为水瀑布图（Waterfall）</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>🔗 三信号联动</h4>
+      <p>Grafana 最强之处：Trace→Logs→Metrics 互跳。</p>
+      <ul style="font-size: var(--text-sm);">
+        <li>Prometheus 指标异常 → 跳 Tempo 查 trace</li>
+        <li>Trace 中点击 span → 跳 Loki 看日志</li>
+        <li>在 Explore 中一站式切换数据源</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight-panel">
+    <p><strong>📖 学习路线建议：</strong>① Prometheus UI 的 <code>/graph</code> 练 PromQL → ② Grafana 配 Prometheus 数据源建第一个 Dashboard → ③ 加 Loki 数据源在同一页面查日志 → ④ 配 Tempo 实现全链路追踪 → ⑤ 边用 Kibana Dev Tools 练 ES DSL。UI 是工具的"面子"，理解数据模型才是"里子"。</p>
   </div>
 
 </section>
