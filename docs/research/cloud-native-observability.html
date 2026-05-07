@@ -3,28 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>云原生可观测项目 - 完整学习指南</title>
+<title>云原生可观测 - 由浅入深学习指南</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({startOnLoad:false,theme:'default',securityLevel:'loose',fontFamily:'"Segoe UI","PingFang SC",sans-serif'})</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden;font-family:'Segoe UI','PingFang SC',sans-serif;background:#f8f9fa}
 .slideshow{height:100vh;width:100vw;position:relative;overflow:hidden}
-.slide{display:none;width:100%;height:100%;padding:16px 28px;position:absolute;top:0;left:0;overflow-y:auto}
+.slide{display:none;width:100%;height:100%;padding:18px 30px;position:absolute;top:0;left:0;overflow-y:auto}
 .slide.active{display:flex;flex-direction:column}
 .slide-cover{background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#1e40af 100%);justify-content:center;align-items:center;text-align:center;color:#fff}
-.slide-cover h1{font-size:2.4rem;margin-bottom:12px;text-shadow:2px 2px 4px rgba(0,0,0,.3)}
+.slide-cover h1{font-size:2.4rem;margin-bottom:12px}
 .slide-cover .subtitle{font-size:1rem;opacity:.9}
 .slide-cover .tag{margin-top:18px;padding:6px 14px;background:rgba(255,255,255,.1);border-radius:18px;font-size:.8rem}
 .slide-cover .date{position:absolute;bottom:50px;font-size:.75rem;opacity:.5}
 h1{font-size:1.4rem;color:#1a1a2e;margin-bottom:8px;border-bottom:3px solid #1e40af;padding-bottom:5px;flex-shrink:0}
 h2{font-size:1.1rem;color:#16213e;margin:8px 0 4px}
 h3{font-size:.92rem;color:#1e40af;margin:5px 0 3px}
-h4{font-size:.85rem;color:#334155;margin:4px 0 2px}
 p{font-size:.85rem;line-height:1.5;margin-bottom:4px;color:#374151}
 .concept-box{background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;padding:10px 14px;border-radius:8px;margin:5px 0}
-.concept-box h3{color:#fff;margin-top:0}
-.concept-box p{color:#e0e7ff;font-size:.85rem}
+.concept-box h3{color:#fff;margin-top:0}.concept-box p{color:#e0e7ff;font-size:.85rem}
 table{width:100%;border-collapse:collapse;margin:4px 0;font-size:.78rem}
 th,td{border:1px solid #d1d5db;padding:3px 5px;text-align:left}
 th{background:#1e40af;color:#fff;font-weight:600}
@@ -34,8 +32,7 @@ li{margin-bottom:2px}
 .mermaid{background:#fff;border-radius:6px;padding:5px;margin:4px 0;box-shadow:0 1px 3px rgba(0,0,0,.06);text-align:center;overflow-x:auto}
 .code-block{background:#1e1e1e;color:#d4d4d4;padding:6px 10px;border-radius:5px;font-family:'Consolas','JetBrains Mono',monospace;font-size:.72rem;margin:4px 0;overflow-x:auto;white-space:pre-wrap;line-height:1.35}
 .card{background:#fff;padding:7px 10px;border-radius:7px;border-left:3px solid #1e40af;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:4px}
-.card h3{margin-top:0;font-size:.9rem}
-.card p{font-size:.82rem;margin-bottom:1px}
+.card h3{margin-top:0;font-size:.9rem}.card p{font-size:.82rem;margin-bottom:1px}
 .code-inline{font-family:'Consolas','JetBrains Mono',monospace;font-size:.85em;background:#e8ecf1;padding:1px 4px;border-radius:3px;color:#1e40af}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
@@ -44,567 +41,240 @@ li{margin-bottom:2px}
 .warning{background:#fff3e0;border-left:3px solid #ff9800;padding:6px 10px;margin:4px 0;border-radius:0 5px 5px 0;font-size:.82rem}
 .info-box{background:#e8f4f8;border-left:3px solid #0ea5e9;padding:6px 10px;margin:4px 0;border-radius:0 5px 5px 0;font-size:.82rem}
 .tag{display:inline-block;font-size:.68rem;font-weight:600;padding:1px 5px;border-radius:999px;margin-right:3px}
-.tag-blue{background:#dbeafe;color:#1e40af}
-.tag-amber{background:#fef3c7;color:#92400e}
-.tag-purple{background:#ede9fe;color:#5b21b6}
-.tag-green{background:#d1fae5;color:#065f46}
-.tag-red{background:#fee2e2;color:#991b1b}
-.img-card{max-width:100%;border-radius:6px;margin:4px auto;display:block;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.tag-blue{background:#dbeafe;color:#1e40af}.tag-amber{background:#fef3c7;color:#92400e}.tag-purple{background:#ede9fe;color:#5b21b6}.tag-green{background:#d1fae5;color:#065f46}.tag-red{background:#fee2e2;color:#991b1b}
 .nav{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:7px;z-index:100}
 .nav button{padding:4px 14px;font-size:.78rem;cursor:pointer;background:#1e40af;color:#fff;border:none;border-radius:12px;transition:all .3s}
 .nav button:hover{background:#1e3a8a;transform:scale(1.05)}
 .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#1e40af,#3b82f6,#60a5fa);transition:width .3s;z-index:100}
 .slide-number{position:fixed;bottom:12px;right:24px;font-size:.72rem;color:#6b7280;z-index:100}
-@media(max-width:768px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}.slide{padding:10px 12px}h1{font-size:1.2rem}}
 </style>
 </head>
 <body>
 <div class="progress" id="progress"></div>
 <div class="slideshow" id="slideshow">
 
-<!-- ============= 1: Cover ============= -->
+<!-- ============================== 第 1 阶段：动机与概念 ============================== -->
+
+<!-- 1: Cover -->
 <div class="slide slide-cover active">
-  <h1>☁️ 云原生可观测<br>从零开始到上手</h1>
-  <div class="subtitle">7 个开源项目 · 配置 · 示例 · 文件 · 实操</div>
-  <div class="tag">Elasticsearch · Kibana · Prometheus · Grafana · OpenTelemetry · Fluent Bit · Jaeger</div>
-  <div class="date">2026-05-08</div>
+  <h1>☁️ 云原生可观测<br>由浅入深学习指南</h1>
+  <div class="subtitle">7 个工具 · 5 个阶段 · 从零到动手</div>
+  <div class="tag">阶段 1: 概念 · 阶段 2: Prometheus · 阶段 3: ELK · 阶段 4: 采集+追踪 · 阶段 5: 集成</div>
 </div>
 
-<!-- ============= 2: Architecture ============= -->
+<!-- 2: 为什么要学 -->
 <div class="slide">
-  <h1>🏗️ 整体架构：数据从应用到展示</h1>
+  <h1>🤔 第 1 步：一台服务器出问题了，你怎么排查？</h1>
+  <div class="grid-2">
+    <div class="card" style="border-left-color:#ef4444"><h3>❌ 没有可观测性</h3><ul><li>SSH 上服务器，敲 <code>top</code> 看 CPU</li><li>再敲 <code>tail -f /var/log/app.log</code> 翻日志</li><li>发现日志太多，用 <code>grep</code> 搜"error"</li><li>看了 30 分钟，没找到线索</li><li>重启服务，问题消失 → 下次再说</li></ul></div>
+    <div class="card" style="border-left-color:#22c55e"><h3>✅ 有可观测性</h3><ul><li>打开一个 Grafana 页面，发现 CPU 在 10:23 突然飙升</li><li>切到日志面板，10:23 附近全是 DB 连接超时</li><li>点其中一个 Trace，看到是某条 SQL 查询特别慢</li><li>定位到具体代码，5 分钟修完</li><li>整个过程没碰过服务器</li></ul></div>
+  </div>
+  <div class="concept-box"><h3>💡 三句话理解可观测性</h3><p><strong>指标</strong>告诉你"出问题了"（CPU 飙升到 90%）。<strong>日志</strong>告诉你"为什么出"（DB 连接超时）。<strong>追踪</strong>告诉你"在哪里出的"（service_a 调用 service_b 的 /query 花了 5 秒）。缺一个，排查就得靠猜。</p></div>
+</div>
+
+<!-- 3: 每个工具一句话 -->
+<div class="slide">
+  <h1>🎯 第 2 步：7 个工具各管什么？</h1>
+  <div class="grid-2">
+    <div class="card" style="border-left-color:#3b82f6"><h3>📦 Elasticsearch</h3><p>日志存储 + 搜索引擎。把日志当 JSON 存进去，像 Google 一样搜。<br><strong>类比：</strong>专门为搜索优化的数据库。</p></div>
+    <div class="card" style="border-left-color:#3b82f6"><h3>📊 Kibana</h3><p>ES 的可视化门户。搜日志、画图表、管索引。<br><strong>类比：</strong>ES 的配套 UI。</p></div>
+    <div class="card" style="border-left-color:#f59e0b"><h3>📡 Prometheus</h3><p>指标采集 + 告警系统。每 15s 拉一次应用的数值，存成时间序列。<br><strong>类比：</strong>一个专门存"数字"的系统。</p></div>
+    <div class="card" style="border-left-color:#f59e0b"><h3>📈 Grafana</h3><p>统一画图板。对接 Prometheus/ES/各种数据源，画 Dashboard。<br><strong>类比：</strong>万能仪表盘。</p></div>
+    <div class="card" style="border-left-color:#8b5cf6"><h3>🔗 OpenTelemetry</h3><p>统一采集标准。一套 API 发出三种信号，通过 Collector 转到后端。<br><strong>类比：</strong>可观测性的 USB-C 接口。</p></div>
+    <div class="card" style="border-left-color:#059669"><h3>💨 Fluent Bit</h3><p>轻量日志采集器。~650KB 内存，把日志从文件送到 ES/Kafka。<br><strong>类比：</strong>日志管道工。</p></div>
+    <div class="card" style="border-left-color:#8b5cf6"><h3>🔬 Jaeger</h3><p>分布式追踪。展示一次请求经过哪些服务、每步花了多久。<br><strong>类比：</strong>请求的全链路 GPS 记录仪。</p></div>
+  </div>
+  <div class="info-box"><strong>💡 学习顺序建议：</strong>先 Prometheus+Grafana（最简单，5 分钟出结果）→ ES+Kibana → Fluent Bit → OTel+Jaeger。本指南完全按这个顺序走。</div>
+</div>
+
+<!-- 4: 整体架构 -->
+<div class="slide">
+  <h1>🏗️ 第 3 步：它们怎么拼在一起？</h1>
   <div class="mermaid">
-flowchart TB
-    subgraph APP["应用层"]
-        A1["你的微服务"]
-    end
-    subgraph COLLECT["采集层"]
-        FB["Fluent Bit<br/>~650KB 日志采集"]
-        OTelS["OTel SDK<br/>自动埋点三信号"]
-    end
-    subgraph PROCESS["处理层"]
-        OTelC["OTel Collector<br/>接收→处理→转发"]
-    end
-    subgraph STORE["存储层"]
-        ES["Elasticsearch<br/>日志搜索"]
-        PRO["Prometheus<br/>指标 TSDB"]
-    end
-    subgraph VIZ["可视化层"]
-        G["Grafana<br/>统一面板"]
-        KB["Kibana<br/>ES 门户"]
-        J["Jaeger<br/>追踪瀑布图"]
-    end
-    A1 --> FB & OTelS
-    FB --> ES --> KB
-    OTelS --> OTelC
-    OTelC --> PRO --> G
-    OTelC --> ES & J
+flowchart LR
+    APP["应用"] -->|"日志"| FB["Fluent Bit"]
+    APP -->|"traces+metrics"| SDK["OTel SDK"]
+    FB --> ES["ES 存储日志"]
+    ES --> KB["Kibana 搜日志"]
+    SDK --> COLL["OTel Collector"]
+    COLL --> PRO["Prometheus 存指标"]
+    COLL --> J["Jaeger 存追踪"]
+    PRO --> G["Grafana 画图"]
+    J --> G
+    ES --> G
   </div>
-  <div class="info-box"><strong>💡 数据流向：</strong>应用产生数据 → Fluent Bit 采日志/OTel SDK 采 traces+metrics → Collector 中转 → ES/Prometheus/Jaeger 存储 → Grafana/Kibana 展示</div>
+  <div class="grid-3">
+    <div class="card"><h3>🔵 日志链路</h3><p>Fluent Bit 采日志 → ES 存 → Kibana 搜 / Grafana 看</p></div>
+    <div class="card"><h3>🟠 指标链路</h3><p>OTel SDK → Collector → Prometheus → Grafana</p></div>
+    <div class="card"><h3>🟣 追踪链路</h3><p>OTel SDK → Collector → Jaeger → Grafana</p></div>
+  </div>
 </div>
 
-<!-- ============= 3: Config Files Overview ============= -->
+<!-- ============================== 第 2 阶段：Prometheus + Grafana ============================== -->
 <div class="slide">
-  <h1>📋 各组件配置文件速查</h1>
-  <p>每个组件都有自己关键的配置文件——记下它们，日常运维 80% 的时间在改这些文件。</p>
-  <table>
-    <tr><th>组件</th><th>核心配置文件</th><th>用途</th><th>默认路径</th></tr>
-    <tr><td><strong>ES</strong></td><td>elasticsearch.yml</td><td>集群名/数据路径/网络/内存/JVM/安全</td><td>/etc/elasticsearch/</td></tr>
-    <tr><td><strong>ES</strong></td><td>jvm.options</td><td>JVM 堆大小（ -Xms/-Xmx ），GC 策略</td><td>/etc/elasticsearch/</td></tr>
-    <tr><td><strong>Kibana</strong></td><td>kibana.yml</td><td>ES 地址/端口/语言/安全配置</td><td>/etc/kibana/</td></tr>
-    <tr><td><strong>Prometheus</strong></td><td>prometheus.yml</td><td>抓取目标/间隔/规则文件引用</td><td>/etc/prometheus/</td></tr>
-    <tr><td><strong>Prometheus</strong></td><td>alerts.yml</td><td>告警规则（可自定义命名）</td><td>prometheus.yml 中引用</td></tr>
-    <tr><td><strong>Grafana</strong></td><td>grafana.ini</td><td>端口/数据库/认证/SMTP/插件</td><td>/etc/grafana/</td></tr>
-    <tr><td><strong>Grafana</strong></td><td>datasources.yaml</td><td>声明式数据源配置（Provisioning）</td><td>/etc/grafana/provisioning/</td></tr>
-    <tr><td><strong>Grafana</strong></td><td>dashboards.yaml</td><td>声明式 Dashboard 导入</td><td>/etc/grafana/provisioning/</td></tr>
-    <tr><td><strong>OTel Collector</strong></td><td>otel-collector.yml</td><td>receivers/processors/exporters 管道</td><td>/etc/otel/</td></tr>
-    <tr><td><strong>Fluent Bit</strong></td><td>fluent-bit.conf</td><td>Input→Parser→Filter→Buffer→Output 完整管道</td><td>/etc/fluent-bit/</td></tr>
-    <tr><td><strong>Fluent Bit</strong></td><td>parsers.conf</td><td>日志解析规则（json/regex/ltsv）</td><td>/etc/fluent-bit/</td></tr>
-    <tr><td><strong>Jaeger</strong></td><td>（多数环境变量）</td><td>存储后端/端口/采样（docker run -e 参数）</td><td>—</td></tr>
-  </table>
-</div>
-
-<!-- ============= 4: ES 启动 ============= -->
-<div class="slide">
-  <h1>🔎 Elasticsearch · 启动 + 配置文件</h1>
+  <h1>🟠 阶段 2 · 为什么先从 Prometheus 开始？</h1>
   <div class="grid-2">
-    <div>
-      <h3>启动 2 分钟</h3>
-      <div class="code-block"># ES
-docker run -d --name es \
-  -p 9200:9200 \
-  -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
-  -e "ES_JAVA_OPTS=-Xms1g -Xmx1g" \
-  docker.elastic.co/elasticsearch/elasticsearch:8.15.0
-
-# Kibana
-docker run -d --name kibana \
-  -p 5601:5601 \
-  -e "ELASTICSEARCH_HOSTS=http://host.docker.internal:9200" \
-  docker.elastic.co/kibana/kibana:8.15.0</div>
-      <h3>常用修改的配置</h3>
-      <div class="code-block"># elasticsearch.yml（关键配置）
-cluster.name: my-es
-node.name: node-1
-path.data: /var/lib/elasticsearch
-path.logs: /var/log/elasticsearch
-network.host: 0.0.0.0          # 监听地址
-discovery.seed_hosts: ["node1","node2"]
-cluster.initial_master_nodes: ["node1"]
-
-# jvm.options（调整堆大小）
--Xms4g
--Xmx4g
-# 不要超过物理内存的 50%，最多 32GB</div>
-    </div>
-    <div>
-      <h3>验证</h3>
-      <div class="code-block"># ES 是否在运行
-curl http://localhost:9200
-
-# 集群健康
-curl http://localhost:9200/_cluster/health
-# → {"status":"green","number_of_nodes":1,...}
-
-# 所有索引
-curl http://localhost:9200/_cat/indices?v
-
-# Kibana 是否在运行
-curl http://localhost:5601/api/status</div>
-      <h3>最常用的操作</h3>
-      <table>
-        <tr><th>操作</th><th>命令</th></tr>
-        <tr><td>查所有索引</td><td><code class="code-inline">GET /_cat/indices?v</code></td></tr>
-        <tr><td>查索引 mapping</td><td><code class="code-inline">GET /索引名/_mapping</code></td></tr>
-        <tr><td>查索引设置</td><td><code class="code-inline">GET /索引名/_settings</code></td></tr>
-        <tr><td>删索引</td><td><code class="code-inline">DELETE /索引名</code></td></tr>
-        <tr><td>查存储大小</td><td><code class="code-inline">GET /_cat/indices?s=store.size:desc</code></td></tr>
-        <tr><td>查节点状态</td><td><code class="code-inline">GET /_nodes/stats</code></td></tr>
-      </table>
-    </div>
+    <div class="card" style="border-left-color:#22c55e"><h3>✅ 最简单的学习起点</h3><ul><li>启动 Prometheus 只要一行 <code>docker run</code></li><li>启动后自带 Web UI，输 <code>up</code> 就能看到结果</li><li>Grafana 连上 Prometheus 后立刻出图</li><li>所有操作都有即时反馈，非常适合入门</li></ul></div>
+    <div class="card" style="border-left-color:#f59e0b"><h3>📝 这阶段你会学到</h3><ul><li>Metrics 是什么、怎么查</li><li>PromQL 最常用的 5 个函数</li><li>配告警规则</li><li>Grafana 建 Dashboard</li><li><strong>预期用时：30 分钟</strong></li></ul></div>
   </div>
-  <div class="warning"><strong>⚠️ 生产必备：</strong>ES 默认没有密码！<code>xpack.security.enabled: true</code> 启用安全。Docker 里加 <code>-e "ELASTIC_PASSWORD=xxx"</code>。</div>
+  <div class="code-block"># 先跑起来再说，配什么后面讲
+docker run -d --name prom -p 9090:9090 prom/prometheus
+docker run -d --name grafana -p 3000:3000 grafana/grafana</div>
 </div>
 
-<!-- ============= 5: ES 核心概念 + CRUD ============= -->
+<!-- 6: Prometheus 启动 -->
 <div class="slide">
-  <h1>📦 ES · Index / Document / Mapping + CRUD 实战</h1>
-  <p>在 Kibana Dev Tools → Console 中执行。先建再查再删，10 分钟从零到会。</p>
-  <div class="grid-2">
-    <div>
-      <h3>创建索引 + 写入</h3>
-      <div class="code-block"># 1. 建索引（不指定 mapping 的话 ES 自动推断）
-PUT /shop
-
-# 2. 写入文档（自动推断字段类型）
-POST /shop/_doc
-{
-  "name": "笔记本电脑",
-  "price": 6999,
-  "stock": 100,
-  "tags": ["电子", "办公"],
-  "created_at": "2026-05-08"
-}
-
-# 3. 批量写入（效率更高）
-POST /shop/_bulk
-{"index":{}}
-{"name":"手机","price":4999,"stock":200}
-{"index":{}}
-{"name":"平板","price":2999,"stock":150}</div>
-      <h3>查询</h3>
-      <div class="code-block"># 4. 搜索全部
-GET /shop/_search
-{ "query": { "match_all": {} } }
-
-# 5. 搜"笔记本"
-GET /shop/_search
-{
-  "query": {
-    "match": { "name": "笔记本" }
-  }
-}
-
-# 6. 价格范围
-GET /shop/_search
-{
-  "query": {
-    "range": { "price": { "gte": 2000, "lte": 6000 } }
-  }
-}</div>
-    </div>
-    <div>
-      <h3>更新 + 删除</h3>
-      <div class="code-block"># 7. 更新字段
-POST /shop/_update/文档ID
-{
-  "doc": { "stock": 80 }
-}
-
-# 8. 删除文档
-DELETE /shop/_doc/文档ID
-
-# 9. 按条件删除
-POST /shop/_delete_by_query
-{
-  "query": {
-    "match": { "name": "平板" }
-  }
-}
-
-# 10. 删除索引
-DELETE /shop</div>
-      <h3>mapping 手动定义（推荐）</h3>
-      <div class="code-block"># 手动定义字段类型，避免自动推断错误
-PUT /products
-{
-  "mappings": {
-    "properties": {
-      "name":    { "type": "text" },
-      "price":   { "type": "integer" },
-      "stock":   { "type": "integer" },
-      "tags":    { "type": "keyword" },
-      "created_at": { "type": "date" }
-    }
-  }
-}
-# text=分词 | keyword=精确匹配 | integer=整数 | date=时间</div>
-    </div>
-  </div>
-  <div class="info-box"><strong>💡</strong> 刚上手在 Dev Tools 里练习 POST/PUT/GET/DELETE 就够了。写入→映射→搜索是核心三部曲。</div>
-</div>
-
-<!-- ============= 6: ES Query DSL 全 ============= -->
-<div class="slide">
-  <h1>🔍 ES Query DSL · 7 种查询完整示例</h1>
-  <div class="grid-2">
-    <div>
-      <h3>① match（分词搜索）</h3>
-      <div class="code-block">GET /logs/_search
-{ "query": {
-    "match": { "message": "error connection timeout" }
-}}
-# "error connection timeout" 分词为 [error,connection,timeout]
-# 含任一词即命中，按匹配度评分排序</div>
-      <h3>② match_phrase（短语匹配）</h3>
-      <div class="code-block">GET /logs/_search
-{ "query": {
-    "match_phrase": { "message": "connection timeout" }
-}}
-# "connection timeout" 顺序和距离必须一致</div>
-      <h3>③ term（精确匹配）</h3>
-      <div class="code-block">GET /logs/_search
-{ "query": {
-    "term": { "level": "error" }
-}}
-# 不经过分词器，keyword 字段专用
-# 常用于 status_code、level、env 等枚举字段</div>
-      <h3>④ terms（多值匹配）</h3>
-      <div class="code-block">GET /logs/_search
-{ "query": {
-    "terms": { "level": ["error","warning"] }
-}}
-# 匹配任意一个就算命中</div>
-    </div>
-    <div>
-      <h3>⑤ range（范围查询）</h3>
-      <div class="code-block">GET /logs/_search
-{ "query": {
-    "range": {
-      "response_time": { "gt": 1000, "lte": 5000 },
-      "@timestamp": { "gte": "now-1h" }
-    }
-}}
-# gt > | gte >= | lt < | lte <=
-# 时间支持 now-1h now/d 等自然语法</div>
-      <h3>⑥ exists（字段存在性）</h3>
-      <div class="code-block">GET /logs/_search
-{ "query": {
-    "exists": { "field": "error_stacktrace" }
-}}
-# 筛选 error_stacktrace 非空的文档</div>
-      <h3>⑦ bool（组合查询核心）</h3>
-      <div class="code-block">GET /logs/_search
-{ "query": {
-    "bool": {
-      "must":     [{ "match": {"message":"error"} }],
-      "filter":   [{ "term": {"level":"error"} }],
-      "must_not": [{ "term": {"service":"health"} }],
-      "should":   [{ "match": {"message":"urgent"} }]
-    }
-}}
-# must=参与评分  filter=不评分可缓存
-# must_not=排除  should=提升评分非必须</div>
-    </div>
-  </div>
-</div>
-
-<!-- ============= 7: ES 聚合全 ============= -->
-<div class="slide">
-  <h1>📊 ES 聚合 Analy· 5 种聚合 + 嵌套实战</h1>
-  <div class="grid-2">
-    <div>
-      <h3>① terms（分组计数）</h3>
-      <div class="code-block">GET /logs/_search
-{ "size":0, "aggs": {
-    "by_level": {
-      "terms": { "field":"level", "size":5 }
-    }
-}}
-# → error:234, warn:567, info:12345</div>
-      <h3>② date_histogram（时间柱状图）</h3>
-      <div class="code-block">GET /logs/_search
-{ "size":0, "aggs": {
-    "hourly": {
-      "date_histogram": {
-        "field":"@timestamp",
-        "calendar_interval": "hour"
-      }
-    }
-}}
-# calendar=月/年  fixed=5m/2h 精确间隔</div>
-      <h3>③ avg/sum/stats（统计量）</h3>
-      <div class="code-block">GET /logs/_search
-{ "size":0, "aggs": {
-    "resp_stats": {
-      "stats": { "field":"response_time" }
-    }
-}}
-# stats 同时返回 count/min/max/avg/sum</div>
-    </div>
-    <div>
-      <h3>④ cardinality（去重计数）</h3>
-      <div class="code-block">GET /logs/_search
-{ "size":0, "aggs": {
-    "unique_ips": {
-      "cardinality": { "field":"client_ip" }
-    }
-}}
-# ≈ SELECT COUNT(DISTINCT client_ip)</div>
-      <h3>⑤ percentiles（百分位）</h3>
-      <div class="code-block">GET /logs/_search
-{ "size":0, "aggs": {
-    "p99": {
-      "percentiles": {
-        "field":"response_time",
-        "percents":[50,95,99]
-      }
-    }
-}}
-# P99=500ms 说明 99% 请求在 500ms 内</div>
-      <h3>⑥ 嵌套：按服务分组后算 P99</h3>
-      <div class="code-block">GET /logs/_search
-{ "size":0, "aggs": {
-    "by_service": {
-      "terms": { "field":"service.keyword" },
-      "aggs": {
-        "avg_resp": { "avg": {"field":"response_time"} },
-        "p99_resp": {
-          "percentiles": {"field":"response_time","percents":[99]}
-        },
-        "hourly": {
-          "date_histogram": {"field":"@timestamp","fixed_interval":"1h"}
-        }
-      }
-    }
-}}
-# 第 1 层分组，第 2 层每组分别算统计
-# → api:  avg=120ms p99=450ms hourly=[...]</div>
-    </div>
-  </div>
-  <div class="key-point"><strong>💡 嵌套聚合流程：</strong>先想清楚"按什么分组"，再想"每组算什么"。terms/date_histogram 是分组器，avg/sum/cardinality/percentiles 是统计器，套在一起就是多维分析。</div>
-</div>
-
-<!-- ============= 8: Kibana UI ============= -->
-<div class="slide">
-  <h1>🖥️ Kibana · Data View → Discover → Dashboard</h1>
-  <div class="grid-2">
-    <div class="card"><h3>① 创建 Data View（最重要一步）</h3><ol><li>左侧菜单 → <strong>Stack Management → Data Views</strong></li><li>点 <strong>Create data view</strong></li><li>Name: <code>nginx-logs</code></li><li>Index pattern: <code>nginx-logs-*</code> — 匹配 nginx-logs-2026.05.07 这类索引</li><li>Timestamp: 选 <code>@timestamp</code></li><li>点 <strong>Save data view to Kibana</strong></li></ol><div class="info-box"><strong>🔑 Data View 是 Kibana 的"数据库配置"</strong>，告诉 Kibana 去哪查数据、用什么字段做时间过滤。配错=搜不到。</div></div>
-    <div class="card"><h3>② Discover 搜日志</h3><ol><li>左侧 → <strong>Discover</strong></li><li>顶部选刚才建的数据视图</li><li>右上角时间范围 <code>Last 7 days</code></li><li>搜索栏输 KQL：<code>status_code: >= 400 and response_time > 1000</code></li><li>点 <strong>Update</strong> 刷新</li><li>左侧字段列表，点字段名可加到表格列</li><li>点任一行展开看所有字段</li></ol></div>
-    <div class="card"><h3>③ Dashboard + Lens</h3><ol><li>左侧 → <strong>Dashboard → Create dashboard</strong></li><li>点 <strong>Create visualization</strong> 进 Lens</li><li>选数据视图 <code>nginx-logs</code></li><li>拖 <code>@timestamp</code> 到 X 轴</li><li>拖 <code>Count of records</code> 到 Y 轴</li><li>拖 <code>status_code</code> 到 Breakdown（按状态码着色）</li><li>右上角 <strong>Save and return</strong>，再加第二个图</li></ol></div>
-    <div class="card"><h3>④ 常用操作</h3><table><tr><th>目标</th><th>操作</th></tr>
-    <tr><td>查索引有哪些</td><td>Dev Tools: <code class="code-inline">GET /_cat/indices</code></td></tr>
-    <tr><td>调 ES 查询</td><td>Dev Tools 写好 → 贴到 Dashboard</td></tr>
-    <tr><td>刷新字段</td><td>Discover 右上角刷新按钮</td></tr>
-    <tr><td>改时间范围</td><td>右上角时间选择器</td></tr>
-    <tr><td>自动刷新</td><td>右上角 Refresh → every 5s</td></tr>
-    <tr><td>导出 CSV</td><td>Discover 上方 → Export</td></tr>
-  </table></div>
-  </div>
-  <div class="warning"><strong>⚠️ 排查三部曲：</strong>搜不到数据→①检查 Data View 索引模式 ②检查时间范围 ③确认 ES 有数据(Dev Tools 先查)。80% 的问题是这三个。</div>
-</div>
-
-<!-- ============= 9: Prometheus 启动 + 配置 ============= -->
-<div class="slide">
-  <h1>📡 Prometheus · 启动 + 配置文件详解</h1>
+  <h1>📡 第 4 步：启动 Prometheus + 看第一个图</h1>
   <div class="grid-2">
     <div>
       <h3>启动</h3>
-      <div class="code-block"># prometheus.yml（核心）
+      <div class="code-block"># docker-compose.yml
+services:
+  prometheus:
+    image: prom/prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports: ["3000:3000"]
+---
+# prometheus.yml
 global:
   scrape_interval: 15s
-  evaluation_interval: 15s
-
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:9090']
-
-  - job_name: 'node'
-    static_configs:
-      - targets: ['localhost:9100']
-
-# rule_files 在后面引用告警规则
-rule_files:
-  - "alerts.yml"
-  - "recording_rules.yml"
-
----
-# 启动容器
-docker run -d --name prom \
-  -p 9090:9090 \
-  -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml \
-  -v $(pwd)/alerts.yml:/etc/prometheus/alerts.yml \
-  prom/prometheus</div>
+      - targets: ['localhost:9090']</div>
+      <div class="key-point">启动后访问 <code>http://localhost:9090</code></div>
     </div>
     <div>
-      <h3>常改文件说明</h3>
-      <table>
-        <tr><th>文件</th><th>改了会怎样</th></tr>
-        <tr><td>prometheus.yml</td><td>抓取目标、频率、规则引用——改了要重启或 SIGHUP</td></tr>
-        <tr><td>alerts.yml</td><td>告警条件——改完后 promtool check rules 验证</td></tr>
-        <tr><td>recording_rules.yml</td><td>预计算查询——改完自动生效，但旧数据不重算</td></tr>
-      </table>
-      <h3>验证 + 常用操作</h3>
-      <div class="code-block"># 验证配置语法
-promtool check config prometheus.yml
+      <h3>第一步：输 <code>up</code> 回车</h3>
+      <div class="code-block"># 在 /graph 输入框里输入 up，点 Execute
+up
+# 看到结果了吗？
+# prometheus → 1（表示在线）
+# prometheus (2) → 1
 
-# 验证规则语法
-promtool check rules alerts.yml
-
-# 热加载配置（不重启）
-curl -X POST http://localhost:9090/-/reload
-
-# 查看指标
-curl http://localhost:9090/api/v1/targets
-
-# 看所有暴露的指标
-curl http://localhost:9090/metrics | head -20</div>
-      <div class="info-box"><strong>💡</strong> 每配一个新 Target，先 <code>curl /metrics</code> 确认能拉通，再配到 prometheus.yml。Targets 页面显示 DOWN 就是连不上。</div>
+# 1 = 在线，0 = 离线
+# 就这么简单</div>
+      <h3>第二步：切到 Graph 标签</h3>
+      <div class="code-block"># 输入
+prometheus_http_requests_total
+# 切到 Graph 标签
+# 看到一条不断增长的曲线了吗？
+# 这就是 Counter 指标——只增不减</div>
+      <h3>第三步：用 rate() 看速率</h3>
+      <div class="code-block"># 输入
+rate(prometheus_http_requests_total[5m])
+# 切到 Graph
+# 看到平稳的折线图了吗？
+# rate() 把"累计值"变成了"每秒速率"
+# 这才是监控需要的——看趋势，不是看累计</div>
     </div>
   </div>
 </div>
 
-<!-- ============= 10: Prometheus 指标 + Node Exporter ============= -->
+<!-- 7: PromQL 5 个核心 -->
 <div class="slide">
-  <h1>📊 Prometheus · 指标类型 + Node Exporter 实操</h1>
+  <h1>📝 第 5 步：PromQL 核心 5 个函数（够了）</h1>
+  <p>PromQL 有几十个函数，但 90% 的场景只需要这 5 个。</p>
+  <table>
+    <tr><th>#</th><th>函数</th><th>干什么</th><th>实例</th><th>效果</th></tr>
+    <tr><td>1</td><td><code class="code-inline">直接写指标名</code></td><td>查当前值</td><td><code class="code-inline">prometheus_http_requests_total</code></td><td>当前累计请求数</td></tr>
+    <tr><td>2</td><td><code class="code-inline">rate(x[5m])</code></td><td>Counter→每秒速率</td><td><code class="code-inline">rate(promhttp_requests_total[5m])</code></td><td>每秒请求数</td></tr>
+    <tr><td>3</td><td><code class="code-inline">sum by(job)(x)</code></td><td>按 job 分组求和</td><td><code class="code-inline">sum by(job)(rate(http_requests_total[5m]))</code></td><td>每个服务的 QPS</td></tr>
+    <tr><td>4</td><td><code class="code-inline">{label="val"}</code></td><td>标签过滤</td><td><code class="code-inline">up{job="node"}</code></td><td>只看 node 的状态</td></tr>
+    <tr><td>5</td><td><code class="code-inline">topk(N, x)</code></td><td>取 Top N</td><td><code class="code-inline">topk(3, rate(http_requests_total[5m]))</code></td><td>QPS 最高的 3 个</td></tr>
+  </table>
+  <div class="concept-box"><h3>💡 PromQL 心法（记住这一句就够了）</h3><p><strong>Counter 用 rate()，Gauge 直接看，分组用 by()，TopK 用 topk。</strong><br>Counter（累计值）→ 必须 rate() 再画图。<br>Gauge（可增可减）→ 直接画。</p></div>
   <div class="grid-2">
-    <div>
-      <h3>4 种指标类型</h3>
-      <table>
-        <tr><th>类型</th><th>特性</th><th>常见函数</th><th>例</th></tr>
-        <tr><td><strong>Counter</strong></td><td>只增不减</td><td>rate() increase()</td><td>http_requests_total</td></tr>
-        <tr><td><strong>Gauge</strong></td><td>可增可减</td><td>直接看, delta()</td><td>node_memory_usage</td></tr>
-        <tr><td><strong>Histogram</strong></td><td>分桶统计</td><td>histogram_quantile()</td><td>duration_seconds_bucket</td></tr>
-        <tr><td><strong>Summary</strong></td><td>预算分位</td><td>直接看</td><td>rpc_duration</td></tr>
-      </table>
-      <h3>Node Exporter 启动</h3>
-      <div class="code-block">docker run -d --name node_exporter \
-  -p 9100:9100 \
-  prom/node-exporter
-# 每次采集 ~300 个指标
-# CPU/内存/磁盘/网络/文件系统/进程 全覆盖</div>
-      <h3>Node Exporter 常用指标</h3>
-      <div class="code-block"># CPU
-node_cpu_seconds_total{mode="idle"}
-node_load1 / node_load5 / node_load15
+    <div class="card" style="border-left-color:#ef4444"><h3>❌ 新手常犯的错</h3><div class="code-block"># 直接看 Counter——没意义！
+prometheus_http_requests_total
+# 数字一直涨，看不出趋势
 
-# 内存
-node_memory_MemTotal_bytes
-node_memory_MemFree_bytes
-node_memory_Buffers_bytes
-
-# 磁盘
-node_filesystem_size_bytes{mountpoint="/"}
-node_filesystem_avail_bytes{mountpoint="/"}
-
-# 网络
-node_network_receive_bytes_total
-node_network_transmit_bytes_total</div>
-    </div>
-    <div>
-      <h3>实战：常见的 PromQL 查询</h3>
-      <div class="code-block"># CPU 使用率
-100 - avg by(instance) (
+# 应该用 rate()
+rate(prometheus_http_requests_total[5m])
+# 每秒变化量，趋势一目了然</div></div>
+    <div class="card" style="border-left-color:#22c55e"><h3>✅ 实战三道题</h3><div class="code-block"># 1. CPU 使用率
+100 - avg by(instance)(
   rate(node_cpu_seconds_total{mode="idle"}[5m])
 ) * 100
 
-# 内存使用率
+# 2. 内存使用率
 (1 - node_memory_MemFree_bytes
   / node_memory_MemTotal_bytes) * 100
 
-# 磁盘使用率
-(1 - node_filesystem_avail_bytes{mountpoint="/"}
-  / node_filesystem_size_bytes{mountpoint="/"}) * 100
+# 3. P99 延迟
+histogram_quantile(0.99,
+  rate(duration_seconds_bucket[5m])
+)</div></div>
+  </div>
+</div>
 
-# 网络带宽
-rate(node_network_receive_bytes_total[5m])
+<!-- 8: Grafana -->
+<div class="slide">
+  <h1>📈 第 6 步：Grafana 连 Prometheus + 建第一个 Dashboard</h1>
+  <div class="grid-2">
+    <div>
+      <h3>连数据源（3 分钟）</h3>
+      <div class="code-block"># 方式一：手动
+# 浏览器打开 http://localhost:3000
+# 默认账号 admin/admin
+# 左侧齿轮 → Data Sources → Add data source
+# 搜索 Prometheus → URL 填 http://prometheus:9090
+# → Save & Test（绿色=成功）
 
-# 磁盘 IO
-rate(node_disk_io_time_seconds_total[5m])</div>
-      <h3>❌ 新手最常见的错误</h3>
-      <div class="card" style="border-left-color:#ef4444">
-      <ul>
-        <li><strong>直接看 Counter</strong>：<code>http_requests_total</code> 一直增长看不出趋势 → 必须用 <code>rate()</code></li>
-        <li><strong>忘写标签</strong>：<code>node_memory_MemTotal_bytes</code> 可能返回多个实例 → 加 <code>{instance="..."}</code></li>
-        <li><strong>Range Vector 写错</strong>：<code>rate(http_requests_total[5m])</code> 必须有 <code>[时间]</code></li>
-        <li><strong>标签大小写</strong>：<code>job="api"</code> 和 <code>job="API"</code> 不同</li>
-      </ul>
-      </div>
+# 方式二：自动配（推荐）
+# /etc/grafana/provisioning/datasources/prom.yaml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    isDefault: true</div>
+    </div>
+    <div>
+      <h3>建 Dashboard（3 分钟）</h3>
+      <div class="code-block"># 1. 左侧 + 号 → New Dashboard
+# 2. Add visualization → 选 Prometheus
+# 3. 查询框输入：
+rate(prometheus_http_requests_total[5m])
+# 4. 右侧面板设置：
+#    Title: 请求速率
+#    Unit: req/s
+# 5. 右上角 Apply → Save，取名
+
+# 已经能看到一条曲线了
+# 这就是你的第一个 Dashboard！</div>
+      <h3>加下拉过滤（3 分钟）</h3>
+      <div class="code-block"># 1. Dashboard 设置 → Variables → Add
+# 2. Name: job, Type: Query
+# 3. Query: label_values(up, job)
+# 4. Panels 中用 $job 变量：
+rate(http_requests_total{job="$job"}[5m])
+# 5. 顶部出现下拉菜单，选了自动变</div>
     </div>
   </div>
 </div>
 
-<!-- ============= 11: PromQL 全面 ============= -->
+<!-- 9: 告警 -->
 <div class="slide">
-  <h1>📝 PromQL · 从零到 95% 场景全覆盖</h1>
-  <table>
-    <tr><th>#</th><th>目标</th><th>PromQL</th><th>说明</th></tr>
-    <tr><td>1</td><td>所有目标在线状态</td><td><code class="code-inline">up</code></td><td>1=在线 0=离线</td></tr>
-    <tr><td>2</td><td>某 job 的状态</td><td><code class="code-inline">up{job="node"}</code></td><td>标签过滤</td></tr>
-    <tr><td>3</td><td>过去 5m 原始数据</td><td><code class="code-inline">up[5m]</code></td><td>Range Vector</td></tr>
-    <tr><td>4</td><td>每秒请求数</td><td><code class="code-inline">rate(http_requests_total[5m])</code></td><td>Counter→速率</td></tr>
-    <tr><td>5</td><td>1 小时增量</td><td><code class="code-inline">increase(http_requests_total[1h])</code></td><td>Counter→区间量</td></tr>
-    <tr><td>6</td><td>每服务 QPS</td><td><code class="code-inline">sum by(job) (rate(http_requests_total[5m]))</code></td><td>按 job 分组</td></tr>
-    <tr><td>7</td><td>CPU 使用率 %</td><td><code class="code-inline">100 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100</code></td><td>Gauge 用</td></tr>
-    <tr><td>8</td><td>内存使用率 %</td><td><code class="code-inline">(1 - node_memory_MemFree_bytes / node_memory_MemTotal_bytes) * 100</code></td><td>二元运算</td></tr>
-    <tr><td>9</td><td>磁盘剩余 %</td><td><code class="code-inline">node_filesystem_avail_bytes / node_filesystem_size_bytes * 100</code></td><td>二元运算</td></tr>
-    <tr><td>10</td><td>P99 延迟</td><td><code class="code-inline">histogram_quantile(0.99, rate(duration_bucket[5m]))</code></td><td>Histogram 专用</td></tr>
-    <tr><td>11</td><td>错误率 %</td><td><code class="code-inline">sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100</code></td><td>除法</td></tr>
-    <tr><td>12</td><td>Top 3 服务</td><td><code class="code-inline">topk(3, sum by(job) (rate(http_requests_total[5m])))</code></td><td>TopK</td></tr>
-    <tr><td>13</td><td>昨天同期对比</td><td><code class="code-inline">rate(http_requests_total[5m]) / rate(http_requests_total[5m] offset 1d)</code></td><td>Offset</td></tr>
-    <tr><td>14</td><td>CPU > 80% 的实例</td><td><code class="code-inline">(100 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80</code></td><td>比较运算符</td></tr>
-    <tr><td>15</td><td>合并多条件</td><td><code class="code-inline">(cpu_usage > 80) and (memory_usage > 90)</code></td><td>and 运算</td></tr>
-  </table>
-  <div class="key-point"><strong>💡 心法：</strong>Counter 必须 rate() 再看 / Gauge 直接看 / 分组用 by() / TopK 用 topk / 比较用 < >。练熟 #1-#10 就能解决 95% 场景。</div>
-</div>
-
-<!-- ============= 12: Prometheus 告警 ============= -->
-<div class="slide">
-  <h1>🔔 Prometheus · 告警规则完整示例</h1>
+  <h1>🔔 第 7 步：配第一个告警规则</h1>
   <div class="grid-2">
     <div>
-      <h3>alerts.yml — 5 条实战规则</h3>
-      <div class="code-block">groups:
-  - name: node_alerts
+      <h3>告警规则文件</h3>
+      <div class="code-block"># alerts.yml
+groups:
+  - name: example
     rules:
-      - alert: NodeDown
-        expr: up{job="node"} == 0
+      - alert: InstanceDown
+        expr: up == 0
         for: 1m
         labels: { severity: critical }
         annotations:
-          summary: "节点 {{ $labels.instance }} 已离线"
+          summary: "实例 {{ $labels.instance }} 挂了"
 
       - alert: HighCPU
         expr: (100 - avg by(instance)(
@@ -613,261 +283,317 @@ rate(node_disk_io_time_seconds_total[5m])</div>
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: "CPU > 80% ({{ $value | humanize }}%)"
-
-      - alert: DiskFull
-        expr: (node_filesystem_avail_bytes{mountpoint="/"}
-          / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
-        for: 2m
-        labels: { severity: critical }
-        annotations:
-          summary: "磁盘余量 < 10%"
-
-  - name: app_alerts
-    rules:
-      - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.01
-        for: 1m
-        labels: { severity: critical }
-        annotations:
-          summary: "{{ $labels.job }} 错误率 {{ $value | humanize }}/s"
-
-      - alert: ZeroTraffic
-        expr: rate(http_requests_total[5m]) == 0
-        for: 10m
-        labels: { severity: warning }
-        annotations:
-          summary: "{{ $labels.job }} 5 分钟无请求"</div>
+          summary: "CPU > 80% ({{ $value | humanize }}%)"</div>
     </div>
     <div>
-      <h3>Recording Rules（预计算）</h3>
-      <div class="code-block">groups:
-  - name: recording_rules
-    rules:
-      - record: job:qps:rate5m
-        expr: sum by(job) (rate(http_requests_total[5m]))
+      <h3>在 prometheus.yml 中引用</h3>
+      <div class="code-block"># prometheus.yml
+rule_files:
+  - "alerts.yml"
 
-      - record: job:error_rate:rate5m
-        expr: sum by(job) (
-          rate(http_requests_total{status=~"5.."}[5m])
-        )
+# 验证语法
+promtool check rules alerts.yml
 
-      - record: job:error_ratio:rate5m
-        expr: |
-          job:error_rate:rate5m
-          /
-          job:qps:rate5m
+# 热加载（不重启 Prometheus）
+curl -X POST http://localhost:9090/-/reload
 
-# 之后 Dashboard 可以直接用：
-# job:error_ratio:rate5m
-# 不用再写完整 PromQL 了</div>
-      <h3>Alertmanager 配置</h3>
-      <div class="code-block"># alertmanager.yml
-route:
-  receiver: slack
-  routes:
-    - match: { severity: critical }
-      receiver: pagerduty
-
-receivers:
-  - name: slack
-    slack_configs:
-      - api_url: "https://hooks.slack.com/xxx"
-        channel: "#alerts"</div>
+# 查看告警状态
+# http://localhost:9090/rules
+# 或 /api/v1/rules</div>
+      <h3>常用操作速查</h3>
+      <table>
+        <tr><th>操作</th><th>命令</th></tr>
+        <tr><td>查配置</td><td><code class="code-inline">curl /api/v1/status/config</code></td></tr>
+        <tr><td>查目标</td><td><code class="code-inline">/targets</code> 页面看 UP/DOWN</td></tr>
+        <tr><td>查规则</td><td><code class="code-inline">/rules</code> 页面看告警状态</td></tr>
+        <tr><td>热加载</td><td><code class="code-inline">POST /-/reload</code></td></tr>
+        <tr><td>查指标</td><td><code class="code-inline">/metrics</code> 看自身指标</td></tr>
+      </table>
     </div>
   </div>
 </div>
 
-<!-- ============= 13: Grafana ============= -->
+<!-- 10: 阶段过渡 -->
 <div class="slide">
-  <h1>📈 Grafana · 数据源 + Dashboard + Provisioning</h1>
+  <h1>✅ 阶段 2 小结 + 阶段 3 预告</h1>
   <div class="grid-2">
-    <div class="card"><h3>① 添加数据源</h3><ol><li>左侧齿轮 → <strong>Data Sources → Add data source</strong></li><li>搜索 <strong>Prometheus</strong> → 选中</li><li>URL: <code>http://localhost:9090</code></li><li>点 <strong>Save & Test</strong>（绿色=成功）</li></ol><div class="code-block"># 声明式配置（推荐）
-# /etc/grafana/provisioning/datasources/default.yaml
-apiVersion: 1
-datasources:
-  - name: Prometheus
-    type: prometheus
-    url: http://prometheus:9090
-    isDefault: true</div></div>
-    <div class="card"><h3>② 创建 Dashboard</h3><ol><li>左侧 <strong>+</strong> → <strong>New Dashboard</strong></li><li>点 <strong>Add visualization</strong> → 选 Prometheus</li><li>输 PromQL：<code>rate(http_requests_total[5m])</code></li><li>右侧设 Title="QPS"、Unit="req/s"</li><li>点 <strong>Apply → Save</strong> 取名</li></ol><div class="code-block"># Dashboard JSON 可以导入导出
-# 很多现成的 https://grafana.com/dashboards
-# 常用：Node Exporter Full #1860</div></div>
-    <div class="card"><h3>③ Variables 实现下拉过滤</h3><ol><li>Dashboard 设置 → <strong>Variables → Add</strong></li><li>Name: <code>instance</code>, Type: <strong>Query</strong></li><li>Query: <code>label_values(up, instance)</code></li><li>Panels 中引用：<code>rate(http_requests_total{instance="$instance"}[5m])</code></li><li>顶部出现下拉菜单，选不同实例数据自动切换</li></ol></div>
-    <div class="card"><h3>④ 常用操作速查</h3><table>
-    <tr><th>操作</th><th>做法</th></tr>
-    <tr><td>调图表</td><td>点 Panel 标题 → Edit</td></tr>
-    <tr><td>加告警</td><td>Edit Panel → Alert → 设条件</td></tr>
-    <tr><td>Explore</td><td>左侧罗盘图标，不用建 Dashboard 也能查</td></tr>
-    <tr><td>Variables</td><td>设好下拉过滤，一份 Dashboard 看所有服务</td></tr>
-    <tr><td>Provisioning</td><td>YAML 文件自动配，重启不丢</td></tr>
-    <tr><td>分享</td><td>Panel Share → 嵌入 iframe / 导出 JSON</td></tr>
+    <div class="card" style="border-left-color:#22c55e"><h3>✅ 你现在已经会了</h3><ul><li>启动 Prometheus + Grafana</li><li>PromQL 5 个核心函数</li><li>建 Dashboard + 配告警</li><li>看 CPU/内存/请求数指标</li></ul></div>
+    <div class="card"><h3>🔜 下一步：ELK Stack</h3><p>Prometheus 只能管"数字"（指标）。但排查问题还需要<strong>搜日志</strong>。ES 就是干这个的——把日志存进去，像 Google 一样搜。</p></div>
+  </div>
+  <div class="warning"><strong>💡 学习节奏：</strong>如果 Prometheus 部分还没完全理解，回头再练练。接下来 ES 部分完全独立，不影响。</div>
+</div>
+
+<!-- ============================== 第 3 阶段：ELK Stack ============================== -->
+
+<!-- 11: ES 启动 -->
+<div class="slide">
+  <h1>🔎 第 8 步：启动 ES + Kibana + 写入第一条日志</h1>
+  <div class="grid-2">
+    <div>
+      <h3>启动</h3>
+      <div class="code-block">docker run -d --name es \
+  -p 9200:9200 \
+  -e "discovery.type=single-node" \
+  -e "xpack.security.enabled=false" \
+  -e "ES_JAVA_OPTS=-Xms1g -Xmx1g" \
+  docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+
+docker run -d --name kibana \
+  -p 5601:5601 \
+  -e "ELASTICSEARCH_HOSTS=http://host.docker.internal:9200" \
+  docker.elastic.co/kibana/kibana:8.15.0
+
+# 验证
+curl http://localhost:9200
+# 看到 JSON = ES 跑起来了
+# 打开 http://localhost:5601 = Kibana 跑起来了</div>
+    </div>
+    <div>
+      <h3>写入第一条数据</h3>
+      <div class="code-block"># 打开 http://localhost:5601
+# 左侧菜单 → Dev Tools → Console
+
+# 建索引（不指定 mapping，ES 自动推断）
+PUT /nginx-logs
+
+# 写入一条日志
+POST /nginx-logs/_doc
+{
+  "@timestamp": "2026-05-08T10:00:00",
+  "client_ip": "192.168.1.100",
+  "method": "GET",
+  "uri": "/api/users",
+  "status_code": 200,
+  "response_time": 120,
+  "user_agent": "Mozilla/5.0"
+}</div>
+      <h3>验证数据进来了</h3>
+      <div class="code-block"># 搜全部
+GET /nginx-logs/_search
+{ "query": { "match_all": {} } }
+# 应该看到刚才写入的那条记录</div>
+      <div class="key-point">1 分钟完成写入→搜索。接下来可以批量写数据练习。</div>
+    </div>
+  </div>
+</div>
+
+<!-- 12: ES 3 个概念 -->
+<div class="slide">
+  <h1>📦 第 9 步：理解 ES 的 3 个核心概念</h1>
+  <div class="grid-3">
+    <div class="card" style="border-left-color:#3b82f6"><h3>Index（索引）</h3><p>≈ 数据库的表。存同一类文档。</p><div class="code-block">PUT /shop
+# 创建一个索引
+
+POST /shop/_bulk
+{"index":{}}
+{"name":"笔记本","price":6999,"stock":100}
+{"index":{}}
+{"name":"手机","price":4999,"stock":200}</div></div>
+    <div class="card" style="border-left-color:#3b82f6"><h3>Document（文档）</h3><p>≈ 一行记录。JSON 格式，每个文档有唯一 ID。</p><div class="code-block"># 搜索全部
+GET /shop/_search
+{ "query": { "match_all": {} } }
+
+# 按 ID 查
+GET /shop/_doc/ID
+
+# 更新
+POST /shop/_update/ID
+{ "doc": { "stock": 80 } }
+
+# 删除
+DELETE /shop/_doc/ID</div></div>
+    <div class="card" style="border-left-color:#3b82f6"><h3>Mapping（映射）</h3><p>≈ 表结构。字段类型定义。</p><div class="code-block"># 查看映射
+GET /shop/_mapping
+
+# 手动定义（推荐）
+PUT /products
+{
+  "mappings": {
+    "properties": {
+      "name":  { "type": "text" },
+      "price": { "type": "integer" },
+      "tags":  { "type": "keyword" },
+      "created_at": { "type": "date" }
+    }
+  }
+}
+# text=分词 keyword=精确 integer=整数 date=时间</div></div>
+  </div>
+  <div class="info-box"><strong>💡 CRUD 练习建议：</strong>在 Dev Tools 里依次做：建索引 → 写入 → 查 → 改 → 删。10 分钟就能记住所有操作。删错了？没事，再写入就行。</div>
+</div>
+
+<!-- 13: ES 搜索入门 -->
+<div class="slide">
+  <h1>🔍 第 10 步：从 match 到 bool——搜索三步走</h1>
+  <div class="grid-2">
+    <div>
+      <h3>第 1 步：match_phrase（短语精确搜索）</h3>
+      <div class="code-block"># 最常用的搜索——搜关键词
+GET /nginx-logs/_search
+{ "query": {
+    "match": { "message": "error timeout" }
+}}
+# 分词搜索，含任意词就命中
+# "error timeout" 分为 [error, timeout]
+# 匹配含 error 或 timeout 的文档</div>
+      <h3>第 2 步：term + range（精确 + 范围）</h3>
+      <div class="code-block"># 精确匹配——搜状态码
+GET /nginx-logs/_search
+{ "query": {
+    "term": { "status_code": 500 }
+}}
+
+# 范围——搜响应时间
+GET /nginx-logs/_search
+{ "query": {
+    "range": { "response_time": { "gt": 1000 } }
+}}
+# gt=大于 gte=大于等于 lt=小于 lte=小于等于</div>
+    </div>
+    <div>
+      <h3>第 3 步：bool——组合查询利器</h3>
+      <div class="code-block"># 把上面所有条件组合在一起
+GET /nginx-logs/_search
+{ "query": {
+    "bool": {
+      "must": [
+        { "match": { "message": "error" } }
+      ],
+      "filter": [
+        { "term": { "status_code": 500 } },
+        { "range": { "response_time": { "gt": 1000 } } },
+        { "range": { "@timestamp": { "gte": "now-6h" } } }
+      ],
+      "must_not": [
+        { "term": { "service": "healthcheck" } }
+      ],
+      "should": [
+        { "match": { "message": "urgent" } }
+      ]
+    }
+}}
+# must=必须匹配（评分）
+# filter=必须匹配（不评分，可缓存）
+# must_not=排除
+# should=提升评分</div>
+    </div>
+  </div>
+  <div class="key-point"><strong>💡 搜索心法：</strong>match 搜文本 / term 精确值 / range 范围 / bool 搭积木。按这个顺序学，从简单到复杂。</div>
+</div>
+
+<!-- 14: ES 聚合 -->
+<div class="slide">
+  <h1>📊 第 11 步：ES 聚合——分 3 个级别学</h1>
+  <div class="grid-2">
+    <div>
+      <h3>级别 1：terms + date_histogram（分组+时间）</h3>
+      <div class="code-block"># 按状态码分组计数
+GET /nginx-logs/_search
+{ "size":0, "aggs": {
+    "by_status": {
+      "terms": { "field":"status_code", "size":5 }
+    }
+}}
+# → 200: 1234次, 404: 56次, 500: 12次
+
+# 按小时分组
+GET /nginx-logs/_search
+{ "size":0, "aggs": {
+    "hourly": {
+      "date_histogram": {
+        "field":"@timestamp",
+        "calendar_interval": "hour"
+      }
+    }
+}}</div>
+    </div>
+    <div>
+      <h3>级别 2：avg/stats/cardinality（统计量）</h3>
+      <div class="code-block"># 响应时间统计
+GET /nginx-logs/_search
+{ "size":0, "aggs": {
+    "stats": {
+      "stats": { "field":"response_time" }
+    }
+}}
+# count/min/max/avg/sum 一次性返回
+
+# 去重计数
+GET /nginx-logs/_search
+{ "size":0, "aggs": {
+    "unique_ips": {
+      "cardinality": { "field":"client_ip" }
+    }
+}}</div>
+      <h3>级别 3：嵌套聚合（分组再统计）</h3>
+      <div class="code-block">GET /nginx-logs/_search
+{ "size":0, "aggs": {
+    "by_service": {
+      "terms": { "field":"service.keyword" },
+      "aggs": {
+        "avg_resp": { "avg": {"field":"response_time"} },
+        "p99": {
+          "percentiles":{
+            "field":"response_time","percents":[99]
+          }
+        },
+        "hourly": {
+          "date_histogram":{
+            "field":"@timestamp","fixed_interval":"1h"
+          }
+        }
+      }
+    }
+}}
+# 外部分组→内部分组统计
+# 一个查询回答：每个服务的平均延迟/P99/每小时趋势</div>
+    </div>
+  </div>
+</div>
+
+<!-- 15: Kibana -->
+<div class="slide">
+  <h1>🖥️ 第 12 步：Kibana 三步上手</h1>
+  <div class="grid-2">
+    <div class="card"><h3>① Data View（必做，配错=搜不到）</h3><ol><li>左侧菜单 → <strong>Stack Management → Data Views</strong></li><li>点 <strong>Create data view</strong></li><li>Name: <code>nginx-logs</code></li><li>Index pattern: <code>nginx-logs-*</code>（匹配你的索引）</li><li>Timestamp: <code>@timestamp</code></li><li>点 <strong>Save</strong></li></ol></div>
+    <div class="card"><h3>② Discover</h3><ol><li>左侧 → <strong>Discover</strong> → 选 data view</li><li>时间范围 <code>Last 7 days</code></li><li>搜索栏输 <code>status_code: >= 400</code></li><li>点 Update → 看到日志列表</li><li>点任一行展开看所有字段</li></ol></div>
+    <div class="card"><h3>③ Dashboard + Lens</h3><ol><li>左侧 → <strong>Dashboard → Create</strong></li><li>点 <strong>Create visualization</strong></li><li>拖 <code>@timestamp</code> 到 X 轴</li><li>拖 <code>status_code</code> 到 Y 轴（选 Count）</li><li>拖 <code>status_code</code> 到 Breakdown 分组</li><li>Save → 加第二个图</li></ol></div>
+    <div class="card"><h3>📋 常用操作</h3><table>
+    <tr><th>操作</th><th>命令</th></tr>
+    <tr><td>查所有索引</td><td><code class="code-inline">GET /_cat/indices?v</code></td></tr>
+    <tr><td>查 mapping</td><td><code class="code-inline">GET /索引/_mapping</code></td></tr>
+    <tr><td>删索引</td><td><code class="code-inline">DELETE /索引</code></td></tr>
+    <tr><td>批量写</td><td><code class="code-inline">POST /_bulk</code></td></tr>
+    <tr><td>调查询</td><td>Dev Tools 写好→贴到 Dashboard</td></tr>
   </table></div>
   </div>
-  <div class="warning"><strong>⚠️ 关键认知：</strong>Grafana 是"查询+展示"引擎，不存数据。重启不会丢 Dashboard，但 Prometheus 挂了就看不到图了。Provisioning（YAML 配置）是生产环境唯一推荐的方式。</div>
+  <div class="warning"><strong>⚠️ 搜不到数据的三步排查：</strong>① Data View 索引模式匹配吗？② 时间范围对吗？③ ES 真的有数据吗（Dev Tools 先查 <code class="code-inline">GET /_cat/indices</code>）</div>
 </div>
 
-<!-- ============= 14: OTel ============= -->
+<!-- 16: 阶段过渡 -->
 <div class="slide">
-  <h1>🔗 OpenTelemetry · 为什么 + 架构 + 配置</h1>
+  <h1>✅ 阶段 3 小结</h1>
   <div class="grid-2">
-    <div>
-      <h3>为什么需要 OTel？</h3>
-      <div class="card" style="border-left-color:#ef4444"><p><strong>❌ 没 OTel 之前：</strong>应用里混着 Jaeger API（trace）+ Prometheus 库（metrics）+ logging（日志），三个库三种配置。想换后端要改代码。</p></div>
-      <div class="card" style="border-left-color:#22c55e"><p><strong>✅ 有 OTel 以后：</strong>一套 API 覆盖三种信号。换后端只改 Collector 配置，不碰业务代码。TraceID 自动注入日志，指标关联 Trace。</p></div>
-      <h3>架构分层</h3>
-      <div class="mermaid">
-flowchart LR
-    APP["应用<br/>OTel SDK"] -->|"OTLP"| COLL["Collector<br/>接收→处理→转发"]
-    COLL -->|"OTLP"| J["Jaeger"]
-    COLL -->|"Prometheus"| P["Prometheus"]
-    COLL -->|"OTLP"| ES["ES"]
-      </div>
-    </div>
-    <div>
-      <h3>常改文件</h3>
-      <table>
-        <tr><th>文件</th><th>作用</th></tr>
-        <tr><td>collector.yml</td><td>Receivers→Processors→Exporters 管道配置</td></tr>
-        <tr><td>（SDK 环境变量）</td><td>OTEL_EXPORTER_OTLP_ENDPOINT、OTEL_SERVICE_NAME</td></tr>
-      </table>
-      <h3>Collector 生产配置</h3>
-      <div class="code-block">receivers:
-  otlp:
-    protocols:
-      grpc: { endpoint: "0.0.0.0:4317" }
-      http: { endpoint: "0.0.0.0:4318" }
-
-processors:
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 512
-  batch:
-    timeout: 1s
-    send_batch_size: 1024
-  tail_sampling:
-    decision_wait: 30s
-    policies:
-      - name: errors
-        type: status_code
-        config: { status_code: ERROR }
-
-exporters:
-  otlp:
-    endpoint: "jaeger:4317"
-    tls: { insecure: true }
-  debug: { verbosity: detailed }
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, tail_sampling, batch]
-      exporters: [otlp, debug]
-    metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [prometheus, debug]</div>
-    </div>
+    <div class="card" style="border-left-color:#22c55e"><h3>✅ 你现在已经会了</h3><ul><li>ES 增删改查 + 搜索</li><li>match/term/range/bool 四种查询</li><li>terms/date_histogram/stats 聚合</li><li>Kibana Discover + Dashboard</li></ul></div>
+    <div class="card"><h3>🤔 但还缺什么？</h3><ul><li>日志怎么自动进 ES 的？—— 下一节学 Fluent Bit</li><li>怎么把监控指标和日志串起来？—— 下下节学 OTel</li><li>怎么追踪一次请求经过多个服务？—— 下下下节学 Jaeger</li></ul></div>
   </div>
+  <div class="info-box"><strong>💡 目前你已经搭建了两个独立的系统：</strong>Prometheus 管"数字"，ES 管"文字"。下阶段把它们串起来。</div>
 </div>
 
-<!-- ============= 15: OTel SDK ============= -->
+<!-- ============================== 第 4 阶段：采集 + 追踪 ============================== -->
+
+<!-- 17: Fluent Bit -->
 <div class="slide">
-  <h1>🔧 OTel SDK · 从自动埋点到手动控制</h3>
+  <h1>💨 第 13 步：Fluent Bit——让日志自动流入 ES</h1>
   <div class="grid-2">
     <div>
-      <h3>自动埋点（推荐，一行启动）</h3>
-      <div class="code-block"># 安装
-pip install opentelemetry-instrumentation \
-  opentelemetry-instrumentation-flask \
-  opentelemetry-instrumentation-requests
-
-# 一行启动全部自动拦截
-# Flask/requests/DB driver 等自动创建 span
-opentelemetry-instrument \
-  --traces_exporter otlp \
-  --metrics_exporter otlp \
-  --service_name my-app \
-  python app.py
-
-# 环境变量替代参数
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317
-export OTEL_SERVICE_NAME=my-app
-opentelemetry-instrument python app.py</div>
-      <h3>手动埋点（精细控制）</h3>
-      <div class="code-block">from opentelemetry import trace
-tracer = trace.get_tracer(__name__)
-
-with tracer.start_as_current_span("query_db") as span:
-    # 加自定义属性
-    span.set_attribute("db.query", "SELECT * FROM users")
-    span.set_attribute("db.rows", 42)
-    span.set_attribute("db.duration_ms", 350)
-
-    # 加事件
-    span.add_event("db:query_start")
-    # ... 业务代码 ...
-    span.add_event("db:query_complete")
-
-    # 记录错误
-    span.set_status(trace.Status(trace.StatusCode.ERROR))
-    span.record_exception(e)</div>
-    </div>
-    <div>
-      <h3>自动标记环境变量</h3>
-      <table>
-        <tr><th>变量</th><th>示例值</th><th>作用</th></tr>
-        <tr><td>OTEL_SERVICE_NAME</td><td>my-app</td><td>服务名，在 Jaeger 中标识来源</td></tr>
-        <tr><td>OTEL_EXPORTER_OTLP_ENDPOINT</td><td>http://collector:4317</td><td>Collector 地址</td></tr>
-        <tr><td>OTEL_TRACES_SAMPLER</td><td>parentbased_traceidratio</td><td>采样策略</td></tr>
-        <tr><td>OTEL_TRACES_SAMPLER_ARG</td><td>0.1</td><td>采样率（0.1=10%）</td></tr>
-        <tr><td>OTEL_RESOURCE_ATTRIBUTES</td><td>deployment.environment=production</td><td>附加标签</td></tr>
-      </table>
-      <h3>采样策略详解</h3>
-      <table>
-        <tr><th>策略</th><th>配置</th><th>适用</th></tr>
-        <tr><td>按比例</td><td>OTEL_TRACES_SAMPLER_ARG=0.1</td><td>日常采样 10%</td></tr>
-        <tr><td>尾部采样</td><td>Collector 端配置 tail_sampling</td><td>保留错误 + 慢请求</td></tr>
-        <tr><td>速率限制</td><td>Collector 端 rate_limiting</td><td>防突发流量</td></tr>
-      </table>
-      <div class="info-box"><strong>💡 日志关联 Trace：</strong>装上 <code>opentelemetry-instrumentation-logging</code> 后，日志自动携带 trace_id/span_id。在 Kibana 搜 trace_id 就能从日志跳到 Trace。</div>
-    </div>
-  </div>
-</div>
-
-<!-- ============= 16: Fluent Bit ============= -->
-<div class="slide">
-  <h1>💨 Fluent Bit · 架构 + 配置文件详解</h1>
-  <div class="grid-2">
-    <div>
-      <h3>核心优势</h3>
-      <div class="concept-box" style="background:linear-gradient(135deg,#059669,#10b981)"><p>C 语言编写，空闲内存 ~650KB（Fluentd ~40MB）。性能是 Fluentd 的 10-40 倍。支持 Grok 正则解析（200+ 内置模式）。K8s DaemonSet 标配。</p></div>
-      <h3>常改文件</h3>
-      <table>
-        <tr><th>文件</th><th>改了会怎样</th></tr>
-        <tr><td>fluent-bit.conf</td><td>整个管道配置——改完重启生效</td></tr>
-        <tr><td>parsers.conf</td><td>日志解析规则——改了不重启，自动加载</td></tr>
-      </table>
-      <h3>启动方式</h3>
-      <div class="code-block"># Docker
+      <h3>启动 + 配一个最简单的管道</h3>
+      <div class="code-block"># 启动 Fluent Bit
 docker run -d --name fb \
   -v $(pwd)/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf \
-  cr.fluentbit.io/fluent/fluent-bit
+  cr.fluentbit.io/fluent/fluent-bit:latest
 
-# K8s DaemonSet（官方推荐）
-# 每个节点跑一个 Pod，采集所有容器日志
-# 配置见 fluent-bit 官方 Helm chart</div>
-    </div>
-    <div>
-      <h3>生产配置示例</h3>
-      <div class="code-block"># fluent-bit.conf
-[SERVICE]
-    flush         5
-    log_level     info
-    parsers_file  parsers.conf
-
-# 输入：采集 Nginx 日志
+# fluent-bit.conf（最简单的配置）
 [INPUT]
     name          tail
     path          /var/log/nginx/access.log
@@ -875,19 +601,18 @@ docker run -d --name fb \
     parser        nginx
     mem_buf_limit 5MB
 
-# 过滤：只保留 5xx 错误
-[FILTER]
-    name          grep
-    match         nginx.*
-    regex         status 5[0-9]{2}
-
-# 添加环境标签
-[FILTER]
-    name          modify
+[OUTPUT]
+    name          stdout   # 先打印到控制台
     match         *
-    add           env production
 
-# 输出到 ES
+# 验证日志
+docker logs fb
+# 看到 Nginx 日志一行行打印出来了</div>
+      <div class="info-box"><strong>调试技巧：</strong>先配 stdout 确认日志能收到，再改成 ES。不然不知道是采集的问题还是写入的问题。</div>
+    </div>
+    <div>
+      <h3>然后把 stdout 改成 ES</h3>
+      <div class="code-block"># 把 OUTPUT 改成 ES
 [OUTPUT]
     name          es
     match         *
@@ -896,441 +621,316 @@ docker run -d --name fb \
     index         nginx-logs-${DATE}
     generate_id   on
 
-# 同时打控制台调试
-[OUTPUT]
-    name          stdout
+# 日志就自动进 ES 了！
+# 去 Kibana Discover 刷新一下就能看到</div>
+      <h3>再加个过滤：只留错误日志</h3>
+      <div class="code-block">[FILTER]
+    name          grep
+    match         nginx.*
+    regex         status 5[0-9]{2}
+
+# 加个标签
+[FILTER]
+    name          modify
     match         *
-    format        json_lines</div>
+    add           env production</div>
+      <h3>常改文件</h3>
+      <table>
+        <tr><th>文件</th><th>改了会怎样</th></tr>
+        <tr><td>fluent-bit.conf</td><td>整个管道——重启生效</td></tr>
+        <tr><td>parsers.conf</td><td>格式解析规则——自动加载</td></tr>
+      </table>
     </div>
   </div>
 </div>
 
-<!-- ============= 17: Fluent Bit 常见示例 ============= -->
+<!-- 18: Fluent Bit 场景 -->
 <div class="slide">
-  <h1>💨 Fluent Bit · 常见场景 + Grok 模式</h1>
+  <h1>💨 第 13 步续：Fluent Bit 常见 3 个场景</h1>
   <div class="grid-2">
     <div>
-      <h3>场景 1：采集 JSON 日志</h3>
+      <h3>场景 1：采集 JSON 格式日志</h3>
       <div class="code-block"># parsers.conf
 [PARSER]
     Name   json_log
     Format json
     Time_Key @timestamp
-    Time_Format %Y-%m-%dT%H:%M:%S.%L
 
-# fluent-bit.conf
+# 采集
 [INPUT]
     name   tail
     path   /app/logs/*.json
     parser json_log</div>
-      <h3>场景 2：Grok 解析 Nginx</h3>
-      <div class="code-block"># parsers.conf 内置 nginx 模式
-# Fluent Bit 内置了 200+ 解析器
-# 直接用 parser nginx
-
-# 自定义多行日志（如 Java 异常栈）
-[MULTILINE_PARSER]
-    name          multiline_java
-    type          regex
-    flush_timeout 1000
-    rule          "start_state"  "(^(\\d{4}-\\d{2}-\\d{2}))" "cont"
-    rule          "cont"         "/^(\s+at.*/"            "cont"</div>
-      <h3>场景 3：K8s 容器日志采集</h3>
+      <h3>场景 2：K8s 容器日志（DaemonSet 标配）</h3>
       <div class="code-block">[INPUT]
-    name          tail
-    path          /var/log/containers/*.log
-    parser        cri
-    tag           kube.*
+    name   tail
+    path   /var/log/containers/*.log
+    parser cri
+    tag    kube.*
     mem_buf_limit 50MB
 
 [FILTER]
-    name          kubernetes
-    match         kube.*
-    merge_log     On
-    k8s_logging.parser On</div>
+    name        kubernetes
+    match       kube.*
+    merge_log   On
+    labels      On</div>
     </div>
     <div>
-      <h3>场景 4：输出到 Kafka</h3>
+      <h3>场景 3：输出到 Kafka（大型部署）</h3>
       <div class="code-block">[OUTPUT]
-    name          kafka
-    match         *
-    brokers       kafka-broker:9092
-    topics        nginx-logs
-    rdkafka.client_id  fluent-bit</div>
-      <h3>场景 5：S3 归档</h3>
-      <div class="code-block">[OUTPUT]
-    name          s3
-    match         *
-    bucket        my-logs-bucket
-    region        us-east-1
-    total_file_size 100M
-    upload_timeout  5m</div>
+    name     kafka
+    match    *
+    brokers  kafka:9092
+    topics   nginx-logs</div>
       <h3>Grok 常用模式</h3>
       <table>
         <tr><th>模式</th><th>匹配</th></tr>
         <tr><td>IP</td><td>192.168.1.1</td></tr>
-        <tr><td>URIPATHPARAM</td><td>/api?id=1</td></tr>
-        <tr><td>HTTPDATE</td><td>07/May/2025:12:00:00</td></tr>
         <tr><td>NUMBER</td><td>200, 3.14</td></tr>
-        <tr><td>GREEDYDATA</td><td>任意内容</td></tr>
+        <tr><td>HTTPDATE</td><td>07/May/2025:12:00:00</td></tr>
+        <tr><td>GREEDYDATA</td><td>任一内容</td></tr>
+      </table>
+      <div class="key-point"><strong>FB vs Logstash：</strong>FB ~650KB 内存 vs LS ~1GB。FB 的 200+ Grok 模式够覆盖 90% 日志解析场景。新项目统一用 FB。</div>
+    </div>
+  </div>
+</div>
+
+<!-- 19: OTel -->
+<div class="slide">
+  <h1>🔗 第 14 步：OpenTelemetry——把指标、日志、追踪统一起来</h1>
+  <div class="grid-2">
+    <div class="card" style="border-left-color:#ef4444"><h3>❌ 没有 OTel 之前</h3><div class="code-block"># 三个库三种配置
+from jaeger_client import Config  # 追踪
+from prometheus_client import Counter  # 指标
+import logging  # 日志
+# TraceID 无法自动串到日志
+# 换后端（Jaeger→Zipkin）要改代码</div></div>
+    <div class="card" style="border-left-color:#22c55e"><h3>✅ 有 OTel 以后</h3><div class="code-block"># 只用 OTel SDK
+from opentelemetry import trace
+tracer = trace.get_tracer(__name__)
+
+with tracer.start_as_current_span("handle"):
+    handle()
+# 一套 API 三信号
+# 换后端只改 Collector 配置
+# TraceID 自动注入日志</div></div>
+  </div>
+  <h3>架构：应用 → Collector → 后端</h3>
+  <div class="mermaid">
+flowchart LR
+    APP["应用<br/>装 OTel SDK"] -->|"OTLP 协议"| COLL["OTel Collector<br/>receiver→processor→exporter"]
+    COLL --> J["Jaeger"]
+    COLL --> P["Prometheus"]
+    COLL --> ES["Elasticsearch"]
+  </div>
+  <div class="info-box"><strong>💡</strong> 应用只需要对接 Collector，后端怎么换都行。这就是 OTel 的核心价值——解耦。</div>
+</div>
+
+<!-- 20: OTel 动手 -->
+<div class="slide">
+  <h1>🔧 第 15 步：动手搭 OTel——从 SDK 到 Jaeger</h1>
+  <div class="grid-2">
+    <div>
+      <h3>启动 Jaeger + Collector</h3>
+      <div class="code-block"># Jaeger（all-in-one，含 Collector+UI）
+docker run -d --name jaeger \
+  -p 16686:16686 -p 4317:4317 \
+  jaegertracing/all-in-one:latest
+
+# OTel Collector（配置文件）
+# collector.yml
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: "0.0.0.0:4317" }
+processors:
+  batch: { timeout: 1s }
+exporters:
+  otlp:
+    endpoint: "jaeger:4317"
+    tls: { insecure: true }
+  debug: { verbosity: detailed }
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp, debug]
+
+# 启动 Collector
+docker run -d --name otel \
+  -p 4317:4317 \
+  -v $(pwd)/collector.yml:/etc/otelcol/config.yaml \
+  otel/opentelemetry-collector-contrib:latest</div>
+    </div>
+    <div>
+      <h3>在应用里装 SDK</h3>
+      <div class="code-block"># Python 应用，自动埋点（一行启动）
+pip install opentelemetry-instrumentation \
+  opentelemetry-instrumentation-flask
+
+opentelemetry-instrument \
+  --traces_exporter otlp \
+  --service_name my-app \
+  python app.py
+
+# 访问你的应用几次
+# 然后打开 http://localhost:16686
+# Service 下拉选 my-app
+# 点 Find Traces
+# → 看到第一条 Trace 的瀑布图！</div>
+      <h3>环境变量速查</h3>
+      <table>
+        <tr><th>变量</th><th>作用</th></tr>
+        <tr><td>OTEL_SERVICE_NAME</td><td>服务名</td></tr>
+        <tr><td>OTEL_EXPORTER_OTLP_ENDPOINT</td><td>Collector 地址</td></tr>
+        <tr><td>OTEL_TRACES_SAMPLER_ARG=0.1</td><td>10% 采样率</td></tr>
       </table>
     </div>
   </div>
-  <div class="info-box"><strong>💡 排查技巧：</strong>先 <code>[OUTPUT] name stdout</code> 看看日志收没收到，再配 ES/S3/Kafka。ES 连不上 Fluent Bit 不会挂，日志暂存在内存缓冲区。</div>
 </div>
 
-<!-- ============= 18: Jaeger ============= -->
+<!-- 21: Jaeger -->
 <div class="slide">
-  <h1>🔬 Jaeger · 启动 + 看 Trace + 与 OTel 集成</h1>
+  <h1>🔬 第 16 步：怎么看 Trace 找到慢请求</h1>
   <div class="grid-2">
     <div>
-      <h3>一步启动</h3>
-      <div class="code-block">docker run -d --name jaeger \
-  -p 16686:16686 \
-  -p 4317:4317 \
-  -p 4318:4318 \
-  jaegertracing/all-in-one:latest
-
-# :16686 → Web UI
-# :4317   → OTel gRPC
-# :4318   → OTel HTTP</div>
-      <h3>Jaeger 数据流</h3>
-      <div class="mermaid">
-flowchart LR
-    SDK["应用<br/>OTel SDK"] -->|"OTLP"| C["Collector"]
-    C -->|"OTLP"| J["Jaeger all-in-one"]
-    J -->|":16686"| UI["Web UI"]
-    J -->|"Grafana 数据源"| G["Grafana"]
-      </div>
-      <h3>在 Grafana 中配 Jaeger</h3>
-      <div class="code-block"># Data Sources → Add → Jaeger
-# URL: http://localhost:16686
-# 配好后 Explore → Jaeger → Search</div>
-    </div>
-    <div>
-      <h3>怎么看 Trace</h3>
+      <h3>Jaeger UI 界面</h3>
       <ol>
         <li>打开 <code>http://localhost:16686</code></li>
-        <li>左侧 Service 下拉选你的服务</li>
-        <li>点 <strong>Find Traces</strong> → 看到 Trace 列表</li>
-        <li>点一个进 <strong>水瀑布图</strong>：
-          <ul>
-            <li>每行 = 一个 Span（一次操作）</li>
-            <li>宽度 = 耗时（越长越慢）</li>
-            <li>红色 = 有错误</li>
-            <li>箭头 = 父子调用关系</li>
-          </ul>
-        </li>
-        <li>点任意 Span → 看 Tags（HTTP 状态码、DB 语句等）</li>
-        <li><strong>Service Graph</strong>：自动画服务拓扑</li>
+        <li>选 Service → 点 <strong>Find Traces</strong></li>
+        <li>看到所有 Trace 列表，按耗时排序</li>
+        <li>找一个最长的点进去</li>
       </ol>
-      <h3>存储后端配置</h3>
-      <div class="code-block"># all-in-one 用内存，重启后数据丢失
-# 生产环境用 ES 或 Cassandra
+      <div class="mermaid">
+flowchart LR
+    G["Gateway<br/>10ms"] --> A["Auth<br/>5ms"]
+    G --> U["User<br/>3420ms ⚠️"]
+    U --> D["DB Query<br/>3400ms ⚠️"]
+    D --> R["Redis<br/>20ms"]
+      </div>
+      <div class="key-point"><strong>怎么找问题：</strong>最长的 span = 问题所在。上图中 User 服务花了 3420ms，里面 DB Query 花了 3400ms → 数据库查询慢是根因。</div>
+    </div>
+    <div>
+      <h3>生产配置：使用 ES 做存储</h3>
+      <div class="code-block"># all-in-one 用内存，重启丢数据
+# 生产用 ES
 docker run -d --name jaeger \
   -e SPAN_STORAGE_TYPE=elasticsearch \
   -e ES_SERVER_URLS=http://es:9200 \
-  jaegertracing/all-in-one:latest
-
-# Jaeger v2 原生 OTLP
-# 不再需要 Jaeger Thrift</div>
-    </div>
-  </div>
-  <div class="key-point"><strong>💡 打通 OTel → Jaeger：</strong>配置 Collector 的 exporters 中加 <code>- otlp: { endpoint: "jaeger:4317" }</code>，应用启动时设 <code>OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317</code>，数据就自动流向 Jaeger 了。</div>
-</div>
-
-<!-- ============= OTel Advanced ============= -->
-<div class="slide">
-  <h1>🔗 OTel · Collector 高级用法 + 生产配置</h1>
-  <div class="grid-2">
-    <div>
-      <h3>三种 Collector 部署模式</h3>
-      <table>
-        <tr><th>模式</th><th>部署方式</th><th>适用场景</th></tr>
-        <tr><td><strong>Agent</strong></td><td>每台机器一个 DaemonSet</td><td>节点级日志/trace 采集，最简单</td></tr>
-        <tr><td><strong>Sidecar</strong></td><td>每个 Pod 旁跑一个 Collector</td><td>精细控制每个应用的 Pipeline</td></tr>
-        <tr><td><strong>Gateway</strong></td><td>独立 Collector 集群</td><td>大规模场景，做采样/过滤/路由</td></tr>
-      </table>
-      <h3>常用 Processor</h3>
-      <div class="code-block">processors:
-  # 批处理（必配）
-  batch:
-    timeout: 1s
-    send_batch_size: 1024
-
-  # 内存限制（必配）
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 512
-
-  # 属性注入（给 span 加标签）
-  attributes:
-    actions:
-      - key: environment
-        value: "production"
-        action: upsert
-
-  # 过滤（丢弃不需要的数据）
-  filter:
-    error_mode: ignore
-    traces:
-      span:
-        - 'attributes["http.method"] == "OPTIONS"'
-
-  # 采样（尾部采样）
-  tail_sampling:
-    decision_wait: 30s
-    policies:
-      - name: errors
-        type: status_code
-        config: { status_code: ERROR }
-      - name: slow
-        type: latency
-        config: { threshold_ms: 1000 }
-      - name: probabilistic
-        type: probabilistic
-        config: { sampling_percentage: 10 }</div>
-    </div>
-    <div>
-      <h3>K8s 部署完整示例</h3>
-      <div class="code-block"># otel-collector.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: otel-collector
-data:
-  collector.yml: |
-    receivers:
-      otlp:
-        protocols:
-          grpc: { endpoint: "0.0.0.0:4317" }
-    processors:
-      memory_limiter:
-        limit_mib: 512
-      batch: { timeout: 1s }
-    exporters:
-      otlp:
-        endpoint: "jaeger.monitoring:4317"
-        tls: { insecure: true }
-      prometheus:
-        endpoint: "0.0.0.0:8889"
-    service:
-      pipelines:
-        traces:
-          receivers: [otlp]
-          processors: [memory_limiter, batch]
-          exporters: [otlp]
-        metrics:
-          receivers: [otlp]
-          processors: [memory_limiter, batch]
-          exporters: [prometheus]
----
-apiVersion: apps/v1
-kind: Deployment
-spec:
-  template:
-    spec:
-      containers:
-        - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:latest
-          args: ["--config=/conf/collector.yml"]
-          ports:
-            - containerPort: 4317
-            - containerPort: 8889</div>
-      <h3>常见问题</h3>
-      <ul>
-        <li><strong>应用连不上 Collector：</strong>检查 <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> 地址和端口是否正确</li>
-        <li><strong>Collector OOM：</strong>配 <code>memory_limiter</code> processor，设合理上限</li>
-        <li><strong>Trace 丢了：</strong>检查采样策略，Tail Sampling 需要所有 span 到齐才决策</li>
-        <li><strong>调试方法：</strong>加 <code>exporters: debug: { verbosity: detailed }</code> 看原始数据</li>
-      </ul>
-    </div>
-  </div>
-</div>
-
-<!-- ============= Fluent Bit K8s ============= -->
-<div class="slide">
-  <h1>💨 Fluent Bit · K8s 部署 + 生产最佳实践</h1>
-  <div class="grid-2">
-    <div>
-      <h3>K8s DaemonSet 配置</h3>
-      <div class="code-block"># fluent-bit-config.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: fluent-bit-config
-  namespace: logging
-data:
-  fluent-bit.conf: |
-    [SERVICE]
-        flush        5
-        log_level    info
-        parsers_file parsers.conf
-
-    [INPUT]
-        name         tail
-        path         /var/log/containers/*.log
-        parser       cri
-        tag          kube.*
-        mem_buf_limit 50MB
-        skip_long_lines On
-
-    [FILTER]
-        name         kubernetes
-        match        kube.*
-        merge_log    On
-        keep_log     On
-        k8s-logging.parser On
-        labels       On
-        annotations  On
-
-    [OUTPUT]
-        name         es
-        match        *
-        host         elasticsearch.logging
-        port         9200
-        index        k8s-logs-${DATE}
-        retry_limit  2
-        buffer_size  2MB
----
-apiVersion: apps/v1
-kind: DaemonSet
-spec:
-  template:
-    spec:
-      containers:
-        - name: fluent-bit
-          image: cr.fluentbit.io/fluent/fluent-bit:latest
-          volumeMounts:
-            - name: config
-              mountPath: /fluent-bit/etc/
-            - name: varlog
-              mountPath: /var/log
-            - name: docker
-              mountPath: /var/lib/docker/containers
-      volumes:
-        - name: config
-          configMap: { name: fluent-bit-config }
-        - name: varlog
-          hostPath: { path: /var/log }
-        - name: docker
-          hostPath: { path: /var/lib/docker/containers }</div>
-    </div>
-    <div>
-      <h3>生产最佳实践</h3>
-      <div class="card"><h4>内存管理</h4><ul>
-        <li><code>mem_buf_limit</code> 设每个 input 上限（推荐 50MB）</li>
-        <li>超出时日志暂存到文件 system buffer</li>
-        <li>Fluent Bit 几乎不会 OOM，这是 vs Logstash 的核心优势</li>
-      </ul></div>
-      <div class="card"><h4>性能调优</h4><ul>
-        <li><code>flush 5</code> 每 5 秒刷一次，日志实时性要求高可改 1</li>
-        <li><code>storage.total_limit_size 1G</code> 限制总缓冲区大小</li>
-        <li><code>net.keepalive on</code> 复用连接提升吞吐</li>
-      </ul></div>
-      <div class="card"><h4>常见问题</h4><ul>
-        <li><strong>日志没进 ES：</strong>先加 <code>[OUTPUT] name stdout</code> 确认 FB 收到日志</li>
-        <li><strong>内存飙高：</strong>检查 ES 是否可写，ES 挂了 FB 会缓冲</li>
-        <li><strong>日志格式不对：</strong>换 parser（cri/json/xyz），用 <code>@TYPE</code> 测试</li>
-        <li><strong>ES 索引太多：</strong>用 ILM（Index Lifecycle Management）自动管理</li>
-      </ul></div>
-    </div>
-  </div>
-</div>
-
-<!-- ============= Jaeger Production ============= -->
-<div class="slide">
-  <h1>🔬 Jaeger · 生产部署 + 存储 + Grafana 集成</h1>
-  <div class="grid-2">
-    <div>
-      <h3>生产架构</h3>
-      <div class="mermaid">
-flowchart LR
-    SDK["OTel SDK"] -->|"OTLP"| C["Collector"]
-    C -->|"OTLP"| JC["Jaeger Collector<br/>接收/验证/索引"]
-    JC -->|"写入"| STORE["存储层<br/>ES / Cassandra"]
-    JC -->|"实时"| JQ["Jaeger Query<br/>API"]
-    JQ -->|":16686"| UI["Jaeger UI"]
-    JQ -->|"数据源"| G["Grafana"]
-      </div>
-      <h3>存储选型</h3>
-      <table>
-        <tr><th>存储</th><th>优点</th><th>缺点</th><th>推荐</th></tr>
-        <tr><td>内存（all-in-one）</td><td>零配置</td><td>重启丢数据</td><td>开发测试</td></tr>
-        <tr><td>Elasticsearch</td><td>与 ELK 复用、可搜索</td><td>运维成本高</td><td>生产首选</td></tr>
-        <tr><td>Cassandra</td><td>写性能好</td><td>运维极复杂</td><td>超大规模</td></tr>
-        <tr><td>Badger（v2 新）</td><td>嵌入式、零运维</td><td>单机、不持久</td><td>小团队</td></tr>
-      </table>
-    </div>
-    <div>
-      <h3>聚合面板 + Grafana</h3>
-      <div class="code-block"># Grafana 配置 Tempo/Jaeger 数据源
+  -p 16686:16686 -p 4317:4317 \
+  jaegertracing/all-in-one:latest</div>
+      <h3>在 Grafana 中看 Trace</h3>
+      <div class="code-block"># 配 Jaeger 数据源
 # Data Sources → Add → Jaeger
-# URL: http://jaeger-query:16686
-
-# 面板建议：
-# - 服务调用拓扑（Service Graph）
-# - 错误率趋势
-# - P95/P99 延迟趋势
-# - Top 5 最慢端点
-# - 最近错误 Trace</div>
-      <h3>常用操作</h3>
-      <div class="code-block"># Jaeger UI 搜索页：
-# Service:    选你要查的服务
-# Operation:  选具体操作（可选）
-# Tags:       http.status_code=500（按标签搜）
-# Lookback:   过去 1 小时 / 6 小时 / 1 天
-# Max Duration: 只查耗时 > xx ms 的（找慢查询）
-
-# 找到 Trace 后：
-# 看瀑布图找最长/红色的 span
-# 点 span → Tags 看 HTTP URL/DB 语句
-# 点 span → Logs 看异常信息</div>
-      <div class="key-point"><strong>💡 排查经验：</strong>Trace 中耗时最长的 Span 通常是根因。Span 的 Tags 里往往有具体信息（HTTP 状态码 500、DB 超时、异常堆栈）。Trace 结合日志（trace_id 关联）是最强排查手段。</div>
+# URL: http://jaeger:16686
+# 然后左侧 Explore → 选 Jaeger
+# 搜 Trace，直接在 Grafana 里看瀑布图</div>
     </div>
   </div>
 </div>
 
-<!-- ============= FAQ ============= -->
+<!-- ============================== 第 5 阶段：集成 + 速查 ============================== -->
+
+<!-- 22: 完整架构 -->
 <div class="slide">
-  <h1>❓ 常见问题排错速查</h1>
+  <h1>🏗️ 第 17 步：把它们全部拼起来</h1>
+  <div class="mermaid">
+flowchart TB
+    APP["你的应用"] -->|"日志"| FB["Fluent Bit<br/>DaemonSet"]
+    APP -->|"traces+metrics"| SDK["OTel SDK<br/>自动埋点"]
+
+    FB -->|"Bulk API"| ES["Elasticsearch<br/>日志存储+搜索"]
+    SDK -->|"OTLP :4317"| COLL["OTel Collector<br/>管道转发"]
+
+    COLL -->|"OTLP"| J["Jaeger<br/>追踪存储"]
+    COLL -->|"Prometheus"| PRO["Prometheus<br/>指标 TSDB"]
+
+    ES --> KB["Kibana<br/>搜日志"]
+    ES & PRO & J --> G["Grafana<br/>统一看板"]
+
+    PRO -->|"告警"| AM["Alertmanager"]
+    AM -->|"通知"| SL["Slack/钉钉/邮件"]
+  </div>
+  <div class="grid-3">
+    <div class="card"><h3>🟠 日志路径</h3><p>应用日志 → FB → ES → Kibana/Grafana</p></div>
+    <div class="card"><h3>🔵 指标路径</h3><p>OTel SDK → Collector → Prometheus → Grafana</p></div>
+    <div class="card"><h3>🟣 追踪路径</h3><p>OTel SDK → Collector → Jaeger → Grafana</p></div>
+  </div>
+  <div class="info-box"><strong>💡 三信号都走通后，你就可以：</strong>在 Grafana 看到一个指标异常 → 点一下跳转到对应时间的 Trace → 再点跳转到日志。一次排查操作，三份数据。</div>
+</div>
+
+<!-- 23: Config Files -->
+<div class="slide">
+  <h1>📋 配置文件速查——日常改什么</h1>
   <table>
-    <tr><th>症状</th><th>可能原因</th><th>检查方法</th><th>解决</th></tr>
-    <tr><td>ES 搜不到数据</td><td>Data View 不匹配 / 时间范围不对</td><td>Dev Tools <code class="code-inline">GET /_cat/indices</code></td><td>修正索引模式，改时间范围</td></tr>
-    <tr><td>ES 集群黄色/红色</td><td>副本分片没分配 / 磁盘满</td><td><code class="code-inline">GET /_cluster/health</code></td><td>加节点 / 清磁盘 / 调 replicas</td></tr>
-    <tr><td>Prometheus Target DOWN</td><td>应用没暴露 /metrics / 端口不对</td><td><code class="code-inline">curl 目标/metrics</code></td><td>修 scrape_config 的目标地址</td></tr>
-    <tr><td>Grafana 连不上 Prometheus</td><td>数据源 URL 不对 / Prometheus 没启动</td><td>Data Source → Test</td><td>检查 URL，检查容器是否在跑</td></tr>
-    <tr><td>Grafana 图是空的</td><td>PromQL 写错 / 时间范围无数据</td><td>Explore 里测同一条 PromQL</td><td>修正 PromQL，改时间范围</td></tr>
-    <tr><td>Fluent Bit 日志没进 ES</td><td>ES 地址/端口错 / ES 不可写</td><td>加 stdout output 看原始数据</td><td>修 ES 配置，先确认 FB 能输出到控制台</td></tr>
-    <tr><td>OTel Trace 看不到</td><td>Collector 连不上 / 采样率 0</td><td>Collector debug exporter 检查</td><td>检查 OTLP endpoint，调整采样率</td></tr>
-    <tr><td>Jaeger 没数据</td><td>Collector 没配 Jaeger exporter</td><td>看 Collector 日志</td><td>加 <code>- otlp: { endpoint: "jaeger:4317" }</code></td></tr>
-    <tr><td>告警没触发</td><td>for 时间没到 / PromQL 对但没匹配</td><td><code class="code-inline">GET /api/v1/rules</code></td><td>检查告警规则语法，看 alerts 页面状态</td></tr>
+    <tr><th>工具</th><th>文件</th><th>改了会怎么样</th></tr>
+    <tr><td><strong>Prometheus</strong></td><td>prometheus.yml</td><td>增减采集目标、改频率。POST /-/reload 热加载，不用重启</td></tr>
+    <tr><td><strong>Prometheus</strong></td><td>alerts.yml</td><td>改告警条件。promtool check rules 验证语法</td></tr>
+    <tr><td><strong>Grafana</strong></td><td>datasources.yaml</td><td>声明式配数据源。重启生效，放在 provisioning 目录</td></tr>
+    <tr><td><strong>Grafana</strong></td><td>dashboards.yaml</td><td>声明式导 Dashboard。导入后不改原 JSON</td></tr>
+    <tr><td><strong>ES</strong></td><td>elasticsearch.yml</td><td>集群名/数据路径/网络/内存。生产改了要滚动重启</td></tr>
+    <tr><td><strong>ES</strong></td><td>jvm.options</td><td>堆大小 -Xms/-Xmx（不超过内存 50%，最多 32G）</td></tr>
+    <tr><td><strong>Kibana</strong></td><td>kibana.yml</td><td>ES 地址/语言/安全配置</td></tr>
+    <tr><td><strong>OTel Collector</strong></td><td>collector.yml</td><td>管道配置：receivers/processors/exporters。改了重启</td></tr>
+    <tr><td><strong>Fluent Bit</strong></td><td>fluent-bit.conf</td><td>输入→过滤→输出全链路。改了重启</td></tr>
+    <tr><td><strong>Fluent Bit</strong></td><td>parsers.conf</td><td>日志格式解析器。不改 FB 也能自动加载</td></tr>
+    <tr><td><strong>Jaeger</strong></td><td>环境变量</td><td>存储后端、采样策略。docker run -e 传入</td></tr>
   </table>
 </div>
 
-<!-- ============= 19: 关系 + 选型 ============= -->
+<!-- 24: 排错 -->
 <div class="slide">
-  <h1>🔄 项目关系 + 场景选型速查</h1>
-  <div class="grid-2">
-    <div class="card" style="border-left-color:#ef4444"><h3>⚔️ 竞争关系</h3><ul>
-      <li><strong>Fluent Bit vs Logstash:</strong> FB 650KB vs LS 1GB+，新项目只用 FB。200+ Grok 模式足够用</li>
-      <li><strong>OTel Collector vs Fluent Bit:</strong> OTel 统一三信号，FB 专精日志。v3+ FB 也开始支持 traces/metrics</li>
-      <li><strong>Kibana vs Grafana:</strong> Kibana 绑 ES，Grafana 万能画板。很多公司两个都用</li>
-    </ul></div>
-    <div class="card" style="border-left-color:#22c55e"><h3>🤝 互补关系</h3><ul>
-      <li><strong>Fluent Bit → ES → Kibana:</strong> 日志采集→存储→搜索</li>
-      <li><strong>Prometheus → Grafana:</strong> 指标采集→可视化，黄金 CP</li>
-      <li><strong>OTel → Jaeger:</strong> 全链路追踪，改 Collector 配置换后端</li>
-    </ul></div>
-  </div>
+  <h1>❓ 常见问题速查</h1>
   <table>
-    <tr><th>场景</th><th>推荐组合</th><th>理由</th></tr>
-    <tr><td>日志搜索</td><td>Fluent Bit → ES → Kibana</td><td>FB 采、ES 存、Kibana 搜</td></tr>
-    <tr><td>指标 + 告警</td><td>Prometheus → Grafana</td><td>最成熟的监控组合</td></tr>
-    <tr><td>分布式追踪</td><td>OTel SDK → Collector → Jaeger</td><td>一套 API，后端随意换</td></tr>
-    <tr><td>全栈可观测（新项目）</td><td>OTel + Prometheus + Grafana + ES + Jaeger</td><td>最现代化方案</td></tr>
-    <tr><td>小团队快速起步</td><td>Prometheus + Grafana + Fluent Bit → ES</td><td>3 个 docker 命令就跑起来</td></tr>
+    <tr><th>症状</th><th>可能原因</th><th>怎么查</th><th>怎么修</th></tr>
+    <tr><td>Prometheus Target DOWN</td><td>服务没暴露 /metrics</td><td><code class="code-inline">curl 目标/metrics</code></td><td>确认服务在运行、端口正确</td></tr>
+    <tr><td>Grafana 图空了</td><td>PromQL 写错 / 时间不对</td><td>Explore 里测同一条 PromQL</td><td>修正 PromQL，改时间范围</td></tr>
+    <tr><td>ES 搜不到数据</td><td>Data View 不对 / 时间范围错</td><td><code class="code-inline">GET /_cat/indices</code></td><td>修正索引模式和时间范围</td></tr>
+    <tr><td>Fluent Bit 没进 ES</td><td>ES 地址不对 / ES 不可写</td><td>加 stdout output 先调试</td><td>修 ES 地址，确认 ES 可用</td></tr>
+    <tr><td>OTel Trace 看不到</td><td>Collector 连不上 / 采样 0</td><td>Collector 日志看 debug</td><td>检查 OTLP endpoint 和采样率</td></tr>
+    <tr><td>Jaeger 没数据</td><td>Collector 没配 Jaeger</td><td>看 Collector 日志</td><td>加 <code class="code-inline">exporters: otlp: {endpoint: "jaeger:4317"}</code></td></tr>
+    <tr><td>告警没触发</td><td>for 时间未到 / 语法错</td><td><code class="code-inline">GET /api/v1/rules</code></td><td>查告警页面状态，promtool 验语法</td></tr>
   </table>
+</div>
+
+<!-- 25: 总结 -->
+<div class="slide">
+  <h1>🎯 总结</h1>
+  <div class="grid-2">
+    <div class="card"><h3>🟠 Prometheus + Grafana</h3><p>最易上手。先配指标监控，建第一个 Dashboard。5 个 PromQL 函数覆盖 95% 场景。</p></div>
+    <div class="card"><h3>🔎 ES + Kibana</h3><p>日志存搜索。match/term/bool/aggs 四个查询类型走天下。Dev Tools 里练到顺手。</p></div>
+    <div class="card"><h3>💨 Fluent Bit</h3><p>日志自动采集入 ES。input→filter→output 三段配置，先 stdout 再改 ES。</p></div>
+    <div class="card"><h3>🔗 OTel + Jaeger</h3><p>统一采集标准。OTel SDK 埋一次，Collector 转发到 Jaeger/Prometheus/ES。</p></div>
+  </div>
+  <div class="key-point"><strong>一句话记住每个工具：</strong><br>ES 搜日志 / Prometheus 管数字 / Grafana 画图 / Fluent Bit 采日志 / OTel 统一 / Jaeger 追踪 / Kibana 搜 ES。</div>
+</div>
+
+<!-- 26: 端口速查 -->
+<div class="slide">
+  <h1>📋 端口速查 + 学习路线</h1>
+  <div class="grid-2">
+    <div>
+      <h3>所有工具端口</h3>
+      <table>
+        <tr><th>工具</th><th>端口</th><th>干什么</th></tr>
+        <tr><td>Prometheus</td><td>:9090</td><td>Web UI + API</td></tr>
+        <tr><td>Grafana</td><td>:3000</td><td>Web UI (admin/admin)</td></tr>
+        <tr><td>ES</td><td>:9200</td><td>REST API</td></tr>
+        <tr><td>Kibana</td><td>:5601</td><td>Web UI</td></tr>
+        <tr><td>Fluent Bit</td><td>—</td><td>无端口，配置文件</td></tr>
+        <tr><td>OTel Collector</td><td>:4317</td><td>OTLP gRPC 接收</td></tr>
+        <tr><td>Jaeger</td><td>:16686</td><td>Web UI</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>学习路线（4 周）</h3>
+      <div class="card"><h4>第 1 天：Prometheus + Grafana</h4><p>docker 启动 → 输 <code>up</code> → 建 Dashboard → 配告警</p></div>
+      <div class="card"><h4>第 2 天：ES + Kibana</h4><p>写入数据 → match→term→bool→aggs → 建 Dashboard</p></div>
+      <div class="card"><h4>第 3 天：Fluent Bit</h4><p>采集日志入 ES → 加过滤 → Grok 解析</p></div>
+      <div class="card"><h4>第 4 天：OTel + Jaeger</h4><p>SDK 自动埋点 → Collector 转发 → Jaeger 看 Trace</p></div>
+    </div>
+  </div>
 </div>
 
 </div>
@@ -1339,15 +939,16 @@ flowchart LR
   <button onclick="prevSlide()">← 上一页</button>
   <button onclick="nextSlide()">下一页 →</button>
 </div>
-<div class="slide-number" id="slideNumber">1 / 19</div>
+<div class="slide-number" id="slideNumber">1 / 26</div>
 
 <script>
-let currentSlide=0;const slides=document.querySelectorAll('.slide');const total=slides.length;const progress=document.getElementById('progress');const sn=document.getElementById('slideNumber');
-async function rm(){const u=document.querySelectorAll('.slide.active .mermaid:not([data-rendered])');for(const e of u){e.setAttribute('data-rendered','true');try{const id='m-'+Math.random().toString(36).substr(2,9);const{svg}=await mermaid.render(id,e.textContent);e.innerHTML=svg}catch(e){}}}
-function show(n){if(n<0)n=0;if(n>=total)n=total-1;currentSlide=n;slides.forEach((s,i)=>s.classList.toggle('active',i===n));progress.style.width=((n+1)/total*100)+'%';sn.textContent=(n+1)+' / '+total;rm()}
-function nextSlide(){show(currentSlide+1)}function prevSlide(){show(currentSlide-1)}
-document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')nextSlide();if(e.key==='ArrowLeft')prevSlide()});
-document.addEventListener('click',e=>{if(e.target.tagName!=='BUTTON'){const x=e.clientX/window.innerWidth;if(x>.7)nextSlide();else if(x<.3)prevSlide()}});
-show(0);</script>
+let c=0;const s=document.querySelectorAll('.slide'),t=s.length,p=document.getElementById('progress'),n=document.getElementById('slideNumber');
+async function r(){const u=document.querySelectorAll('.slide.active .mermaid:not([data-rendered])');for(const e of u){e.setAttribute('data-rendered','true');try{const id='m-'+Math.random().toString(36).substr(2,9);const{svg}=await mermaid.render(id,e.textContent);e.innerHTML=svg}catch(e){}}}
+function w(i){if(i<0)i=0;if(i>=t)i=t-1;c=i;s.forEach((x,j)=>x.classList.toggle('active',j===i));p.style.width=((i+1)/t*100)+'%';n.textContent=(i+1)+' / '+t;r()}
+function next(){w(c+1)}function prev(){w(c-1)}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')next();if(e.key==='ArrowLeft')prev()});
+document.addEventListener('click',e=>{if(e.target.tagName!=='BUTTON'){const x=e.clientX/w.innerWidth;if(x>.7)next();else if(x<.3)prev()}});
+w(0);
+</script>
 </body>
 </html>
