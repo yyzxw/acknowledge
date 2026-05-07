@@ -169,13 +169,6 @@ curl http://localhost:9200
   <div class="info-box"><strong>💡</strong> 访问 <code>http://localhost:9200</code> 看到 JSON 响应 = ES 跑起来了。访问 <code>http://localhost:5601</code> = Kibana 跑起来了。</div>
 </div>
 
-<!-- ============= Slide ES Visual: 倒排索引概念图 ============= -->
-<div class="slide">
-  <h1>🖼️ Elasticsearch 倒排索引工作原理</h1>
-  <img src="images/inverted-index.png" class="img-card" alt="ES 倒排索引原理图">
-  <p style="text-align:center;font-size:.82rem;color:#6b7280">文档 → 分词器 → 词条 → 词典 + 倒排列表 → 快速搜索。这是 ES 能"毫秒级搜索"的核心秘密。</p>
-</div>
-
 <!-- ============= Slide 6: ES 核心概念 ============= -->
 <div class="slide">
   <h1>📦 ES 三大核心概念</h1>
@@ -822,6 +815,83 @@ groups:
   </div>
 </div>
 
+<!-- ============= Slide Prom: 实战告警 ============= -->
+<div class="slide">
+  <h1>🔔 Prometheus 实战：告警配置完整示例</h1>
+  <div class="grid-2">
+    <div>
+      <h3>告警规则文件 alerts.yml</h3>
+      <div class="code-block">groups:
+  - name: node_alerts
+    rules:
+      - alert: NodeDown
+        expr: up{job="node"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "节点 {{ $labels.instance }} 离线"
+          description: "节点 {{ $labels.instance }} 已离线超过 1 分钟"
+
+      - alert: HighCPUUsage
+        expr: (100 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "节点 {{ $labels.instance }} CPU 使用率超过 80%"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "节点 {{ $labels.instance }} 磁盘剩余不足 10%"
+
+  - name: app_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.01
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} 错误率超过 1%/s"
+          description: "当前值: {{ $value | humanize }}"
+
+      - alert: NoRequests
+        expr: rate(http_requests_total[5m]) == 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.job }} 请求量为 0"</div>
+    </div>
+    <div>
+      <h3>在 prometheus.yml 中引用</h3>
+      <div class="code-block"># prometheus.yml
+rule_files:
+  - "alerts.yml"
+
+# 检查规则语法
+# promtool check rules alerts.yml</div>
+      <h3>Recording Rules（预计算）</h3>
+      <div class="code-block"># 把常用查询预计算，Dashboard 直接引用
+groups:
+  - name: recording_rules
+    rules:
+      - record: job:http_requests_total:rate5m
+        expr: sum by(job) (rate(http_requests_total[5m]))
+
+      - record: job:http_errors_5xx:rate5m
+        expr: sum by(job) (rate(http_requests_total{status=~"5.."}[5m]))
+
+      - record: job:error_ratio:rate5m
+        expr: |
+          job:http_errors_5xx:rate5m
+          /
+          job:http_requests_total:rate5m</div>
+      <div class="info-box"><strong>💡 Recording Rules 的价值：</strong>复杂查询提前算好存起来，Dashboard 直接读结果，大幅加速查询。适合 95% 的场景。</div>
+    </div>
+  </div>
+</div>
+
 <!-- ============= Slide 20: Grafana ============= -->
 <div class="slide">
   <h1>📈 Grafana — 配数据源到建 Dashboard</h1>
@@ -1117,18 +1187,6 @@ services:
       <li><strong>对象存储</strong>（S3/MinIO）做统一后端</li>
       <li><strong>Grafana</strong> 统一可视化</li>
     </ul></div>
-  </div>
-</div>
-
-<!-- ============= Slide 27: 学习路线 ============= -->
-<div class="slide">
-  <h1>🎯 推荐学习路线</h1>
-  <div class="concept-box"><h3>从零开始，逐级进阶</h3><p>每个阶段都有明确的目标，完成一个再进入下一个。</p></div>
-  <div class="grid-2">
-    <div class="card"><h3>第 1 周：Prometheus + Grafana</h3><ol><li>用 Docker 启动 Prometheus + Grafana</li><li>Prometheus UI <code>/graph</code> 输入 <code>up</code> 看目标状态</li><li>Grafana 配 Prometheus 数据源</li><li>建第一个 Dashboard：CPU、内存、请求数</li><li>练习 PromQL：rate → sum by → histogram_quantile</li></ol></div>
-    <div class="card"><h3>第 2 周：ELK Stack</h3><ol><li>Docker 启动 ES + Kibana</li><li>Kibana Dev Tools 建索引、写入文档、搜索</li><li>练习 match / term / range / bool / aggs</li><li>Kibana Discover 搜你的日志</li><li>Lens 拖一个 Dashboard 出来</li></ol></div>
-    <div class="card"><h3>第 3 周：Fluent Bit + Logstash</h3><ol><li>生成一些 Nginx 日志</li><li>Fluent Bit 采集 → ES</li><li>配置 Grep Filter 只采错误日志</li><li>Kibana 里确认日志进来了</li><li>Logstash 写一个 Grok 解析规则</li></ol></div>
-    <div class="card"><h3>第 4 周：OPenTelemetry + Jaeger</h3><ol><li>Docker 启动 Jaeger + OTel Collector</li><li>写一个 Python 或者 Node.js 小应用</li><li>装上 OTel SDK 自动埋点</li><li>Jaeger UI 里看第一条 Trace</li><li>搭建完整全链路：OTel → Collector → Jaeger + Prometheus</li></ol></div>
   </div>
 </div>
 
