@@ -8,9 +8,9 @@
 
 ```
 docs/
-  index.html                 ← 首页，链接到 research/list.html
+  index.html                 ← 首页，链接到 research/
   research/
-    list.html                ← 报告列表页（动态渲染，不用手动维护）
+    index.html               ← 报告列表页（动态渲染，不用手动维护）
     Agent.md                 ← 本文件
     <report-name>.html       ← 研究报告（添加新文件即可自动发现）
     <report-dir>/            ← 多页报告子目录
@@ -39,17 +39,17 @@ docs/
 ```
 
 **不需要：**
-- 不需要修改 `list.html`
+- 不需要修改 `index.html`
 - 不需要修改 `index.html`
 - 不需要运行任何脚本
 - 不需要维护任何清单文件
 
 ## 页面工作原理
 
-`research/list.html` 启动时：
+`research/index.html` 启动时：
 
-1. `fetch('./')` → 获取目录列表（因为目录下没有 `index.html`，HTTP 服务器返回目录列表）
-2. 解析目录列表中的 `<a href>`，筛选所有 `.html` 文件（排除自身 `list.html`）
+1. `fetch('./')` → 获取目录列表（因为目录下没有 `index.html`，HTTP 服务器返回目录列表），如果失败则通过 GitHub API 获取
+2. 解析目录列表中的 `<a href>`，筛选所有 `.html` 文件（排除自身 `index.html`）
 3. 对每个文件 `fetch()` → 解析 `<meta>` 标签 → 提取标题、描述、标签、分类、颜色
 4. 动态渲染卡片网格：样式、颜色、标签 pills
 5. 从卡片 pills 中提取所有标签 → 生成标签筛选按钮
@@ -71,20 +71,20 @@ docs/
 
 ## 多页报告
 
-如果报告有多个页面（如 `vllm-concepts-deep-dive/`），创建一个目录并在其中放 `index.html` 作为入口页。目录路径要以 `/` 结尾（如 `vllm-concepts-deep-dive/`），`list.html` 会自动检测目录并加载其 `index.html`。
+如果报告有多个页面（如 `vllm-concepts-deep-dive/`），创建一个目录并在其中放 `index.html` 作为入口页。目录路径要以 `/` 结尾（如 `vllm-concepts-deep-dive/`），首页会自动检测目录并加载其 `index.html`。
 
 ## 本地预览
 
 ```bash
 cd docs
 python3 -m http.server 8080
-open http://localhost:8080/research/list.html
+open http://localhost:8080/research/
 ```
 
 必须通过 HTTP 服务访问，`file://` 协议下 `fetch()` 会因 CORS 限制失败。
 
 ## 部署注意
 
-- 依赖服务器返回目录列表（`research/` 下不能有 `index.html`）
-- Python http.server、nginx（autoindex）、Apache（Options +Indexes）均支持
-- 如果部署平台禁止目录列表（如 GitHub Pages），需要改用其他方案
+- **GitHub Pages：** 自动通过 GitHub API (`api.github.com/repos/yyzxw/acknowledge/contents/docs/research`) 获取文件列表，无需额外配置
+- **本地开发：** `python3 -m http.server` 返回目录列表时直接使用，无需联网
+- 两种方式的报告列表结果一致，自动切换

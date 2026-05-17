@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Reports</title>
+  <style>
+    :root {
+      --bg-0: #060a12;
+      --bg-1: #08111f;
+      --bg-2: #0d1728;
+      --panel: rgba(13, 25, 43, 0.92);
+      --line: rgba(135, 163, 199, 0.24);
+      --line-strong: rgba(143, 199, 255, 0.46);
+      --text: #eef7ff;
+      --muted: #9eb4ca;
+      --soft: #c9d9ea;
+      --cyan: #23d7ff;
+      --green: #35e6bd;
+      --red: #ff7070;
+      --blue: #4a9eff;
+      --purple: #a78bfa;
+      --radius-xl: 26px;
+      --radius-md: 12px;
+      --shadow-soft: 0 22px 80px rgba(0, 0, 0, 0.34);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      font-family: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 700px at 15% -10%, rgba(35, 215, 255, 0.14), transparent 60%),
+        radial-gradient(1000px 620px at 110% 10%, rgba(169, 140, 255, 0.12), transparent 60%),
+        linear-gradient(180deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 4rem 2rem;
+    }
+
+    header { text-align: center; margin-bottom: 3rem; }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+    .back:hover {
+      color: var(--cyan);
+      border-color: var(--cyan);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      padding: 1.75rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--panel);
+      box-shadow: var(--shadow-soft);
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.25s ease;
+    }
+    .card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-2px);
+    }
+    .card.red:hover { box-shadow: 0 0 36px rgba(255, 112, 112, 0.2); }
+    .card.green:hover { box-shadow: 0 0 36px rgba(53, 230, 189, 0.2); }
+    .card.blue:hover { box-shadow: 0 0 36px rgba(74, 158, 255, 0.2); }
+    .card.purple:hover { box-shadow: 0 0 36px rgba(167, 139, 250, 0.2); }
+
+    .card-tag {
+      display: inline-flex;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      width: fit-content;
+      margin-bottom: 1rem;
+    }
+    .card-tag.red { background: rgba(255, 112, 112, 0.14); color: var(--red); }
+    .card-tag.green { background: rgba(53, 230, 189, 0.14); color: var(--green); }
+    .card-tag.blue { background: rgba(74, 158, 255, 0.14); color: var(--blue); }
+    .card-tag.purple { background: rgba(167, 139, 250, 0.14); color: var(--purple); }
+
+    .card h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .card p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.7;
+      flex: 1;
+    }
+
+    .card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .pill {
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+      color: var(--soft);
+      font-size: 0.75rem;
+    }
+
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      background: rgba(6, 10, 18, 0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--line);
+      height: 60px;
+      display: flex;
+      align-items: center;
+    }
+    .nav-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 2rem;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .nav-brand {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .nav-brand span { color: var(--cyan); }
+
+    /* Search */
+    #search-section { margin-bottom: 2rem; }
+    #search-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      transition: border-color 0.2s ease;
+      margin-bottom: 1rem;
+    }
+    #search-bar:focus-within { border-color: var(--cyan); }
+    #search-bar .icon {
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    #search-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 1rem;
+      font-family: inherit;
+    }
+    #search-input::placeholder { color: var(--muted); opacity: 0.6; }
+    #search-status {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 0.5rem;
+    }
+    #search-results { display: none; margin-bottom: 1.5rem; }
+    #search-results .search-result-item { margin-bottom: 1rem; }
+    #search-results .snippet {
+      color: var(--soft);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      max-height: 4.8em;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+    .no-results { text-align: center; color: var(--muted); padding: 2rem; }
+    .loading { text-align: center; color: var(--muted); padding: 3rem 1rem; grid-column: 1 / -1; }
+
+    /* Tag filter */
+    #tag-filter { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+    .tag-chip {
+      padding: 0.3rem 0.9rem; border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted); font-size: 0.8rem;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .tag-chip:hover { border-color: var(--cyan); color: var(--cyan); }
+    .tag-chip.active { background: rgba(35,215,255,0.12); border-color: var(--cyan); color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="../" class="nav-brand">Acknowledge</a>
+  </div>
+</nav>
+
+<main class="page" style="padding-top: 80px;">
+  <header>
+    <h1>Research Reports</h1>
+    <p class="subtitle">AI / 云原生领域的技术调研与产品分析</p>
+  </header>
+
+  <div id="search-section">
+    <div id="search-bar">
+      <svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input id="search-input" type="text" placeholder="搜索全部文档内容…" autocomplete="off">
+    </div>
+    <div id="search-status"></div>
+    <div id="search-results"></div>
+    <div id="tag-filter"></div>
+  </div>
+
+  <a class="back" href="../">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M13 6l-6 6 6 6"/></svg>
+    返回首页
+  </a>
+
+  <div class="grid" id="report-grid">
+    <div class="loading">正在加载报告列表…</div>
+  </div>
+</main>
+
+<script>
+var metaCache = {};
+var searchTexts = {};
+var reportUrls = [];
+var loaded = 0;
+
+document.addEventListener('DOMContentLoaded', function () {
+  fetch('./').then(function (r) { return r.text(); }).then(function (html) {
+    parseDirListing(html);
+  }).catch(function () {
+    // Directory listing not available (e.g. GitHub Pages), use GitHub API
+    fetch('https://api.github.com/repos/yyzxw/acknowledge/contents/docs/research').then(function (r) { return r.json(); }).then(function (files) {
+      if (!Array.isArray(files)) throw new Error('not a directory');
+      reportUrls = files.filter(function (f) { return f.type === 'file' && f.name.endsWith('.html') && f.name !== 'index.html'; }).map(function (f) { return f.name; }).sort();
+      if (reportUrls.length === 0) throw new Error('no reports');
+      loadReports();
+    }).catch(function () {
+      document.getElementById('report-grid').innerHTML = '<div class="loading">无法加载报告列表</div>';
+    });
+  });
+});
+
+function parseDirListing(html) {
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  var urls = [];
+  tmp.querySelectorAll('a[href]').forEach(function (a) {
+    var href = a.getAttribute('href');
+    if (!href || href.startsWith('?') || href.indexOf('://') > 0) return;
+    if (href.endsWith('.html') && href !== 'index.html') {
+      urls.push(href);
+    } else if (href.endsWith('/') && !href.startsWith('./') && !href.startsWith('../') && !href.startsWith('.')) {
+      urls.push(href);
+    }
+  });
+  reportUrls = [...new Set(urls)].sort();
+  if (reportUrls.length === 0) throw new Error('no reports');
+  loadReports();
+}
+
+function loadReports() {
+  reportUrls.forEach(function (url) {
+    var fetchUrl = url.endsWith('/') ? url + 'index.html' : url;
+    fetch(fetchUrl).then(function (r) {
+      if (!r.ok) throw new Error('fail');
+      return r.text();
+    }).then(function (html) {
+      var m = parseMeta(html);
+      m.href = url.endsWith('/') ? './' + url : './' + url;
+      metaCache[url] = m;
+      searchTexts[url] = extractText(html);
+      loaded++;
+      if (loaded >= reportUrls.length) renderGrid();
+    }).catch(function () {
+      loaded++;
+      if (loaded >= reportUrls.length) renderGrid();
+    });
+  });
+}
+
+function extractText(html) {
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  tmp.querySelectorAll('script,style,nav,header,footer,svg').forEach(function (e) { e.remove(); });
+  return (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function parseMeta(html) {
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  function m(name) {
+    var e = tmp.querySelector('meta[name="' + name + '"]');
+    return e ? (e.getAttribute('content') || '') : '';
+  }
+  return {
+    title: m('page-title') || (tmp.querySelector('title') || {}).textContent || '',
+    description: m('description'),
+    tags: m('keywords').split(',').map(function (s) { return s.trim(); }).filter(Boolean),
+    category: m('page-category') || 'Research',
+    color: m('page-color') || 'blue',
+  };
+}
+
+function renderGrid() {
+  var grid = document.getElementById('report-grid');
+  grid.innerHTML = '';
+  reportUrls.forEach(function (url) {
+    var m = metaCache[url];
+    if (!m) return;
+    var card = document.createElement('a');
+    card.className = 'card ' + m.color;
+    card.href = m.href;
+    card.innerHTML =
+      '<span class="card-tag ' + m.color + '">' + esc(m.category) + '</span>' +
+      '<h2>' + esc(m.title) + '</h2>' +
+      '<p>' + esc(m.description) + '</p>' +
+      '<div class="card-meta">' + m.tags.map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('') + '</div>';
+    grid.appendChild(card);
+  });
+  buildTagFilter();
+}
+
+function buildTagFilter() {
+  var tags = new Set();
+  document.querySelectorAll('#report-grid .card .pill').forEach(function (el) { tags.add(el.textContent.trim()); });
+  var sel = new Set();
+  var container = document.getElementById('tag-filter');
+  [...tags].sort().forEach(function (tag) {
+    var btn = document.createElement('button');
+    btn.className = 'tag-chip';
+    btn.textContent = tag;
+    btn.dataset.tagText = tag;
+    btn.onclick = function () {
+      if (sel.has(tag)) sel.delete(tag); else sel.add(tag);
+      document.querySelectorAll('#report-grid .card').forEach(function (c) {
+        if (sel.size === 0) { c.style.display = ''; return; }
+        var pills = [...c.querySelectorAll('.pill')].map(function (p) { return p.textContent.trim(); });
+        c.style.display = [...sel].some(function (s) { return pills.includes(s); }) ? '' : 'none';
+      });
+      container.querySelectorAll('.tag-chip').forEach(function (c) {
+        c.classList.toggle('active', sel.has(c.dataset.tagText));
+      });
+    };
+    container.appendChild(btn);
+  });
+}
+
+var si = document.getElementById('search-input');
+var sr = document.getElementById('search-results');
+var ss = document.getElementById('search-status');
+var sg = document.getElementById('report-grid');
+var t;
+si.addEventListener('input', function () {
+  clearTimeout(t);
+  t = setTimeout(search, 150);
+});
+
+function search() {
+  var q = si.value.trim();
+  if (q.length < 2) { sr.style.display = 'none'; sg.style.display = ''; ss.textContent = ''; return; }
+  sg.style.display = 'none';
+  if (loaded < reportUrls.length) { ss.textContent = '正在加载…'; setTimeout(search, 300); return; }
+  ss.textContent = '';
+  var results = [];
+  reportUrls.forEach(function (url) {
+    var m = metaCache[url];
+    if (!m) return;
+    var text = searchTexts[url] || '';
+    var idx = text.indexOf(q);
+    var snippet = '';
+    var score = 0;
+    if (idx >= 0) {
+      score += Math.max(1, 20 - Math.floor(idx / 1000));
+      var start = Math.max(0, idx - 30);
+      var end = Math.min(text.length, idx + q.length + 80);
+      snippet = (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '');
+    }
+    if (m.title.indexOf(q) >= 0) score += 20;
+    if (m.description.indexOf(q) >= 0) score += 10;
+    if (m.tags.some(function (t) { return t.indexOf(q) >= 0; })) score += 5;
+    if (score > 0) results.push({ meta: m, snippet: snippet, score: score });
+  });
+  results.sort(function (a, b) { return b.score - a.score; });
+  sr.innerHTML = '';
+  sr.style.display = 'block';
+  if (results.length === 0) { sr.innerHTML = '<div class="no-results">未找到匹配的结果</div>'; return; }
+  results.slice(0, 12).forEach(function (r) {
+    var el = document.createElement('a');
+    el.className = 'card ' + r.meta.color + ' search-result-item';
+    el.href = r.meta.href;
+    el.innerHTML =
+      '<span class="card-tag ' + r.meta.color + '">' + esc(r.meta.category) + '</span>' +
+      '<h2>' + esc(r.meta.title) + '</h2>' +
+      (r.snippet ? '<p class="snippet">' + esc(r.snippet) + '</p>' : '') +
+      '<div class="card-meta">' + r.meta.tags.map(function (t) { return '<span class="pill">' + esc(t) + '</span>'; }).join('') + '</div>';
+    sr.appendChild(el);
+  });
+}
+
+function esc(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML; }
+</script>
+
+</body>
+</html>
