@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kustomize 技术分析报告</title>
+<style>
+  :root {
+    --k8s-blue: #326CE5;
+    --k8s-dark: #1a3a8f;
+    --k8s-light: #e8f0fe;
+    --accent: #00a4e4;
+    --text: #1f2937;
+    --text-secondary: #4b5563;
+    --bg: #fafafa;
+    --card-bg: #ffffff;
+    --border: #e5e7eb;
+    --code-bg: #1e1e1e;
+    --code-text: #d4d4d4;
+    --success: #10b981;
+    --warning: #f59e0b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+
+  /* Top nav / header */
+  .site-header {
+    background: linear-gradient(135deg, var(--k8s-blue) 0%, var(--k8s-dark) 100%);
+    color: #fff;
+    padding: 48px 24px 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .site-header::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 20% 30%, rgba(255,255,255,0.08) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .site-header h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    position: relative;
+    letter-spacing: -0.5px;
+  }
+  .site-header .subtitle {
+    font-size: 1.05rem;
+    opacity: 0.9;
+    max-width: 640px;
+    margin: 0 auto;
+    position: relative;
+    font-weight: 400;
+  }
+  .site-header .badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 0.8rem;
+    margin-top: 16px;
+    backdrop-filter: blur(4px);
+  }
+
+  /* Layout */
+  .container {
+    display: flex;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    gap: 32px;
+  }
+
+  /* TOC sidebar */
+  .toc-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 24px;
+    align-self: flex-start;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+  .toc-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+    padding: 20px;
+  }
+  .toc-card h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--k8s-blue);
+    margin-bottom: 14px;
+    font-weight: 700;
+  }
+  .toc-card ul { list-style: none; }
+  .toc-card li { margin-bottom: 6px; }
+  .toc-card a {
+    display: block;
+    text-decoration: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+  }
+  .toc-card a:hover, .toc-card a.active {
+    color: var(--k8s-blue);
+    background: var(--k8s-light);
+    border-left-color: var(--k8s-blue);
+  }
+
+  /* Main content */
+  .main-content { flex: 1; min-width: 0; }
+
+  .section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+    padding: 32px;
+    margin-bottom: 24px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .section:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 8px 24px rgba(0,0,0,0.06);
+  }
+
+  .section h2 {
+    font-size: 1.6rem;
+    color: var(--k8s-dark);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--k8s-light);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section h2 .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--k8s-blue), var(--accent));
+    color: #fff;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+  }
+
+  .section h3 {
+    font-size: 1.2rem;
+    color: var(--text);
+    margin: 24px 0 12px;
+    font-weight: 600;
+  }
+  .section h4 {
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    margin: 18px 0 10px;
+    font-weight: 600;
+  }
+
+  .section p {
+    margin-bottom: 14px;
+    color: var(--text-secondary);
+  }
+  .section p strong { color: var(--text); }
+
+  .section ul, .section ol {
+    margin-left: 22px;
+    margin-bottom: 14px;
+    color: var(--text-secondary);
+  }
+  .section li { margin-bottom: 8px; }
+
+  /* Highlight box */
+  .highlight-box {
+    background: linear-gradient(135deg, #e8f0fe, #f0f7ff);
+    border-left: 4px solid var(--k8s-blue);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin: 18px 0;
+  }
+  .highlight-box p { margin: 0; color: var(--text); }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin: 18px 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  thead { background: linear-gradient(135deg, var(--k8s-blue), var(--k8s-dark)); color: #fff; }
+  th, td { padding: 12px 16px; text-align: left; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:nth-child(even) { background: #f8fafc; }
+  tbody tr:hover { background: var(--k8s-light); }
+  tbody tr:last-child { border-bottom: none; }
+  td strong { color: var(--k8s-dark); }
+
+  /* Code blocks */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 18px 22px;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    margin: 14px 0;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  code {
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.9em;
+  }
+  p code, li code, td code {
+    background: #f1f5f9;
+    color: var(--k8s-dark);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+
+  /* Command list */
+  .command-list {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 14px 0;
+  }
+  .command-list li {
+    font-family: "SF Mono", "Fira Code", Consolas, monospace;
+    font-size: 0.92rem;
+    color: var(--text);
+    background: var(--card-bg);
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    list-style: none;
+    margin-left: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .command-list li::before {
+    content: "$";
+    color: var(--k8s-blue);
+    font-weight: 700;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+  .command-list li:last-child { margin-bottom: 0; }
+
+  /* Scenario cards */
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin: 18px 0;
+  }
+  .scenario-card {
+    background: linear-gradient(135deg, #f8fafc, #fff);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .scenario-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(50,108,229,0.1);
+    border-color: var(--k8s-blue);
+  }
+  .scenario-card .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--k8s-blue);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .scenario-card h4 { margin: 0 0 8px; font-size: 1rem; }
+  .scenario-card p { margin: 0; font-size: 0.9rem; }
+
+  /* Conclusion banner */
+  .conclusion-banner {
+    background: linear-gradient(135deg, var(--k8s-blue), var(--k8s-dark));
+    color: #fff;
+    border-radius: 12px;
+    padding: 28px 32px;
+    text-align: center;
+    margin-top: 8px;
+  }
+  .conclusion-banner p {
+    color: rgba(255,255,255,0.95);
+    font-size: 1.05rem;
+    margin: 0;
+    line-height: 1.8;
+  }
+  .conclusion-banner strong {
+    color: #fff;
+    border-bottom: 2px solid rgba(255,255,255,0.4);
+  }
+
+  /* Footer */
+  .site-footer {
+    text-align: center;
+    padding: 32px 24px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+    margin-top: 16px;
+  }
+
+  /* Mobile TOC */
+  .mobile-toc-toggle {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--k8s-blue);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 16px rgba(50,108,229,0.4);
+    font-size: 1.3rem;
+    cursor: pointer;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .mobile-toc-drawer {
+    display: none;
+    position: fixed;
+    bottom: 84px;
+    right: 24px;
+    width: 280px;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    padding: 16px;
+    z-index: 999;
+  }
+  .mobile-toc-drawer.open { display: block; }
+
+  /* Responsive */
+  @media (max-width: 960px) {
+    .container { flex-direction: column; padding: 16px; }
+    .toc-sidebar { display: none; }
+    .mobile-toc-toggle { display: flex; }
+    .site-header h1 { font-size: 1.8rem; }
+    .section { padding: 22px; }
+    .scenario-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    body { font-size: 15px; }
+    .site-header { padding: 32px 16px 28px; }
+    .site-header h1 { font-size: 1.5rem; }
+    .section { padding: 18px; }
+    .section h2 { font-size: 1.3rem; }
+    th, td { padding: 10px 12px; font-size: 0.9rem; }
+  }
+
+  /* Print */
+  @media print {
+    .toc-sidebar, .mobile-toc-toggle, .mobile-toc-drawer { display: none !important; }
+    .section { break-inside: avoid; box-shadow: none; border: 1px solid var(--border); }
+    .site-header { background: var(--k8s-blue) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <h1>Kustomize 技术分析报告</h1>
+  <p class="subtitle">Kubernetes 原生声明式配置管理工具 — 核心概念、功能详解、使用场景与 Helm 对比</p>
+  <span class="badge">技术深度分析报告</span>
+</header>
+
+<button class="mobile-toc-toggle" onclick="toggleMobileToc()" aria-label="目录">☰</button>
+<div class="mobile-toc-drawer" id="mobileTocDrawer">
+  <nav>
+    <ul>
+      <li><a href="#sec-positioning" onclick="closeMobileToc()">核心定位</a></li>
+      <li><a href="#sec-concepts" onclick="closeMobileToc()">核心概念体系</a></li>
+      <li><a href="#sec-features" onclick="closeMobileToc()">功能矩阵</a></li>
+      <li><a href="#sec-example" onclick="closeMobileToc()">实际使用示例</a></li>
+      <li><a href="#sec-patches" onclick="closeMobileToc()">Patches 技术详解</a></li>
+      <li><a href="#sec-helm" onclick="closeMobileToc()">Kustomize vs Helm</a></li>
+      <li><a href="#sec-advanced" onclick="closeMobileToc()">高级特性</a></li>
+      <li><a href="#sec-scenarios" onclick="closeMobileToc()">典型使用场景</a></li>
+      <li><a href="#sec-commands" onclick="closeMobileToc()">常用命令速查</a></li>
+      <li><a href="#sec-conclusion" onclick="closeMobileToc()">结论</a></li>
+    </ul>
+  </nav>
+</div>
+
+<div class="container">
+  <aside class="toc-sidebar">
+    <div class="toc-card">
+      <h3>目录</h3>
+      <nav>
+        <ul>
+          <li><a href="#sec-positioning">核心定位</a></li>
+          <li><a href="#sec-concepts">核心概念体系</a></li>
+          <li><a href="#sec-features">功能矩阵</a></li>
+          <li><a href="#sec-example">实际使用示例</a></li>
+          <li><a href="#sec-patches">Patches 技术详解</a></li>
+          <li><a href="#sec-helm">Kustomize vs Helm</a></li>
+          <li><a href="#sec-advanced">高级特性</a></li>
+          <li><a href="#sec-scenarios">典型使用场景</a></li>
+          <li><a href="#sec-commands">常用命令速查</a></li>
+          <li><a href="#sec-conclusion">结论</a></li>
+        </ul>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <section class="section" id="sec-positioning">
+      <h2><span class="icon">◎</span>Kustomize 核心定位</h2>
+      <p>Kustomize 是 Kubernetes 原生的<strong>声明式配置管理工具</strong>，专门用于定制和管理 Kubernetes YAML 清单文件。自 Kubernetes 1.14 起，它被内置到 <code>kubectl</code> 中（<code>kubectl apply -k</code>）。</p>
+      <div class="highlight-box">
+        <p><strong>解决核心问题：</strong>如何在保持上游配置不变的前提下，为不同环境（开发、测试、生产）定制 Kubernetes 资源？</p>
+      </div>
+      <p>遵循 <strong>DRY（Don't Repeat Yourself）</strong> 原则，通过"基础配置 + 环境差异层"的架构来管理多环境部署。</p>
+    </section>
+
+    <section class="section" id="sec-concepts">
+      <h2><span class="icon">◈</span>核心概念体系</h2>
+
+      <h3>Base（基础配置）</h3>
+      <ul>
+        <li>存放原始的、可复用的 Kubernetes YAML 清单</li>
+        <li>不特定于任何环境</li>
+        <li>通常包含 Deployment、Service、ConfigMap 等资源</li>
+      </ul>
+
+      <h3>Overlay（覆盖层）</h3>
+      <ul>
+        <li>针对特定环境的定制配置</li>
+        <li>通过引用 Base 并应用差异来生成最终配置</li>
+        <li>不同环境（dev/staging/prod）各自拥有独立的 Overlay 目录</li>
+      </ul>
+
+      <h3>Kustomization 文件</h3>
+      <p>每个目录通过 <code>kustomization.yaml</code> 定义对该目录下资源如何处理。</p>
+    </section>
+
+    <section class="section" id="sec-features">
+      <h2><span class="icon">▣</span>功能矩阵</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>功能</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>resources</strong></td><td>引用的原始 YAML 文件</td></tr>
+            <tr><td><strong>commonLabels</strong></td><td>为所有资源添加统一标签</td></tr>
+            <tr><td><strong>commonAnnotations</strong></td><td>为所有资源添加统一注解</td></tr>
+            <tr><td><strong>namePrefix / nameSuffix</strong></td><td>批量修改资源名称前缀 / 后缀</td></tr>
+            <tr><td><strong>namespace</strong></td><td>为所有资源指定命名空间</td></tr>
+            <tr><td><strong>images</strong></td><td>批量替换镜像名和标签</td></tr>
+            <tr><td><strong>replicas</strong></td><td>修改副本数量</td></tr>
+            <tr><td><strong>configMapGenerator / secretGenerator</strong></td><td>动态生成 ConfigMap / Secret</td></tr>
+            <tr><td><strong>patches</strong></td><td>精细修改资源的任意字段</td></tr>
+            <tr><td><strong>transformers</strong></td><td>自定义转换逻辑</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="sec-example">
+      <h2><span class="icon">◉</span>实际使用示例</h2>
+      <p>典型的目录结构：</p>
+      <pre>myapp/
+├── base/
+│   ├── kustomization.yaml
+│   ├── deployment.yaml
+│   └── service.yaml
+└── overlays/
+    ├── dev/
+    │   └── kustomization.yaml
+    └── prod/
+        └── kustomization.yaml</pre>
+      <p><strong>开发环境 Overlay</strong> 使用 <code>namePrefix</code>、<code>images</code> 替换和 <code>patches</code> 修改副本数。</p>
+      <p><strong>生产环境 Overlay</strong> 使用不同的镜像标签和更大的副本数。</p>
+      <p>构建最终配置：</p>
+      <pre>kustomize build overlays/prod</pre>
+      <p>或直接应用：</p>
+      <pre>kubectl apply -k overlays/prod</pre>
+    </section>
+
+    <section class="section" id="sec-patches">
+      <h2><span class="icon">◆</span>Patches 技术详解</h2>
+      <p>Kustomize 支持两种 Patch 格式：</p>
+      <ol>
+        <li><strong>Strategic Merge Patch</strong> — 通过 <code>patchesStrategicMerge</code> 引用</li>
+        <li><strong>JSON Patch（RFC 6902）</strong> — 更精确，支持任意字段修改</li>
+      </ol>
+    </section>
+
+    <section class="section" id="sec-helm">
+      <h2><span class="icon">◇</span>Kustomize vs Helm 对比</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>维度</th><th>Kustomize</th><th>Helm</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>理念</strong></td><td>配置覆盖与转换</td><td>模板化与参数化</td></tr>
+            <tr><td><strong>语法</strong></td><td>纯 YAML，无逻辑代码</td><td>Go Template（含条件、循环）</td></tr>
+            <tr><td><strong>学习曲线</strong></td><td>低（会 YAML 即可）</td><td>较高（需学模板语法）</td></tr>
+            <tr><td><strong>包管理</strong></td><td>无（Git 子目录引用）</td><td>有（Charts 仓库、版本、依赖）</td></tr>
+            <tr><td><strong>动态生成</strong></td><td>有限（Generator）</td><td>强大（模板函数）</td></tr>
+            <tr><td><strong>生态</strong></td><td>Kubernetes 原生</td><td>成熟的 Charts 生态</td></tr>
+            <tr><td><strong>发布管理</strong></td><td>不管理</td><td>支持升级、回滚</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="highlight-box">
+        <p><strong>选择建议：</strong>配置差异较小、团队偏好声明式、需要严格版本控制时选择 Kustomize；复杂应用分发、需要参数化时选择 Helm。两者也可以结合使用。</p>
+      </div>
+    </section>
+
+    <section class="section" id="sec-advanced">
+      <h2><span class="icon">✦</span>高级特性</h2>
+
+      <h3>ConfigMap / Secret 生成器</h3>
+      <ul>
+        <li><code>configMapGenerator</code> 和 <code>secretGenerator</code> 动态生成资源</li>
+        <li>Kustomize 自动为生成的资源名添加哈希后缀，触发关联 Pod 滚动更新</li>
+      </ul>
+
+      <h3>组件（Components）</h3>
+      <p>Kustomize v2.1.0+ 支持将通用修改封装为可复用组件，通过 <code>components</code> 字段在 Overlay 中引用。</p>
+    </section>
+
+    <section class="section" id="sec-scenarios">
+      <h2><span class="icon">✶</span>典型使用场景</h2>
+      <div class="scenario-grid">
+        <div class="scenario-card">
+          <span class="num">1</span>
+          <h4>多环境部署</h4>
+          <p>dev / staging / prod 共享基础配置，各自 Overlay 差异</p>
+        </div>
+        <div class="scenario-card">
+          <span class="num">2</span>
+          <h4>多租户隔离</h4>
+          <p>为不同客户 / 团队定制 namespace、标签、资源限制</p>
+        </div>
+        <div class="scenario-card">
+          <span class="num">3</span>
+          <h4>GitOps 工作流</h4>
+          <p>与 ArgoCD、Flux 配合实现声明式持续交付</p>
+        </div>
+        <div class="scenario-card">
+          <span class="num">4</span>
+          <h4>第三方资源定制</h4>
+          <p>Fork 上游配置，通过 Overlay 添加 sidecar、修改镜像</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="sec-commands">
+      <h2><span class="icon">⌘</span>常用命令速查</h2>
+      <ul class="command-list">
+        <li>kustomize build &lt;dir&gt;</li>
+        <li>kubectl apply -k &lt;dir&gt;</li>
+        <li>kustomize cfg tree</li>
+        <li>kustomize edit set image nginx=mynginx:v2</li>
+      </ul>
+    </section>
+
+    <section class="section" id="sec-conclusion" style="padding:0;background:none;box-shadow:none;">
+      <div class="conclusion-banner">
+        <p>Kustomize 的优势在于<strong>简单、透明、Kubernetes 原生</strong>——不引入新的模板语言，完全基于 YAML 的叠加和变换。如果团队已经在使用 YAML 管理 K8s 资源，且主要需求是"同一套配置在不同环境有微小差异"，Kustomize 是最轻量、最符合 Kubernetes 哲学（声明式、版本可控）的选择。</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer class="site-footer">
+  <p>© 技术深度分析报告 · Kustomize 详细介绍 · 由 AI 生成</p>
+</footer>
+
+<script>
+  // Mobile TOC toggle
+  function toggleMobileToc() {
+    document.getElementById('mobileTocDrawer').classList.toggle('open');
+  }
+  function closeMobileToc() {
+    document.getElementById('mobileTocDrawer').classList.remove('open');
+  }
+
+  // Active TOC highlighting on scroll
+  const sections = document.querySelectorAll('.section[id]');
+  const tocLinks = document.querySelectorAll('.toc-card a');
+
+  function onScroll() {
+    let current = '';
+    sections.forEach(sec => {
+      const rect = sec.getBoundingClientRect();
+      if (rect.top <= 120) current = sec.getAttribute('id');
+    });
+    tocLinks.forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('href') === '#' + current) link.classList.add('active');
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+
+</body>
+</html>
