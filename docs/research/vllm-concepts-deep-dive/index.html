@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vLLM &amp; AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });
+  </script>
+  <style>
+    .hero {
+      min-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: var(--space-8);
+      background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, transparent 50%);
+    }
+    .hero h1 {
+      font-size: 3rem;
+      margin-bottom: var(--space-4);
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: 1.2rem;
+      max-width: 640px;
+      margin-bottom: var(--space-8);
+    }
+    .hero-meta {
+      display: flex;
+      gap: var(--space-6);
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+    .grid-nav {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: var(--space-8);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--space-4);
+    }
+    .nav-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space-6);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      text-decoration: none;
+      display: block;
+    }
+    .nav-card:hover {
+      border-color: var(--primary);
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
+    }
+    .nav-card-num {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary);
+      opacity: 0.5;
+      margin-bottom: var(--space-2);
+    }
+    .nav-card h3 {
+      color: var(--text-primary);
+      margin-bottom: var(--space-2);
+    }
+    .nav-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .nav-card .tag {
+      margin-top: var(--space-3);
+    }
+    .section-divider {
+      max-width: 1200px;
+      margin: var(--space-12) auto;
+      padding: 0 var(--space-8);
+    }
+    .section-divider h2 {
+      text-align: center;
+      margin-bottom: var(--space-8);
+    }
+    .footer {
+      text-align: center;
+      padding: var(--space-8);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+    @media (max-width: 768px) {
+      .grid-nav { grid-template-columns: repeat(2, 1fr); }
+      .hero h1 { font-size: 2rem; }
+    }
+    @media (max-width: 480px) {
+      .grid-nav { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>vLLM &amp; AI 推理核心概念全景解析</h1>
+  <p>从 GPU 架构到生产部署，从 Prefill/Decode 到 AI Agent，系统梳理 160+ 个 AI/LLM 推理领域核心概念</p>
+  <div class="hero-meta">
+    <span>编制日期: 2026-05-15</span>
+    <span>共 8 个模块 | 160+ 概念</span>
+  </div>
+</div>
+
+<div class="grid-nav">
+  <a href="section-1.html" class="nav-card">
+    <div class="nav-card-num">01</div>
+    <h3>LLM 推理基础</h3>
+    <p>Prefill / Decode 阶段、KV Cache、Attention 机制（MHA / MQA / GQA）</p>
+    <span class="tag tag-blue">基础概念</span>
+  </a>
+  <a href="section-2.html" class="nav-card">
+    <div class="nav-card-num">02</div>
+    <h3>vLLM 核心创新</h3>
+    <p>PagedAttention、Continuous Batching、Chunked Prefill、Prefix Caching、Speculative Decoding</p>
+    <span class="tag tag-emerald">核心创新</span>
+  </a>
+  <a href="section-3.html" class="nav-card">
+    <div class="nav-card-num">03</div>
+    <h3>vLLM API 模型类型</h3>
+    <p>Generation / Pooling / Frontend Task、Embedding / Rerank / Classification / Reward Model</p>
+    <span class="tag tag-amber">API 体系</span>
+  </a>
+  <a href="section-4.html" class="nav-card">
+    <div class="nav-card-num">04</div>
+    <h3>分布式推理与部署</h3>
+    <p>TP / PP / DP / EP、Disaggregated Serving、量化 (AWQ/GPTQ)、FlashAttention、采样策略</p>
+    <span class="tag tag-rose">分布式</span>
+  </a>
+  <a href="section-5.html" class="nav-card">
+    <div class="nav-card-num">05</div>
+    <h3>生态项目</h3>
+    <p>LMCache 多级 KV 卸载、SGLang RadixAttention、推理网关、K8s 部署、LoRA / QLoRA</p>
+    <span class="tag tag-purple">生态</span>
+  </a>
+  <a href="section-6.html" class="nav-card">
+    <div class="nav-card-num">06</div>
+    <h3>AI 通用概念</h3>
+    <p>Transformer 架构深度解析、RoPE 位置编码、MoE、SSM/Mamba、Tokenization、推理引擎对比</p>
+    <span class="tag tag-cyan">通用</span>
+  </a>
+  <a href="section-7.html" class="nav-card">
+    <div class="nav-card-num">07</div>
+    <h3>高级 AI（上）</h3>
+    <p>训练范式 (Pretrain / RLHF / DPO)、评估指标、GPU 架构 (H100/H200)、RAG 检索增强生成</p>
+    <span class="tag tag-blue">高级</span>
+  </a>
+  <a href="section-8.html" class="nav-card">
+    <div class="nav-card-num">08</div>
+    <h3>高级 AI（下）</h3>
+    <p>AI Agent / Function Calling、多模态 (VLM)、模型压缩、生产部署最佳实践</p>
+    <span class="tag tag-emerald">高级</span>
+  </a>
+</div>
+
+<div class="section-divider">
+  <h2>AI 推理概念全景关系图</h2>
+  <div class="mermaid-wrapper">
+    <pre class="mermaid">
+graph TB
+    subgraph GPU["GPU 硬件层"]
+        GPUArch[GPU 架构<br/>CUDA/Tensor Core]
+        HBM[HBM 显存层次]
+        Quant[量化<br/>FP8/INT4/AWQ]
+    end
+
+    subgraph Model["模型层"]
+        Trans[Transformer]
+        PE[位置编码<br/>RoPE/ALiBi]
+        Attn[Attention 机制<br/>MHA/GQA/MQA]
+        Act[激活函数<br/>SwiGLU/GELU]
+        Norm[归一化<br/>RMSNorm/LayerNorm]
+        MoE[MoE 混合专家]
+        Mamba[SSM / Mamba]
+        Tokenizer[Tokenization<br/>BPE/SentencePiece]
+    end
+
+    subgraph Infra["推理引擎层"]
+        PA[PagedAttention]
+        KV[KV Cache 管理]
+        Prefill[Prefill 阶段]
+        Decode[Decode 阶段]
+        CB[Continuous Batching]
+        CP[Chunked Prefill]
+        PC[Prefix Caching]
+        SD[Speculative Decoding]
+        FlashAttn[FlashAttention]
+    end
+
+    subgraph Dist["分布式层"]
+        TP[TP 张量并行]
+        PP[PP 流水线并行]
+        EP[EP 专家并行]
+        DS[Disaggregated Serving]
+    end
+
+    subgraph Serving["服务层"]
+        GenT[Generation Task]
+        PoolT[Pooling Task]
+        Embed[Embedding Model]
+        Rerank[Rerank Model]
+        Reward[Reward Model]
+        LMCache[LMCache]
+        SGLang[SGLang]
+        Gateway[推理网关]
+        LoRA[LoRA / QLoRA]
+        K8s[K8s 部署]
+    end
+
+    subgraph App["应用层"]
+        RAG[RAG 检索增强]
+        Agent[AI Agent]
+        MCP[MCP 协议]
+        RLHF[RLHF / DPO]
+        Eval[评估指标<br/>MMLU/HumanEval]
+        Multi[多模态 VLM]
+    end
+
+    GPU --> Model
+    Model --> Infra
+    Infra --> Dist
+    Dist --> Serving
+    Serving --> App
+
+    Trans --> Attn
+    Trans --> PE
+    Trans --> Act
+    Trans --> Norm
+    Attn --> Mamba
+    MoE --> EP
+
+    PA --> KV
+    PA --> PC
+    KV --> Prefill
+    KV --> Decode
+    CB --> CP
+    CB --> SD
+
+    Embed --> RAG
+    Rerank --> RAG
+    Reward --> RLHF
+    Embed --> Agent
+    LMCache --> KV
+    SGLang --> PC
+    LoRA --> Reward
+    </pre>
+  </div>
+</div>
+
+<div class="footer">
+  <p>基于 Phase 2 搜索（5 agents, 219 sources）和 Phase 3 深度分析（8 modules, 160+ concepts）生成的 HTML 多页报告</p>
+  <p style="margin-top: var(--space-2)">研究日期: 2026-05-15 | 框架: vLLM + 生态项目 | 用途: 知识普及/扫盲</p>
+</div>
+
+</body>
+</html>

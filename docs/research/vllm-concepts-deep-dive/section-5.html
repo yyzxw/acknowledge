@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块5: 生态项目核心概念 — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 5 / 8</span>
+  </div>
+</div>
+
+<section id="sec-5" data-section="module">
+  <div class="module-content">
+
+    <!-- ============================================ -->
+    <!-- 5.1 LMCache -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>5.1 LMCache（多级 KV Cache 卸载）</h3>
+        <span class="tag tag-blue">KV Cache 扩展</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义</h4>
+        <p>LMCache 是一个专为大规模 LLM 推理设计的 KV Cache 扩展层，定位于 vLLM 和 SGLang 等推理引擎的 KV Cache 管理增强组件。其核心使命是"让 LLM 对每个文本只执行一次 Prefill"——通过多级存储层次将 KV Cache 持久化，使任何服务引擎实例都能跨请求、跨会话甚至跨节点复用缓存，从而显著降低 Time-To-First-Token (TTFT) 并节省 GPU 计算周期。LMCache 由 LMCache 团队维护，与 vLLM Production Stack 同源，已被集成到上游 vLLM 的 KVConnector 架构中，提供即插即用体验。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>多级存储层次</h4>
+        <p>LMCache 实现了 <strong>GPU HBM → CPU DRAM → 本地 SSD/NVMe → 远程存储（S3/Redis）</strong> 的四级卸载层次：</p>
+        <table>
+          <thead><tr><th>层级</th><th>配置项</th><th>典型延迟</th><th>容量</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td>GPU HBM</td><td>原生 vLLM KV Cache</td><td>~1.5 TB/s 带宽</td><td>有限（如 A100 80GB）</td><td>当前活跃请求</td></tr>
+            <tr><td>CPU DRAM</td><td><code>local_cpu: true</code>, <code>max_local_cpu_size</code></td><td>~100 GB/s 带宽</td><td>数 TB</td><td>热数据缓存</td></tr>
+            <tr><td>本地 SSD/NVMe</td><td><code>local_disk: "file:///path"</code></td><td>~7 GB/s 带宽</td><td>数 TB~数十 TB</td><td>温数据持久化</td></tr>
+            <tr><td>远程存储</td><td><code>remote_url</code> (S3/Redis/Valkey)</td><td>网络延迟</td><td>无限</td><td>冷数据、跨节点共享</td></tr>
+            <tr><td>P2P 传输</td><td><code>enable_p2p: true</code></td><td>RDMA 延迟</td><td>不限</td><td>实例间直接传输</td></tr>
+          </tbody>
+        </table>
+        <p>关键配置参数（来自 <code>lmcache/v1/config.py</code>）：</p>
+        <ul>
+          <li><code>chunk_size</code>（默认 256）: KV Cache 分块大小，影响存储粒度和索引效率</li>
+          <li><code>local_cpu</code>（默认 True）: 是否启用 CPU offloading</li>
+          <li><code>max_local_cpu_size</code>（默认 5.0 GB）: 本地 CPU 缓存最大容量</li>
+          <li><code>local_disk</code>: 本地磁盘路径，用于磁盘级 offloading</li>
+          <li><code>remote_url</code>: 远程存储 URL，支持 S3、Redis 等后端</li>
+          <li><code>enable_pd</code> / <code>pd_role</code>: Disaggregated Prefill 角色配置</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>Disaggregated Prefill</h4>
+        <p>Disaggregated Prefill（又称 PD 分离）是 LMCache 的高级特性，将计算密集的 Prefill 阶段和内存带宽密集的 Decode 阶段部署到不同的 GPU 集合上。LMCache 支持基于 NIXL（NVIDIA Dynamo 的通信抽象）的跨实例 KV Cache 传输，NIXL 支持 NVLink、RDMA 网卡和 GPU Direct Storage。</p>
+        <p>PD 分离中的 KV 传输路径：</p>
+        <pre><code>vLLM Prefill Node → LMCache Server → vLLM Decode Node</code></pre>
+        <p>配置示例：</p>
+        <pre><code># Prefiller 端
+local_cpu: False
+enable_pd: True
+transfer_channel: "nixl"
+pd_role: "sender"
+pd_proxy_host: "localhost"
+pd_proxy_port: 7500
+nixl_backends: [UCX]
+
+# Decoder 端
+local_cpu: False
+enable_pd: True
+transfer_channel: "nixl"
+pd_role: "receiver"
+pd_peer_host: "localhost"
+pd_peer_init_port: 7300
+pd_buffer_size: 2147483648  # 2GB
+nixl_backends: [UCX]</code></pre>
+        <p>与传统 PD 分离方案相比，LMCache 避免了细粒度 KV Cache 传输导致的带宽利用率不足问题，通过批量化数据移动和计算与 I/O 流水线技术，实现了更高的传输效率。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>P2P Sharing（跨节点 KV Cache 共享）</h4>
+        <p>P2P 共享允许 vLLM 实例直接交换 KV Cache，无需经过中央存储。各实例形成一个分布式缓存网络，请求可以被路由到已缓存相关前缀的实例。P2P 配置包括：</p>
+        <ul>
+          <li><code>enable_p2p</code>: 启用 P2P 共享</li>
+          <li><code>p2p_host</code>: P2P 主机地址</li>
+          <li><code>p2p_init_ports</code> / <code>p2p_lookup_ports</code>: 端口配置</li>
+        </ul>
+        <p>当 Decode 实例收到请求后，首先通过 P2P 网络查询远程 Prefill 实例上是否存在对应的 KV Cache，若命中则直接拉取，跳过重复计算。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 vLLM 的集成方式</h4>
+        <p>LMCache 与 vLLM V1 的 KVConnector 架构深度集成，实现了 <code>KVConnectorBase_V1</code> 的子类，扮演两种角色：</p>
+        <pre><code>from vllm.distributed.kv_transfer.kv_connector.v1.base import (
+    KVConnectorBase_V1, KVConnectorMetadata, KVConnectorRole,
+)
+
+class LMCacheConnectorV1Impl(KVConnectorBase_V1):
+    def __init__(self, vllm_config, role, connector):
+        self._lmcache_engine = cls(vllm_config, role, self)
+        # SCHEDULER: 在调度器进程中绑定元数据
+        # WORKER: 在 worker 进程中执行实际加载/保存</code></pre>
+        <p>关键接口方法：</p>
+        <ul>
+          <li><code>get_num_new_matched_tokens()</code>: 获取远程 KV Cache 中匹配的新 token 数</li>
+          <li><code>start_load_kv()</code>: 异步加载 KV Cache</li>
+          <li><code>save_kv_layer()</code>: 逐层保存 KV Cache</li>
+          <li><code>request_finished()</code>: 请求完成时处理 KV Cache 释放</li>
+        </ul>
+        <p><code>RequestTracker</code> 数据结构追踪每个请求的缓存状态：</p>
+        <pre><code>@dataclass
+class RequestTracker:
+    req_id: str
+    prompt_len: int
+    token_ids: list[int]
+    allocated_block_ids: list[int]
+    num_saved_tokens: int = 0
+    disagg_spec: Optional[DisaggSpec] = None
+    num_lmcache_cached_tokens: int = 0  # LMCache 缓存的 token 数
+    vllm_cached_tokens: int = 0         # vLLM 本地缓存的 token 数</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>性能数据</h4>
+        <p>根据 LMCache 官方论文和测试数据：</p>
+        <ul>
+          <li><strong>3-10x 延迟节省</strong>：在多轮 QA 和 RAG 场景中，LMCache 可实现 3-10 倍的延迟降低和 GPU 计算周期减少</li>
+          <li><strong>SGLang 集成</strong>：在 Qwen3-32B (TP=2) 上，LMCache 的 CPU offloading 相比无 offloading 的 SGLang 获得更高吞吐和更低 TTFT；与 SGLang 原生 CPU offloading 性能相当，但支持分布式存储后端</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与其他概念的关系</h4>
+        <p>LMCache 与 vLLM 的 Prefix Caching 互补：vLLM 的本地 prefix caching 处理同实例内的请求间共享，LMCache 扩展了跨实例和跨存储层次的共享能力。在 PD 分离架构中，LMCache 作为 KV Cache 传输层，连接 Prefill 池和 Decode 池。在 Production Stack 中，LMCache 是默认集成的 KV Cache 扩展组件。</p>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 5.2 SGLang -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>5.2 SGLang</h3>
+        <span class="tag tag-purple">推理框架</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义</h4>
+        <p>SGLang（Structured Generation Language）是由 LMSYS 团队开发的高性能 LLM 推理和服务框架，与 vLLM 处于同一生态位，但采用了不同的架构路线。SGLang 不仅是一个推理引擎，还包含一个 Python 嵌入式 DSL，用于表达复杂的 LLM 程序工作流，如多轮对话、工具调用、树状思考等。其核心定位是面向生产规模部署的高性能推理系统，特别擅长处理具有重复提示模式的工作负载（聊天机器人、RAG、多轮 Agent），支持 400,000+ GPU 的超大规模生产部署（如 DeepSeek）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>RadixAttention：Radix Tree 前缀缓存</h4>
+        <p>RadixAttention 是 SGLang 最具标志性的创新，是一种在运行时自动且系统化地复用 KV Cache 的技术。与 vLLM 在处理完生成请求后丢弃 KV Cache 不同，SGLang 将提示词和生成结果的 KV Cache 保留在一个 <strong>Radix Tree（基数树/压缩前缀树）</strong> 数据结构中，实现高效的前缀搜索、复用、插入和驱逐。</p>
+        <p><strong>Radix Tree 数据结构</strong>（来自 <code>sglang/srt/mem_cache/radix_cache.py</code>）：</p>
+        <pre><code>class TreeNode:
+    def __init__(self, id=None, priority=0):
+        self.children = defaultdict(TreeNode)
+        self.parent: TreeNode = None
+        self.key: RadixKey = None
+        self.value: Optional[torch.Tensor] = None          # GPU 上的 KV Cache
+        self.lock_ref = 0
+        self.last_access_time = time.monotonic()
+        self.hit_count = 0
+        self.host_value: Optional[torch.Tensor] = None     # CPU 备份
+        self.priority = priority
+
+class RadixKey:
+    def __init__(self, token_ids: List[int], extra_key: Optional[str] = None):
+        self.token_ids = token_ids
+        self.extra_key = extra_key  # 区分不同 LoRA 或缓存盐值</code></pre>
+        <p>前缀匹配算法按 <code>page_size</code> 粒度比较 token 序列，与 GPU 上的页式 KV Cache 管理对齐：</p>
+        <pre><code>def _key_match_paged(key0, key1, page_size):
+    _check_extra_key(key0, key1)
+    min_len = min(len(key0), len(key1))
+    i = 0
+    while i < min_len:
+        if key0.token_ids[i:i+page_size] != key1.token_ids[i:i+page_size]:
+            break
+        i += page_size
+    return i</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 vLLM Block Hash 前缀缓存的对比</h4>
+        <table>
+          <thead><tr><th>特性</th><th>SGLang RadixAttention</th><th>vLLM PagedAttention + Prefix Caching</th></tr></thead>
+          <tbody>
+            <tr><td>数据结构</td><td>Radix Tree（压缩前缀树）</td><td>Block Table + 哈希表</td></tr>
+            <tr><td>匹配粒度</td><td>Token 序列（支持页粒度）</td><td>固定 Block（默认 16 tokens）</td></tr>
+            <tr><td>复用范围</td><td>任意前缀（包括生成结果）</td><td>主要是提示词前缀</td></tr>
+            <tr><td>驱逐策略</td><td>LRU + 优先级感知</td><td>LRU（V1）</td></tr>
+            <tr><td>调度协同</td><td>缓存感知调度（优先命中请求）</td><td>标准调度 + Prefix Caching 辅助</td></tr>
+            <tr><td>内存开销</td><td>树结构带来额外开销</td><td>块表扁平数组，开销较小</td></tr>
+            <tr><td>适用场景</td><td>多轮对话、Agent、复杂工作流</td><td>单轮请求、批处理</td></tr>
+          </tbody>
+        </table>
+        <p>核心区别：</p>
+        <ol>
+          <li><strong>树 vs 表</strong>：Radix Tree 天然支持变长前缀共享，而 vLLM 的 block hash 是固定块级别的匹配。当对话历史在不同请求间有细微差异（如时间戳、用户名）时，Radix Tree 可以在不同分支上共享公共前缀，而 vLLM 的 block hash 可能完全失效。</li>
+          <li><strong>生成结果缓存</strong>：SGLang 将生成结果也缓存到 Radix Tree 中，支持多轮对话的完整历史复用；vLLM 的 prefix caching 主要针对输入提示词。</li>
+          <li><strong>调度协同</strong>：SGLang 的调度器会优先调度能命中缓存的请求，vLLM 的调度器在这方面的集成较浅。</li>
+        </ol>
+        <p>性能数据：关闭 RadixAttention 会使吞吐下降 70-90%；SGLang 在端到端 Agentic、推理和长上下文任务上比基线 vLLM 和 LMQL 高 4-6 倍吞吐。在 80% 共享前缀的工作负载下，SGLang 的 TTFT 比 vLLM 快 2-6 倍。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Structured Outputs：压缩 FSM 加速约束解码</h4>
+        <p>Structured Outputs 是 SGLang 的关键特性，用于约束 LLM 生成符合特定格式（JSON Schema、正则表达式）的输出。不同于传统 rejection sampling（生成后检查，不符合则重试），SGLang <strong>将 JSON Schema 或正则表达式编译为压缩有限状态机（FSM）</strong>，在采样阶段直接引导生成过程。</p>
+        <p>FSM 由状态集合、输入字母表、转移函数、初始状态和接受状态组成。在约束解码中，FSM 的状态表示当前解析位置，转移表示允许的下一个 token。SGLang 的压缩 FSM 优化实现了 <strong>3 倍更快的 JSON 解码</strong>。</p>
+        <pre><code>class Scheduler:
+    def __init__(self, ...):
+        # 初始化时即创建 GrammarManager
+        self.structured_output_manager = GrammarManager(...)</code></pre>
+        <p>应用场景包括：工具调用（强制 LLM 输出符合预定义的工具参数格式）、API 响应格式化（确保可解析的 JSON）、数据抽取（从文本中抽取结构化信息）、代码生成（约束语法规则）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Zero-overhead CPU Scheduler</h4>
+        <p>LLM 推理不仅消耗 GPU 资源，CPU 也需要承担大量工作：批调度、内存分配、前缀匹配等。未优化的推理引擎中 CPU 开销可能高达一半的总推理时间。SGLang 的 Zero-overhead CPU Scheduler <strong>将 CPU 调度与 GPU 计算重叠</strong>——调度器提前一个批次运行，准备下一个批次所需的所有元数据，使 GPU 始终处于忙碌状态，昂贵的 Radix Tree 操作等开销被完全隐藏。</p>
+        <p>这一思想在 NanoFlow 论文中已有提出，SGLang v0.4 将其推至极致实现。调度器的复杂组成包括：<code>schedule_policy.py</code>（调度策略）、<code>schedule_batch.py</code>（批次管理）、<code>scheduler_dp_attn_mixin.py</code>（Data Parallel Attention 混合）等模块。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 vLLM 的架构差异对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>SGLang</th><th>vLLM</th></tr></thead>
+          <tbody>
+            <tr><td>前缀缓存</td><td>RadixAttention（树结构，自动）</td><td>PagedAttention + Prefix Caching（块哈希，需显式启用）</td></tr>
+            <tr><td>调度器</td><td>Zero-overhead，CPU/GPU 重叠</td><td>V1 统一调度，V0 异步调度</td></tr>
+            <tr><td>结构化输出</td><td>压缩 FSM（3x JSON 加速）</td><td>Outlines / xGrammar 支持</td></tr>
+            <tr><td>前端语言</td><td>SGLang DSL（Python 嵌入式）</td><td>纯 Python API</td></tr>
+            <tr><td>硬件支持</td><td>NVIDIA, AMD, TPU</td><td>主要 NVIDIA，扩展中</td></tr>
+            <tr><td>PD 分离</td><td>原生支持</td><td>通过 LMCache 等扩展</td></tr>
+            <tr><td>MoE 优化</td><td>DeepSeek 级 Expert Parallelism</td><td>支持，实现不同</td></tr>
+            <tr><td>进程架构</td><td>独立 Scheduler 进程，ZMQ 通信</td><td>API Server → Engine Core → GPU Worker</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 5.3 Gateway / 推理网关 -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>5.3 Gateway / 推理网关</h3>
+        <span class="tag tag-amber">路由</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义</h4>
+        <p>Gateway API Inference Extension 是由 Kubernetes SIG（Special Interest Group）推出的推理网关扩展项目，隶属于 <code>kubernetes-sigs</code> 组织。它将 Kubernetes Gateway API 从通用的 L7 路由基础设施扩展为<strong>推理感知（Inference-Aware）的智能网关</strong>，使 LLM 推理服务具备"模型即服务"（Model-as-a-Service）的能力。项目引入了两个新的 Custom Resource Definitions（CRDs）：<code>InferencePool</code>（推理工作负载的后端集合）和 <code>InferenceModel</code>（客户端可见模型名到后端 LoRA 适配器/目标模型的映射）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Prefix Cache 感知路由</h4>
+        <p>传统负载均衡器（如轮询）不考虑各实例的 KV Cache 状态，可能将请求路由到没有缓存前辍的实例，导致需要完整 prefill。Prefix Cache 感知路由的核心原理是：<strong>将请求路由到已经持有相关前缀缓存的实例</strong>，从而避免重复的 prefill 计算，降低 TTFT。</p>
+        <p>Endpoint Picker (EPP) 是 Inference Extension 的核心调度组件，通过 Envoy 的 <code>ext_proc</code> 过滤器接收请求信息，结合从 Model Serving 平台获取的实时指标做出最优端点选择：</p>
+        <ol>
+          <li>Gateway 选择正确的 InferencePool</li>
+          <li>Gateway 将请求信息转发给 Endpoint Selection Extension</li>
+          <li>Inference Gateway 从 Model Serving 获取实时指标（Prefix Cache 状态、LoRA 可用性等）</li>
+          <li>EPP 基于指标和请求特征选择最优端点</li>
+          <li>Envoy 将请求路由到选定的端点</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>LoRA Adapter 路由</h4>
+        <p>在生产环境中，通常在同一个基础模型上加载多个 LoRA 适配器以服务不同任务。Gateway 提供三层面的 LoRA 路由支持：</p>
+        <ul>
+          <li><strong>路由到已加载的实例</strong>：优先将请求发到已持有该 LoRA 的 GPU</li>
+          <li><strong>路由到可加载的实例</strong>：若无实例已加载，发到有能力加载的实例</li>
+          <li><strong>动态加载决策</strong>：基于适配器使用频率缓存热度做换入换出决策</li>
+        </ul>
+        <p>配置示例：</p>
+        <pre><code>apiVersion: inference.networking.x-k8s.io/v1alpha2
+kind: InferenceModel
+metadata:
+  name: tweet-summary
+spec:
+  modelName: tweet-summary
+  criticality: Critical
+  targetModels:
+  - name: tweet-summary-0
+    weight: 90
+  - name: tweet-summary-1
+    weight: 10</code></pre>
+        <p>通过 <code>weight</code> 字段可实现蓝绿发布或金丝雀发布。大规模 LoRA 服务的核心挑战包括：数万个适配器注册、适配器使用极不均衡（少数高频大量低频）、不同适配器需要不同的 SLO 层级。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Criticality 分级</h4>
+        <p>Criticality 分级允许为不同请求设置不同的服务优先级：</p>
+        <ul>
+          <li><strong>Critical（关键）</strong>: 延迟敏感任务（如在线聊天），优先负载均衡</li>
+          <li><strong>Sheddable（可丢弃）</strong>: 延迟容忍任务（如摘要生成），负载过高时可丢弃</li>
+        </ul>
+        <p>EPP 的过滤器链按以下顺序评估：</p>
+        <p>对于关键请求：</p>
+        <ol>
+          <li><strong>Critical Request Check</strong>: 判断是否关键</li>
+          <li><strong>Low Queuing Filter</strong>: 筛选队列 < 50 的端点</li>
+          <li><strong>LoRA Affinity Check</strong>: 筛选已加载所需 LoRA 的端点</li>
+          <li><strong>Least Queuing Filter</strong>: 选择队列最短的端点</li>
+          <li><strong>Least KV Cache Filter</strong>: 选择 KV Cache 利用率最低的端点</li>
+        </ol>
+        <p>对于非关键请求（Sheddable）：</p>
+        <ol>
+          <li><strong>Has Capacity Filter</strong>: 筛选 KV Cache < 80% 且队列 < 5 的端点</li>
+          <li>若无可满足条件的端点，<strong>直接丢弃请求</strong></li>
+        </ol>
+        <p>示例场景：</p>
+        <pre><code>关键请求 + LoRA-X：
+  Pod A: Queue=6, KV=85%, LoRA-X=loaded    → 通过 LoRA 亲和性 → 最终选中
+  Pod B: Queue=4, KV=75%, LoRA-X=not loaded → 不通过 LoRA 亲和性
+  Pod C: Queue=7, KV=60%, LoRA-X=not loaded → 不通过 LoRA 亲和性</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>基于 GPU 指标的智能路由</h4>
+        <p>除了 Prefix Cache 和 LoRA 状态，Gateway 还考虑以下 GPU 指标：</p>
+        <ul>
+          <li><strong>KV Cache 利用率</strong>: 各实例的 KV Cache 使用比例</li>
+          <li><strong>队列长度</strong>: 等待处理的请求数</li>
+          <li><strong>GPU 利用率</strong>: 计算资源使用率</li>
+          <li><strong>请求成本</strong>: 预估的推理成本</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 Envoy 的集成</h4>
+        <p>Gateway 利用 Envoy 的 External Processing (<code>ext_proc</code>) 过滤器实现扩展：</p>
+        <pre><code>Client → Envoy Proxy → ext_proc → EPP (Endpoint Picker)
+                               →
+                        InferencePool/InferenceModel CRDs</code></pre>
+        <p>已知集成实现：<strong>kgateway</strong>（原 Envoy Gateway，原生支持）、<strong>Istio</strong>（通过设置 <code>SUPPORT_GATEWAY_API_INFERENCE_EXTENSION=true</code> 启用）、<strong>GKE Inference Gateway</strong>（Google Cloud 托管实现）。</p>
+        <p>调度器核心 Go 代码结构：</p>
+        <pre><code>type Scheduler struct {
+    profileHandler framework.ProfileHandler
+    profiles       map[string]*framework.SchedulerProfile
+}
+
+func (s *Scheduler) Schedule(ctx context.Context, request *types.LLMRequest,
+    candidatePods []types.Pod) (*types.SchedulingResult, error) {
+    // 1. 迭代运行 Profile Handler 选择 profiles
+    // 2. 运行选中的 scheduler profiles（过滤 + 评分）
+    // 3. 返回最优端点
+}</code></pre>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 5.4 Production Stack（生产部署栈） -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>5.4 Production Stack（生产部署栈）</h3>
+        <span class="tag tag-emerald">部署</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义</h4>
+        <p>vLLM Production Stack（亦称 vllm-stack 或 llmstack）是 vLLM 的生产级部署参考实现，由 LMCache 团队维护。它是一个 Kubernetes 原生的推理栈，在 vLLM 之上增加了四个关键能力：KV Cache 共享与存储（通过 LMCache）、Prefix-aware 路由、可观测性（TTFT/TBT/吞吐监控）、自动扩缩容。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Helm / Kubernetes 部署</h4>
+        <p>通过 Helm Chart 一键部署到 Kubernetes：</p>
+        <pre><code># 添加 chart 仓库
+helm repo add vllm https://vllm-project.github.io/production-stack
+
+# 最小化部署
+helm install vllm vllm/vllm-stack -f tutorials/assets/values-01-minimal-example.yaml</code></pre>
+        <p>核心配置 <code>values.yaml</code>：</p>
+        <pre><code>servingEngineSpec:
+  enableEngine: true
+  modelSpec:
+  - name: "mistral"
+    repository: "lmcache/vllm-openai"
+    tag: "latest"
+    modelURL: "mistralai/Mistral-7B-Instruct-v0.2"
+    replicaCount: 1
+    requestCPU: 10
+    requestMemory: "64Gi"
+    requestGPU: 1
+    pvcStorage: "50Gi"
+    vllmConfig:
+      enablePrefixCaching: false
+      enableChunkedPrefill: false
+      maxModelLen: 16384
+      dtype: "bfloat16"
+      maxNumSeqs: 32
+      gpuMemoryUtilization: 0.95
+      maxLoras: 4
+    lmcacheConfig:
+      enabled: true
+      cpuOffloadingBufferSize: "30"
+
+routerSpec:
+  repository: "lmcache/lmstack-router"
+  tag: "latest"
+  enableRouter: true
+  replicaCount: 1</code></pre>
+        <p>Helm templates 包含：<code>deployment-vllm-multi.yaml</code>（引擎部署）、<code>deployment-router.yaml</code>（路由器）、<code>deployment-cache-server.yaml</code>（LMCache 服务器）、<code>hpa-router.yaml</code>（路由器 HPA）、<code>configmap.yaml</code>（配置映射）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Prometheus + Grafana 监控体系</h4>
+        <p>Production Stack 集成了完整的可观测性栈：</p>
+        <table>
+          <thead><tr><th>指标类别</th><th>指标名</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>延迟</td><td>TTFT (Time-To-First-Token)</td><td>首 token 响应时间</td></tr>
+            <tr><td>延迟</td><td>TBT (Time-Between-Tokens)</td><td>相邻 token 间隔时间</td></tr>
+            <tr><td>延迟</td><td>e2e latency</td><td>端到端请求延迟</td></tr>
+            <tr><td>吞吐</td><td>requests/sec</td><td>每秒请求数</td></tr>
+            <tr><td>资源</td><td>GPU 利用率</td><td>GPU 计算资源使用</td></tr>
+            <tr><td>资源</td><td>KV Cache 使用率</td><td>KV Cache 块使用比例</td></tr>
+            <tr><td>队列</td><td>num_requests_waiting</td><td>等待队列长度</td></tr>
+            <tr><td>队列</td><td>num_requests_running</td><td>运行中请求数</td></tr>
+            <tr><td>实例</td><td>Available vLLM Instances</td><td>健康实例数</td></tr>
+          </tbody>
+        </table>
+        <p>提供预配置的 Grafana Dashboard，面板包括：部署监控总览、请求延迟分布、TTFT 分布、运行/挂起请求数、KV Cache 状态。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>HPA / VPA 自动扩缩容</h4>
+        <p>Production Stack 使用 KEDA（Kubernetes Event-driven Autoscaling）实现基于自定义指标的自动扩缩容：</p>
+        <pre><code>keda:
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus:9090
+      metricName: vllm_num_requests_waiting
+      query: vllm:num_requests_waiting
+      threshold: "5"
+  advanced:
+    restoreToOriginalReplicaCount: false
+
+servingEngineSpec:
+  modelSpec:
+  - name: "llama3"
+    replicaCount: 1
+    keda:
+      minReplicaCount: 1
+      maxReplicaCount: 3
+      triggers:
+      - type: prometheus
+        metadata:
+          query: vllm:num_requests_waiting
+          threshold: "5"</code></pre>
+        <p>配置要点：基于 <code>vllm:num_requests_waiting</code> 指标触发扩缩容，副本范围 1-3，扩容阈值队列长度 > 5，检查周期 15 秒，缩容冷却 360 秒（避免抖动）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>多种路由策略</h4>
+        <table>
+          <thead><tr><th>策略</th><th>配置</th><th>适用场景</th></tr></thead>
+          <tbody>
+            <tr><td>Round-robin（轮询）</td><td><code>routingStrategy: "round-robin"</code></td><td>无状态、缓存无关的工作负载</td></tr>
+            <tr><td>Session-ID 路由</td><td><code>routingStrategy: "session"</code></td><td>同一会话始终路由到同一实例</td></tr>
+            <tr><td>Prefix-aware 路由</td><td><code>routingStrategy: "prefix-aware"</code></td><td>最大化 KV Cache 复用</td></tr>
+            <tr><td>KV-aware 路由</td><td><code>routingStrategy: "kv-aware"</code></td><td>基于 KV Cache 利用率的智能分发</td></tr>
+          </tbody>
+        </table>
+        <p>Prefix-aware 路由是 Production Stack 的核心优化特性，它结合 LMCache 的前缀缓存信息将请求路由到最长前缀匹配的实例，最大化缓存命中率。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 LMCache 的深度集成</h4>
+        <pre><code>servingEngineSpec:
+  modelSpec:
+  - name: "mistral"
+    lmcacheConfig:
+      enabled: true
+      cpuOffloadingBufferSize: "30"</code></pre>
+        <p>部署后通过 <code>kubectl logs <vllm-pod> | grep -i lmcache</code> 验证激活，预期输出应包括 KV Cache 存储和检索的日志条目。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>生产环境最佳实践</h4>
+        <ol>
+          <li><strong>Startup Probe 配置</strong>：给模型加载留出充足时间（<code>initialDelaySeconds: 15, failureThreshold: 60, periodSeconds: 10</code>，总计最多 10 分钟）</li>
+          <li><strong>Liveness Probe 配置</strong>：适当放宽阈值避免频繁重启（<code>failureThreshold: 3</code>）</li>
+          <li><strong>PVC 持久化</strong>：用于模型权重缓存，加速大规模部署</li>
+          <li><strong>gpuMemoryUtilization 设为 0.95</strong>：在留出余量的同时最大化显存利用率</li>
+          <li><strong>KEDA 缩容冷却 360 秒</strong>：避免流量波动导致频繁扩缩容</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 5.5 LoRA / QLoRA -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>5.5 LoRA / QLoRA</h3>
+        <span class="tag tag-purple">参数高效微调</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>LoRA 数学原理</h4>
+        <p>LoRA（Low-Rank Adaptation）是一种参数高效微调（PEFT）方法，基于关键假设：<strong>模型权重在微调过程中的更新具有低内在秩（low intrinsic rank）</strong>。标准微调更新预训练权重矩阵 W₀ ∈ ℝ^(d×k) 为 <code>W = W₀ + ΔW</code>，其中 ΔW 包含 d×k 个参数。</p>
+        <p>LoRA 将 ΔW 分解为两个低秩矩阵的乘积：</p>
+        <div class="formula-box"><code>W = W₀ + BA</code></div>
+        <p>其中 B ∈ ℝ^(d×r)，A ∈ ℝ^(r×k)，秩 r ≪ min(d, k)。总参数量从 d×k 减少到 r×(d+k)。</p>
+        <p>带缩放因子的前向传播：</p>
+        <div class="formula-box"><code>h = W₀x + (α/r) · BAx</code></div>
+        <p>其中 α 是缩放因子。训练开始时 A 随机高斯初始化，B 初始化为零，确保模型输出与预训练模型一致。</p>
+        <p>计算效率对比（以 1000×1000 矩阵为例）：</p>
+        <ul>
+          <li>全量微调：ΔW 有 1,000,000 参数</li>
+          <li>LoRA (r=2)：A 是 1000×2，B 是 2×1000，共 4,000 参数，<strong>参数量减少 250 倍</strong></li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>QLoRA：4-bit NormalFloat + Double Quantization + Paged Optimizers</h4>
+        <p>QLoRA（Quantized LoRA）通过三种技术将 LoRA 的内存需求进一步降低：</p>
+        <p><strong>1. 4-bit NormalFloat (NF4)：</strong> NF4 基于权重通常服从正态分布的观察，使用信息论最优的非均匀量化点。量化级别通过拟合标准正态分布 N(0,1) 的分位数确定，在 4 位（16 个级别）约束下最小化量化误差。</p>
+        <p><strong>2. Double Quantization（双重量化）：</strong> 第一次量化将权重从 fp16/bf16 量化为 4-bit，但量化本身需要存储 scale 参数（fp32）。Double Quantization 将这些 scale 参数再次量化（例如到 8-bit），进一步减少内存开销。</p>
+        <p><strong>3. Paged Optimizers（分页优化器）：</strong> 使用 NVIDIA 统一内存管理优化器状态。当 GPU 显存不足时，优化器状态页自动转移到 CPU 内存，需要时再换入，避免训练过程中的 OOM 错误。</p>
+        <p>内存节省对比（7B 参数模型）：</p>
+        <table>
+          <thead><tr><th>方法</th><th>权重</th><th>优化器状态</th><th>总计</th></tr></thead>
+          <tbody>
+            <tr><td>全量微调 fp16</td><td>~14GB</td><td>~42GB</td><td>~56GB</td></tr>
+            <tr><td>LoRA fp16</td><td>~14GB</td><td>很小</td><td>~14GB+</td></tr>
+            <tr><td><strong>QLoRA NF4</strong></td><td><strong>~4GB</strong></td><td><strong>分页管理</strong></td><td><strong>~4GB+</strong></td></tr>
+          </tbody>
+        </table>
+        <p>QLoRA 使得在消费级 GPU（如 24GB RTX 4090）上微调 70B 参数模型成为可能。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 中动态多适配器并发支持</h4>
+        <p>vLLM 支持在运行时动态加载和卸载 LoRA 适配器，无需重启服务：</p>
+        <pre><code># 动态加载
+curl -X POST http://localhost:8000/v1/load_lora_adapter \
+  -H "Content-Type: application/json" \
+  -d '{
+    "lora_name": "sql_adapter",
+    "lora_path": "/path/to/sql-lora-adapter"
+  }'
+
+# 动态卸载
+curl -X POST http://localhost:8000/v1/unload_lora_adapter \
+  -H "Content-Type: application/json" \
+  -d '{"lora_name": "sql_adapter"}'</code></pre>
+        <p><code>LoRAConfig</code>（<code>vllm/config/lora.py</code>）定义了核心参数：</p>
+        <table>
+          <thead><tr><th>参数</th><th>说明</th><th>典型值</th></tr></thead>
+          <tbody>
+            <tr><td><code>max_lora_rank</code></td><td>最大 LoRA 秩</td><td>1, 8, 16, 32, 64, 128, 256, 320, 512</td></tr>
+            <tr><td><code>max_loras</code></td><td>单个批次中最大 LoRA 数量</td><td>1~256</td></tr>
+            <tr><td><code>max_cpu_loras</code></td><td>CPU 中存储的最大 LoRA 数</td><td>用于换入换出</td></tr>
+            <tr><td><code>fully_sharded_loras</code></td><td>是否全分片（TP 场景）</td><td>False</td></tr>
+            <tr><td><code>target_modules</code></td><td>LoRA 应用的模块后缀</td><td><code>["o_proj", "qkv_proj"]</code></td></tr>
+            <tr><td><code>specialize_active_lora</code></td><td>是否为不同 LoRA 数量捕获独立的 CUDA Graph</td><td>False</td></tr>
+          </tbody>
+        </table>
+        <p><code>LoRAModelManager</code>（<code>vllm/lora/model_manager.py</code>）实现适配器的全生命周期管理：</p>
+        <pre><code>class LoRAModelManager:
+    def __init__(self, model, max_num_seqs, max_num_batched_tokens,
+                 vocab_size, lora_config, device, vllm_config):
+        self._registered_adapters: dict[int, LoRAModel] = {}
+        self._active_adapters: dict[int, None] = {}
+        self.lora_index_to_id: list[int | None] = [None] * self.lora_slots
+        self.punica_wrapper_mapping: dict[str, PunicaWrapperBase] = {}</code></pre>
+        <p>核心机制：</p>
+        <ul>
+          <li><strong>注册适配器</strong>：<code>_registered_adapters</code> 存储所有已加载的 LoRA</li>
+          <li><strong>活跃适配器</strong>：<code>_active_adapters</code> 跟踪当前批次中使用的 LoRA（支持同一批次中混用不同 LoRA）</li>
+          <li><strong>LRU 缓存</strong>：<code>AdapterLRUCache</code> 管理 GPU 内存中的 LoRA，超出容量时驱逐到 CPU</li>
+          <li><strong>PunicaWrapper</strong>：高效的批量 LoRA 计算内核封装，通过批量化低秩矩阵乘法实现多适配器零额外开销</li>
+        </ul>
+        <p>vLLM 为不同并行层类型实现了 LoRA 支持：</p>
+        <pre><code>vllm/lora/layers/
+├── base.py                    # 基础 LoRA 层
+├── base_linear.py             # 线性层基础
+├── column_parallel_linear.py  # 列并行线性层
+├── row_parallel_linear.py     # 行并行线性层
+├── replicated_linear.py       # 复制线性层
+├── vocal_parallel_embedding.py
+├── logits_processor.py
+└── fused_moe.py               # MoE 融合层</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>S-LoRA 架构</h4>
+        <p>S-LoRA（Scalable Low-Rank Adaptation）是 vLLM LoRA 支持的底层架构，实现了高效的服务数千个 LoRA 适配器的系统。其核心技术贡献包括：</p>
+        <ol>
+          <li><strong>Unified Paging</strong>：统一管理 LoRA 权重页和 KV Cache 页，实现统一内存池</li>
+          <li><strong>Dynamic Adapter Batching</strong>：在同一批次中混合不同 LoRA 适配器的请求，通过 Punica 内核实现高效执行</li>
+          <li><strong>Punica Kernel</strong>：专门为批量 LoRA 计算设计的 CUDA kernel，接收不同适配器的低秩矩阵 A 和 B，一次性完成批量化计算</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>LoRA 前缀缓存共享机制</h4>
+        <p>在 vLLM 中，LoRA 请求的前缀缓存通过 <code>extra_key</code> 机制区分。<code>hash_block_tokens</code> 函数在计算 block hash 时结合 LoRA 名称，确保不同 LoRA 适配器下的同一 token 序列被视为不同的缓存实体：</p>
+        <pre><code>def hash_block_tokens(token_ids, extra_keys=None):
+    # extra_keys 中包含 lora_name
+    # 使得不同 LoRA 下同一前缀产生不同的哈希值
+    return hash(tuple(token_ids) + tuple(extra_keys or []))</code></pre>
+        <p>这意味着同一基础模型+同一前缀在不同 LoRA 适配器下会分别缓存。SGLang 的 RadixAttention 采用类似的机制，其 <code>RadixKey.extra_key</code> 也用于区分 LoRA 适配器。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>各类 Adapter 对比</h4>
+        <table>
+          <thead><tr><th>类型</th><th>修改对象</th><th>参数量</th><th>推理延迟</th><th>适用场景</th></tr></thead>
+          <tbody>
+            <tr><td>LoRA</td><td>权重矩阵（低秩分解）</td><td>少</td><td>无额外延迟</td><td>通用微调</td></tr>
+            <tr><td>QLoRA</td><td>量化权重 + 低秩分解</td><td>极少</td><td>略增（反量化开销）</td><td>显存受限微调</td></tr>
+            <tr><td>Prefix Tuning</td><td>输入嵌入（前缀 token）</td><td>中等</td><td>无额外延迟</td><td>特定任务适配</td></tr>
+            <tr><td>Prompt Tuning</td><td>输入嵌入（软提示）</td><td>很少</td><td>无额外延迟</td><td>轻量任务适配</td></tr>
+            <tr><td>Series Adapter</td><td>层输出串联</td><td>中等</td><td>有额外延迟</td><td>复杂任务适配</td></tr>
+            <tr><td>IA3</td><td>激活值缩放向量</td><td>极少</td><td>无额外延迟</td><td>通用微调（参数量最少）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 Gateway 的协同</h4>
+        <p>Gateway API Inference Extension 原生支持 LoRA Adapter 路由，通过 <code>InferenceModel</code> CRD 定义客户端可见模型名到 LoRA 适配器的映射。在大规模 LoRA 服务（数万适配器）场景下，架构方案为：</p>
+        <ol>
+          <li><strong>适配器分层</strong>：热适配器常驻 GPU，温适配器在 CPU，冷适配器按需加载</li>
+          <li><strong>请求-适配器协同迁移</strong>：动态迁移请求和适配器以优化延迟</li>
+          <li><strong>动态跨适配器批处理</strong>：vLLM 原生支持同一批次中混合使用不同 LoRA 的请求</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="section-4.html" class="module-nav-prev">
+    <div class="module-nav-label">← 上一模块</div>
+    <div class="module-nav-title">分布式推理与部署</div>
+  </a>
+    <a href="section-6.html" class="module-nav-next">
+    <div class="module-nav-label">下一模块 →</div>
+    <div class="module-nav-title">AI 通用概念</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 5: 生态项目核心概念 | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>

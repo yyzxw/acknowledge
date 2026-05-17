@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块6: AI 领域通用概念 — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 6 / 8</span>
+  </div>
+</div>
+
+<section id="sec-6" data-section="module">
+  <div class="module-content">
+
+    <!-- ============================================ -->
+    <!-- 6.1 Transformer 架构深度解析 -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.1 Transformer 架构深度解析</h3>
+        <span class="tag tag-blue">核心架构</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义与概述</h4>
+        <p>Transformer 是一种完全基于注意力机制（Attention Mechanism）的深度学习架构，由 Vaswani 等人在 2017 年的论文《Attention Is All You Need》中首次提出。其核心设计彻底摒弃了此前 NLP 领域中占主导地位的 RNN 和 CNN 结构，转而采用自注意力（Self-Attention）机制来建模序列中任意两个位置之间的依赖关系。</p>
+        <p>Transformer 架构经历了三大变体的演进：<strong>Encoder-only</strong>、<strong>Decoder-only</strong> 和 <strong>Encoder-Decoder</strong>。不同的变体适应不同的任务类型，而它们共享的核心模块包括 Embedding Layer、Multi-Head Attention、FFN、残差连接和 LayerNorm。</p>
+      </div>
+
+      <!-- 6.1.2 Encoder-only -->
+      <div class="sub-section">
+        <h4>6.1.2 Encoder-only 架构（BERT 系列）</h4>
+        <p>Encoder-only 架构仅使用 Transformer 的编码器部分，最典型的代表是 BERT（Bidirectional Encoder Representations from Transformers）。编码器由多层堆叠的 Transformer 块组成，每层包含一个双向 Self-Attention 子层和一个 FFN 子层。</p>
+        <p><strong>双向自注意力</strong></p>
+        <p>与 Decoder 中的因果注意力不同，Encoder 的 Self-Attention 是<strong>双向的</strong>：每个 token 可以 attend 到序列中的所有其他 token（包括前后方向）。这允许模型捕捉完整的上下文信息：</p>
+        <div class="formula-box"><code>Attention(Q, K, V) = softmax(Q K^T / sqrt(d_k)) V</code></div>
+        <p>这里没有任何因果掩码（causal mask），Attention Score 矩阵是一个完整的 n x n 矩阵，每个位置 i 可以 attend 到所有位置 j ∈ [1, n]。</p>
+        <p><strong>掩码语言建模（Masked Language Model, MLM）</strong></p>
+        <p>BERT 的预训练目标是在输入中随机 Mask 掉 15% 的 token，然后让模型预测这些被掩码的原始 token：</p>
+        <pre><code>输入:  [CLS] 我 [MASK] 喜欢 [MASK] 猫 [SEP]
+目标: 预测被掩码的位置 → "很", "这"</code></pre>
+        <p>MLM 的损失函数为：</p>
+        <div class="formula-box"><code>L_MLM = - sum_{i ∈ M} log P(x_i | x_{masked})</code></div>
+        <p>其中 M 是被掩码的位置集合。由于每个 token 的预测可以并行计算（不依赖之前位置的输出），Encoder-only 模型的训练效率很高。</p>
+        <p><strong>架构特性</strong></p>
+        <ul>
+          <li><strong>输入表示</strong>：Token Embeddings + Segment Embeddings + Position Embeddings</li>
+          <li><strong>特殊 Token</strong>：[CLS]（序列开始/分类）、[SEP]（分隔符）、[MASK]（掩码）、[PAD]（填充）</li>
+          <li><strong>注意力类型</strong>：全双向（Full Bidirectional），无因果掩码</li>
+          <li><strong>典型模型</strong>：BERT、RoBERTa、ALBERT、DeBERTa、ERNIE</li>
+        </ul>
+        <p><strong>适用场景</strong></p>
+        <p>Encoder-only 模型主要用于需要<strong>理解</strong>而非生成的任务：</p>
+        <table>
+          <thead><tr><th>任务类型</th><th>具体应用</th><th>代表模型</th></tr></thead>
+          <tbody>
+            <tr><td>文本分类</td><td>情感分析、垃圾邮件检测</td><td>BERT-base</td></tr>
+            <tr><td>序列标注</td><td>NER、POS Tagging</td><td>BERT-base</td></tr>
+            <tr><td>语义匹配</td><td>句子对相似度判断</td><td>RoBERTa</td></tr>
+            <tr><td>嵌入/检索</td><td>生成句子/Token 级向量</td><td>BERT/GTE/E5</td></tr>
+            <tr><td>QA（抽取式）</td><td>从文中定位答案</td><td>BERT-large</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 6.1.3 Decoder-only -->
+      <div class="sub-section">
+        <h4>6.1.3 Decoder-only 架构（GPT 系列）</h4>
+        <p>Decoder-only 架构仅使用 Transformer 的解码器部分，是当前大语言模型（GPT、LLaMA、Mistral、DeepSeek）的主流范式。每个 Decoder 块包含一个<strong>因果自注意力</strong>（Causal Self-Attention）子层和一个 FFN 子层。</p>
+        <p><strong>因果自注意力</strong></p>
+        <p>因果自注意力通过<strong>因果掩码</strong>确保每个位置只能 attend 到自身及之前的 token：</p>
+        <div class="formula-box"><code>Attention(Q, K, V) = softmax(Q K^T / sqrt(d_k) + M) V</code></div>
+        <p>其中 M 是下三角掩码矩阵：</p>
+        <div class="formula-box"><code>M_{i,j} = 0,       if j ≤ i<br>M_{i,j} = -inf,   if j > i</code></div>
+        <p><strong>自回归生成</strong></p>
+        <p>Decoder-only 模型通过<strong>自回归</strong>（Autoregressive）方式生成文本：在每一步 t，模型基于已生成的所有 token x_{<t} 预测下一个 token x_t 的概率分布，然后从中采样或选择最可能的 token：</p>
+        <div class="formula-box"><code>P(x) = ∏_{t=1}^T P(x_t | x_{<t})</code></div>
+        <p>在推理时，KV Cache 机制将之前计算过的 Key 和 Value 缓存起来，使每步 Decode 的计算量从 O(n²) 降至 O(n)。</p>
+        <p><strong>架构特性</strong></p>
+        <ul>
+          <li><strong>输入表示</strong>：仅 Token Embeddings + Position Embeddings（无 Segment Embeddings）</li>
+          <li><strong>注意力类型</strong>：因果自注意力（Causal Self-Attention）</li>
+          <li><strong>预训练目标</strong>：Next Token Prediction（NTP）/ Causal LM</li>
+          <li><strong>生成方式</strong>：自回归（逐 token 生成）</li>
+          <li><strong>典型模型</strong>：GPT-2/3/4、LLaMA-1/2/3、Mistral、DeepSeek-V2/V3、Qwen</li>
+        </ul>
+        <p><strong>Decoder-only 成为主流的原因</strong></p>
+        <ol>
+          <li><strong>通用性</strong>：自回归生成可以覆盖几乎所有 NLP 任务（生成、分类、QA、翻译等）</li>
+          <li><strong>规模化</strong>：实验证明 Decoder-only 架构在 scaling law 下表现最佳</li>
+          <li><strong>推理效率</strong>：KV Cache 和 PagedAttention 等优化技术专门针对因果注意力设计</li>
+          <li><strong>统一训练</strong>：统一使用 NTP 目标，不需要 MLM 的 mask-then-predict 复杂调度</li>
+        </ol>
+      </div>
+
+      <!-- 6.1.4 Encoder-Decoder -->
+      <div class="sub-section">
+        <h4>6.1.4 Encoder-Decoder 架构（T5, BART）</h4>
+        <p>Encoder-Decoder（也称 Seq2Seq）架构同时包含编码器和解码器，专注于<strong>序列到序列</strong>的转换任务。一个独立的编码器处理输入序列，产生上下文表示；解码器基于这些表示和之前已生成的 token 自回归地生成输出序列。</p>
+        <p><strong>交叉注意力（Cross-Attention）</strong></p>
+        <p>Encoder-Decoder 与 Decoder-only 的核心差异在于<strong>交叉注意力</strong>。在解码器的每个块中，除了因果自注意力外，还有一个额外的交叉注意力子层，让解码器关注编码器的输出：</p>
+        <div class="formula-box"><code>CrossAttention(Q_dec, K_enc, V_enc) = softmax(Q_dec K_enc^T / sqrt(d_k)) V_enc</code></div>
+        <p>完整的 Decoder 块前向流程：</p>
+        <pre><code>1. x = SelfAttention(CausalMask(x_norm)) + x      # 因果自注意力
+2. x = CrossAttention(x, EncoderOutput) + x        # 交叉注意力
+3. x = FFN(x_norm) + x                             # FFN</code></pre>
+        <p><strong>架构对比：三种 Attention</strong></p>
+        <table>
+          <thead><tr><th>注意力类型</th><th>Query 来源</th><th>Key/Value 来源</th><th>掩码</th></tr></thead>
+          <tbody>
+            <tr><td>Encoder Self-Attention</td><td>编码器输入</td><td>编码器输入</td><td>无（全双向）</td></tr>
+            <tr><td>Decoder Self-Attention</td><td>解码器输入</td><td>解码器输入</td><td>因果掩码</td></tr>
+            <tr><td>Decoder Cross-Attention</td><td>解码器输入</td><td><strong>编码器输出</strong></td><td>无</td></tr>
+          </tbody>
+        </table>
+        <p><strong>典型模型</strong></p>
+        <table>
+          <thead><tr><th>模型</th><th>编码器</th><th>解码器</th><th>预训练目标</th><th>发布日期</th></tr></thead>
+          <tbody>
+            <tr><td>T5</td><td>Encoder (bi-directional)</td><td>Decoder (causal)</td><td>Span Corruption</td><td>2019</td></tr>
+            <tr><td>BART</td><td>Encoder (bi-directional)</td><td>Decoder (causal)</td><td>Denoising AE</td><td>2019</td></tr>
+            <tr><td>mT5</td><td>Encoder (bi-directional)</td><td>Decoder (causal)</td><td>Span Corruption</td><td>2020</td></tr>
+            <tr><td>Flan-T5</td><td>T5 + Instruction Tuning</td><td>—</td><td>多任务微调</td><td>2022</td></tr>
+          </tbody>
+        </table>
+        <p>T5 的 Span Corruption 目标：随机选择输入中的若干个连续 token 片段，每个片段用一个哨兵 token（如 <code>&lt;extra_id_0&gt;</code>）替代，解码器需要生成这些被掩码的片段。</p>
+        <p><strong>适用场景</strong></p>
+        <ul>
+          <li><strong>机器翻译</strong>：Encoder 读源语言，Decoder 生成目标语言</li>
+          <li><strong>文本摘要</strong>：Encoder 读长文本，Decoder 生成摘要</li>
+          <li><strong>语音识别</strong>：Encoder 处理声学特征，Decoder 输出文本</li>
+          <li><strong>语法纠错</strong>：Encoder 读含错句子，Decoder 生成正确句子</li>
+        </ul>
+      </div>
+
+      <!-- 6.1.5 核心模块详解 -->
+      <div class="sub-section">
+        <h4>6.1.5 核心模块详解</h4>
+        <p>所有 Transformer 变体共享以下四个核心模块：</p>
+        <p><strong>（1）Embedding Layer</strong></p>
+        <p>将离散的 token ID 映射到连续向量空间：</p>
+        <div class="formula-box"><code>Embedding(x) = W_e @ one_hot(x)</code></div>
+        <p>其中 W_e ∈ R^{V × d_model} 是嵌入矩阵，V 是词汇表大小。Embedding 层的参数占总模型参数的比例随 V 增大而增大，在 V=100K、d_model=4096 时约占 8 亿参数。</p>
+        <p><strong>Token Embedding + Position Embedding + Segment Embedding</strong>（BERT 风格）：</p>
+        <pre><code>input = TokenEmbedding(token_ids)
+       + PositionEmbedding(position_ids)
+       + SegmentEmbedding(segment_ids)  # 可选，仅部分模型使用</code></pre>
+        <p><strong>Token Embedding + RoPE</strong>（LLaMA 风格）：位置信息通过 RoPE 注入 Q/K 向量，不作为加法嵌入到输入中。</p>
+        <p><strong>（2）Multi-Head Attention</strong></p>
+        <p>将 d_model 维度的输入投影到 h 个独立的"头"，每个头在 d_k = d_model / h 维子空间上计算注意力，然后将所有头的结果拼接后投影回 d_model：</p>
+        <div class="formula-box"><code>head_i = Attention(Q W_i^Q, K W_i^K, V W_i^V)<br>MultiHead(Q, K, V) = Concat(head_1, ..., head_h) W^O</code></div>
+        <p>其中 W_i^Q, W_i^K, W_i^V ∈ R^{d_model × d_k}, W^O ∈ R^{h·d_v × d_model}。</p>
+        <p>vLLM 的 Attention Backend（如 FlashAttention、FlashInfer）在实现中通常将 Q/K/V 的投影融合为单个矩阵乘法以减少内存访问。</p>
+        <p><strong>（3）Feed-Forward Network（FFN）</strong></p>
+        <p>FFN 作用于每个位置独立（position-wise），由两个线性变换和一个激活函数组成：</p>
+        <p>标准 FFN（ReLU/GELU）：</p>
+        <div class="formula-box"><code>FFN(x) = Activation(x W_1 + b_1) W_2 + b_2</code></div>
+        <p>门控 FFN（SwiGLU/GeGLU）：</p>
+        <div class="formula-box"><code>FFN(x) = [Activation(x W_gate) ⊙ (x W_up)] W_down</code></div>
+        <p>其中 W_1 ∈ R^{d_model × d_ff}（扩展到 4×），W_2 ∈ R^{d_ff × d_model}（投影回）。门控变体引入第三个权重矩阵 W_gate，通常 d_ff 缩小到约 8/3 × d_model 以保持参数量相近。</p>
+        <p><strong>（4）残差连接 + LayerNorm</strong></p>
+        <p>残差连接提供梯度高速公路，使深层网络训练稳定：</p>
+        <div class="formula-box"><code>Post-Norm: x_{l+1} = LayerNorm(x_l + Sublayer(x_l))<br>Pre-Norm:  x_{l+1} = x_l + Sublayer(LayerNorm(x_l))</code></div>
+        <p>现代模型几乎全部使用 Pre-Norm 架构。</p>
+      </div>
+
+      <!-- 6.1.6 适用场景对比 -->
+      <div class="sub-section">
+        <h4>6.1.6 三种变体的适用场景对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>Encoder-only (BERT)</th><th>Decoder-only (GPT)</th><th>Encoder-Decoder (T5)</th></tr></thead>
+          <tbody>
+            <tr><td><strong>注意力模式</strong></td><td>全双向</td><td>因果（单向）</td><td>双向编码 + 因果解码</td></tr>
+            <tr><td><strong>计算复杂度</strong></td><td>O(n²) 训练</td><td>O(n²) 训练 / O(n) 推理</td><td>O(n²) 编码 + O(m²) 解码</td></tr>
+            <tr><td><strong>推理方式</strong></td><td>一次前向</td><td>自回归逐 token 生成</td><td>编码一次 + 自回归生成</td></tr>
+            <tr><td><strong>预训练目标</strong></td><td>MLM + NSP</td><td>Next Token Prediction</td><td>Span Corruption / Denoising</td></tr>
+            <tr><td><strong>训练效率</strong></td><td>高（可并行预测所有位置）</td><td>中（需要预测每个位置）</td><td>较低（编码器-解码器双组件）</td></tr>
+            <tr><td><strong>生成能力</strong></td><td>无（需额外解码头）</td><td>原生支持</td><td>原生支持</td></tr>
+            <tr><td><strong>理解能力</strong></td><td>极强（双向上下文）</td><td>强</td><td>很强</td></tr>
+            <tr><td><strong>典型参数量</strong></td><td>110M-340M（BERT）</td><td>7B-671B（GPT/LLaMA）</td><td>220M-11B（T5）</td></tr>
+            <tr><td><strong>代表模型</strong></td><td>BERT, RoBERTa, DeBERTa</td><td>GPT-4, LLaMA-3, DeepSeek-V3, Mistral</td><td>T5, BART, mT5, Flan-T5</td></tr>
+            <tr><td><strong>在 vLLM 生态角色</strong></td><td>Embedding/Reranker 模型</td><td>文本生成核心</td><td>部分翻译/摘要模型</td></tr>
+            <tr><td><strong>最佳任务</strong></td><td>分类、NER、嵌入、检索</td><td>对话、代码、创作、推理</td><td>翻译、摘要、格式转换</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6.2 位置编码 -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.2 位置编码（Positional Encoding）</h3>
+        <span class="tag tag-amber">架构组件</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>为什么需要位置编码</h4>
+        <p>Transformer 的 Self-Attention 具有<strong>置换不变性</strong>（Permutation Invariance）：打乱输入 token 的顺序不会改变注意力输出。然而自然语言是有顺序的，必须向模型中注入位置信息。位置编码的核心目标是让模型知道"token 出现在序列中的哪个位置"。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.2.2 绝对位置编码（Sinusoidal）</h4>
+        <p>原始 Transformer（Vaswani et al., 2017）提出使用固定频率的正弦和余弦函数生成位置编码，不需要学习参数：</p>
+        <div class="formula-box"><code>PE(pos, 2i)   = sin(pos / 10000^{2i/d_model})<br>PE(pos, 2i+1) = cos(pos / 10000^{2i/d_model})</code></div>
+        <p>其中 pos 是位置索引，i 是维度索引（0 ≤ i < d_model/2）。</p>
+        <p><strong>核心性质</strong></p>
+        <ol>
+          <li><strong>每个位置有唯一编码</strong>：不同 pos 产生不同的 PE 向量</li>
+          <li><strong>频率随维度递减</strong>：低维度编码高频信息（相邻位置差异大），高维度编码低频信息（长距离变化小）</li>
+          <li><strong>相对位置可线性表达</strong>：PE(pos+k) 可以表示为 PE(pos) 的线性变换，这使模型理论上能通过自注意力学习相对位置关系</li>
+        </ol>
+        <p>Sinusoidal 编码直接加到输入 Embedding 上：</p>
+        <pre><code>input = TokenEmbedding(token_ids) + PositionalEncoding(positions)</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.2.3 可学习位置编码（Learned）</h4>
+        <p>BERT 和 GPT 系列使用可学习的 Position Embedding 矩阵 P ∈ R^{max_seq_len × d_model}，其中的每一行是一个可训练的参数向量：</p>
+        <pre><code>input = TokenEmbedding(token_ids) + P[position_ids]</code></pre>
+        <p>优点：模型可以根据任务数据自动学习最佳的位置表示。缺点：最大序列长度受限于 max_seq_len，超出部分无法处理（需插值或截断）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.2.4 RoPE（Rotary Position Embedding）</h4>
+        <p>RoPE 由 Su 等人在 2021 年提出，被 LLaMA、Mistral、Qwen、DeepSeek 等主流模型采用。与加法式位置编码不同，RoPE 通过<strong>旋转 Q/K 向量</strong>注入位置信息。</p>
+        <p><strong>数学推导</strong></p>
+        <p>对于 d 维度的 Q/K 向量，RoPE 将其分成 d/2 个二维子空间对，每对应用独立的旋转：</p>
+        <div class="formula-box"><code>R_{Θ,m} = block_diag(R(mθ_1), R(mθ_2), ..., R(mθ_{d/2}))</code></div>
+        <p>其中每个旋转矩阵为：</p>
+        <div class="formula-box"><code>R(θ) = [[cos θ, -sin θ],<br>        [sin θ,  cos θ]]</code></div>
+        <p>旋转频率按几何级数递减：</p>
+        <div class="formula-box"><code>θ_i = 10000^{-2(i-1)/d},  i = 1, 2, ..., d/2</code></div>
+        <p>对于位置 m 的 Query 向量和位置 n 的 Key 向量：</p>
+        <div class="formula-box"><code>q_m' = R_{Θ,m} · q_m<br>k_n' = R_{Θ,n} · k_n</code></div>
+        <p><strong>相对位置编码的关键性质</strong></p>
+        <p>旋转后的 Q 和 K 点积只依赖于相对位置差 m - n：</p>
+        <div class="formula-box"><code>q_m'^T · k_n' = (R_{Θ,m} q_m)^T · (R_{Θ,n} k_n)<br>               = q_m^T · R_{Θ,-m} · R_{Θ,n} · k_n<br>               = q_m^T · R_{Θ,n-m} · k_n</code></div>
+        <p>由于 R_{Θ,m} 是正交矩阵，R_{Θ,m}^T = R_{Θ,-m}，最终结果只与 n - m 有关，绝对位置 m 和 n 被消去。</p>
+        <p><strong>RoPE 在 Attention 中的融合</strong></p>
+        <p>在实际实现中，RoPE 在 Q/K 投影之后、Attention Score 计算之前应用：</p>
+        <pre><code># 伪代码：RoPE 的核心计算
+def apply_rotary(x, cos, sin):
+    # x: [batch, seq, num_heads, head_dim]
+    # cos, sin: [seq, head_dim]
+    x_rotated = x * cos + rotate_half(x) * sin
+    return x_rotated
+
+# rotate_half: 将 x 的后半部分取负并交换位置
+# 即 (x1, x2) → (-x2, x1)，等价于旋转 90 度</code></pre>
+        <p><strong>LLaMA 系列为何使用 RoPE</strong></p>
+        <ol>
+          <li><strong>相对位置建模</strong>：天然编码相对距离，模型更容易捕捉长距离依赖</li>
+          <li><strong>外推能力</strong>：配合 NTK-aware scaling 或 YaRN 等技术，RoPE 可以扩展到训练时未见过的序列长度</li>
+          <li><strong>兼容性</strong>：与 FlashAttention 等优化 Kernel 的集成非常自然（只需在 Q/K 上预先旋转）</li>
+        </ol>
+        <p><strong>长上下文扩展技术</strong></p>
+        <table>
+          <thead><tr><th>技术</th><th>原理</th><th>效果</th></tr></thead>
+          <tbody>
+            <tr><td>Position Interpolation (PI)</td><td>位置索引 m 缩放为 m/s</td><td>稳定的 4× 扩展，短距离精度损失</td></tr>
+            <tr><td>NTK-aware Scaling</td><td>修改 base 频率调整高频分量</td><td>更好的外推，保持短距离性能</td></tr>
+            <tr><td>YaRN</td><td>温度缩放 + 频率修改</td><td>最佳扩展效果，LLaMA-2 已验证</td></tr>
+            <tr><td>DeepSeek Yarn</td><td>引入 mscale 动态调整温度</td><td>DeepSeek 系列专用</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.2.5 ALiBi（Attention with Linear Biases）</h4>
+        <p>ALiBi 由 Press 等人在 2021 年提出，是一种无需学习参数的位置编码方案。与修改 Q/K 向量或添加位置嵌入不同，ALiBi 直接在 Attention Score 上添加一个基于相对距离的<strong>线性负偏置</strong>：</p>
+        <div class="formula-box"><code>score(i, j) = (q_i · k_j) / sqrt(d_k) - m_h · |i - j|</code></div>
+        <p>其中 m_h 是第 h 个注意力头的固定斜率，不经过学习：</p>
+        <div class="formula-box"><code>m_h = 2^{-h},  h = 1, 2, ..., num_heads</code></div>
+        <p>不同头使用不同斜率，使不同头关注不同尺度的位置信息（大斜率的头对短距离更敏感）。</p>
+        <p><strong>与 RoPE 的完整对比</strong></p>
+        <table>
+          <thead><tr><th>特性</th><th>RoPE</th><th>ALiBi</th></tr></thead>
+          <tbody>
+            <tr><td>位置注入方式</td><td>旋转 Q/K 向量</td><td>在 Attention Score 上加偏置</td></tr>
+            <tr><td>额外参数</td><td>无</td><td>无</td></tr>
+            <tr><td>外推能力</td><td>好（需扩展技术）</td><td>极佳（天然支持，可 train short test long）</td></tr>
+            <tr><td>实现复杂度</td><td>中等</td><td>极简（只需加一个偏置矩阵）</td></tr>
+            <tr><td>FlashAttention 集成</td><td>天然兼容</td><td>需要在 Kernel 内计算偏置</td></tr>
+            <tr><td>短距离建模</td><td>精细（旋转保留了相对关系）</td><td>粗粒（线性惩罚）</td></tr>
+            <tr><td>主流采用</td><td>LLaMA, Mistral, Qwen, DeepSeek</td><td>BLOOM, MPT</td></tr>
+            <tr><td>理论优雅性</td><td>高（旋转正交变换）</td><td>低（启发式偏置）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.2.6 各方法优缺点对比</h4>
+        <table>
+          <thead><tr><th>方法</th><th>是否可学习</th><th>是否偏置</th><th>是否相对</th><th>外推能力</th><th>参数量</th><th>代表模型</th></tr></thead>
+          <tbody>
+            <tr><td>Sinusoidal</td><td>否</td><td>加性</td><td>隐含</td><td>好</td><td>0</td><td>原始 Transformer</td></tr>
+            <tr><td>Learned</td><td>是</td><td>加性</td><td>否</td><td>差（需截断）</td><td>O(max_seq_len × d)</td><td>BERT, GPT-2</td></tr>
+            <tr><td>RoPE</td><td>否</td><td>乘性（旋转）</td><td>是</td><td>好（需扩展）</td><td>0</td><td>LLaMA, Mistral, Qwen</td></tr>
+            <tr><td>ALiBi</td><td>否</td><td>Attention Score</td><td>是</td><td>极佳</td><td>0</td><td>BLOOM, MPT</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6.3 激活函数 -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.3 激活函数（Activation Functions）</h3>
+        <span class="tag tag-cyan">架构组件</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.3.1 ReLU（Rectified Linear Unit）</h4>
+        <p>原始的 Transformer 使用 ReLU 作为 FFN 的激活函数：</p>
+        <div class="formula-box"><code>ReLU(x) = max(0, x)</code></div>
+        <p><strong>特性</strong></p>
+        <ul>
+          <li><strong>稀疏激活</strong>：当 x < 0 时输出为 0，引入稀疏性</li>
+          <li><strong>计算简单</strong>：只需一次比较操作，无需指数或三角函数</li>
+          <li><strong>梯度非饱和</strong>：当 x > 0 时梯度恒为 1，缓解梯度消失</li>
+        </ul>
+        <p><strong>死亡 ReLU 问题（Dying ReLU）</strong></p>
+        <p>当某个神经元在训练过程中权重更新后对所有输入都输出负值时，该神经元将永远输出 0，梯度也为 0，从此不再更新。在大模型中，ReLU 的死亡比例可能高达 10-40%，浪费了模型容量。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.3.2 GELU（Gaussian Error Linear Unit）</h4>
+        <p>GELU 是 BERT 等早期 Transformer 模型采用的激活函数，定义为输入与标准正态分布累积分布函数的乘积：</p>
+        <div class="formula-box"><code>GELU(x) = x · Φ(x)<br>        = x · (1/2) [1 + erf(x / sqrt(2))]</code></div>
+        <p>其中 Φ(x) 是标准正态分布的 CDF，erf 是误差函数。</p>
+        <p><strong>实践中的近似计算</strong></p>
+        <p>由于精确计算 erf 开销较大，使用 tanh 近似：</p>
+        <div class="formula-box"><code>GELU(x) ≈ 0.5x (1 + tanh[sqrt(2/π) (x + 0.044715x³)])</code></div>
+        <p><strong>GELU 的优势</strong></p>
+        <ol>
+          <li><strong>处处可微</strong>：没有 ReLU 在 x=0 处的硬拐点，梯度流动更平滑</li>
+          <li><strong>概率解释</strong>：GELU(x) = x · P(X ≤ x)，X ~ N(0,1)，可以理解为"输入的随机 dropout 期望"</li>
+          <li><strong>非零负值</strong>：对于较小的负值，GELU 仍保留非零输出，保留更多信息</li>
+          <li><strong>实验结果</strong>：在 BERT/GPT-3 等模型的实验研究中，GELU 一致优于 ReLU</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.3.3 SwiGLU / SiLU</h4>
+        <p><strong>Swish / SiLU 定义</strong></p>
+        <p>Swish（也称 SiLU, Sigmoid Linear Unit）由 Google 在 2017 年提出：</p>
+        <div class="formula-box"><code>Swish(x) = x · σ(x)</code></div>
+        <p>其中 σ(x) = 1/(1+e^{-x}) 是 sigmoid 函数。</p>
+        <p><strong>GLU（Gated Linear Unit）</strong></p>
+        <p>GLU 由 Dauphin 等在 2017 年提出，核心思想是不再对单一路径应用激活函数，而是通过两个线性投影的逐元素乘法实现门控：</p>
+        <div class="formula-box"><code>GLU(x) = (x W_1 + b_1) ⊗ σ(x W_2 + b_2)</code></div>
+        <p>门控路径 σ(x W_2) 控制信息流的通过量。</p>
+        <p><strong>SwiGLU 的完整定义</strong></p>
+        <p>SwiGLU 将 GLU 中的 sigmoid 替换为 Swish：</p>
+        <div class="formula-box"><code>SwiGLU(x) = Swish(x W_gate) ⊗ (x W_up)<br>          = [x W_gate · σ(x W_gate)] ⊗ (x W_up)</code></div>
+        <p>最终输出再经过下投影：</p>
+        <div class="formula-box"><code>FFN_swiglu(x) = SwiGLU(x) · W_down</code></div>
+        <p>其中 W_gate, W_up ∈ R^{d_model × d_ff}, W_down ∈ R^{d_ff × d_model}。</p>
+        <p><strong>LLaMA 为什么使用 SwiGLU</strong></p>
+        <ol>
+          <li><strong>更强的表达能力</strong>：门控机制可以"学习性地选择"哪些信息通过，而非应用固定的非线性变换</li>
+          <li><strong>更好的训练动态</strong>：经验表明 SwiGLU 在 deep Transformer 中的训练损失更低</li>
+          <li><strong>参数量与效果权衡</strong>：SwiGLU 有三个权重矩阵（gate/up/down），比标准 FFN（两个）多 50% 参数。为保持总参数量一致，d_ff 从标准 4×d_model 缩小到约 (8/3)×d_model</li>
+        </ol>
+        <p>vLLM 中 SwiGLU 的融合实现：</p>
+        <pre><code>class SiluAndMul(CustomOp):
+    """SwiGLU 的融合实现。
+    输入 x 被预先拼接为 [gate_proj(x), up_proj(x)]，
+    x[..., :d] 是门控路径，x[..., d:] 是上投影路径。
+    """
+    @staticmethod
+    def forward_native(x: torch.Tensor) -> torch.Tensor:
+        d = x.shape[-1] // 2
+        return F.silu(x[..., :d]) * x[..., d:]</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.3.4 GeGLU</h4>
+        <p>GeGLU 是另一种 GLU 变体，使用 GELU 代替 Swish：</p>
+        <div class="formula-box"><code>GeGLU(x) = GELU(x W_gate) ⊗ (x W_up)</code></div>
+        <p>GeGLU 在编码器模型（如 BERT 风格模型）中较为常见，而 SwiGLU 在解码器-only 的 LLM 中更为流行。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.3.5 FFN 层激活函数的演进路线</h4>
+        <pre><code>ReLU (2017, Transformer)
+  │
+  ├──→ GELU (2018, BERT/GPT-3)
+  │       │
+  │       └──→ GeGLU (2020, T5 v1.1): GELU + 门控
+  │
+  └──→ Swish/SiLU (2017)
+          │
+          └──→ SwiGLU (2020, LLaMA/PaLM): Swish + 门控</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.3.6 各激活函数对比</h4>
+        <table>
+          <thead><tr><th>属性</th><th>ReLU</th><th>GELU</th><th>Swish/SiLU</th><th>SwiGLU</th><th>GeGLU</th></tr></thead>
+          <tbody>
+            <tr><td>公式</td><td>max(0,x)</td><td>x·Φ(x)</td><td>x·σ(x)</td><td>[x·σ(x)]·up</td><td>GELU·up</td></tr>
+            <tr><td>是否门控</td><td>否</td><td>否</td><td>否</td><td>是（3 个权重矩阵）</td><td>是（3 个权重矩阵）</td></tr>
+            <tr><td>计算开销</td><td>O(1)</td><td>O(d)（含 erf）</td><td>O(d)</td><td>O(3d²)</td><td>O(3d²)</td></tr>
+            <tr><td>平滑性</td><td>非光滑</td><td>光滑</td><td>光滑</td><td>光滑</td><td>光滑</td></tr>
+            <tr><td>负值输出</td><td>0</td><td>非零负值</td><td>非零负值</td><td>由门控控制</td><td>由门控控制</td></tr>
+            <tr><td>代表模型</td><td>原始 Transformer</td><td>BERT, GPT-3</td><td>—</td><td>LLaMA, Mistral, PaLM</td><td>T5 v1.1</td></tr>
+            <tr><td>训练损失（实验）</td><td>基线</td><td>低 0.5-1%</td><td>低 0.3-0.5%</td><td>最低</td><td>与 SwiGLU 接近</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6.4 归一化 -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.4 归一化（Normalization）</h3>
+        <span class="tag tag-cyan">架构组件</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.4.1 LayerNorm（层归一化）</h4>
+        <p>Layer Normalization（LayerNorm）由 Ba 等人在 2016 年提出，对同一样本的所有特征进行归一化。与 Batch Normalization 对不同样本的同一特征归一化不同，LayerNorm 不受 batch size 影响，特别适合 NLP 中的变长序列。</p>
+        <p>给定输入 x ∈ R^{d_model}，LayerNorm 的计算为：</p>
+        <div class="formula-box"><code>LayerNorm(x) = γ ⊙ (x - μ) / sqrt(σ² + ε) + β</code></div>
+        <p>其中：</p>
+        <ul>
+          <li>μ = (1/d_model) ∑ x_i：输入特征的均值</li>
+          <li>σ² = (1/d_model) ∑ (x_i - μ)²：输入特征的方差</li>
+          <li>ε：很小的常数（如 10⁻⁶），防止除零</li>
+          <li>γ, β ∈ R^{d_model}：可学习的缩放和偏移参数</li>
+        </ul>
+        <p><strong>核心作用</strong></p>
+        <ol>
+          <li><strong>稳定激活分布</strong>：防止层与层之间激活值的尺度爆炸或消失</li>
+          <li><strong>加速收敛</strong>：归一化后的输入具有更稳定的梯度</li>
+          <li><strong>降低对初始化的敏感性</strong>：减少参数初始化对训练结果的影响</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.4.2 RMSNorm（均方根归一化）</h4>
+        <p>RMSNorm 由 Zhang 和 Sennrich 在 2019 年提出，是 LayerNorm 的简化变体。与 LayerNorm 同时减去均值并除以标准差不同，RMSNorm 仅除以 RMS（均方根），不计算也不减去均值：</p>
+        <div class="formula-box"><code>RMSNorm(x) = γ ⊙ x / RMS(x)<br><br>RMS(x) = sqrt((1/d_model) ∑ x_i² + ε)</code></div>
+        <p><strong>相比 LayerNorm 的差异</strong></p>
+        <ol>
+          <li><strong>计算效率</strong>：省去了均值计算，减少约一半的统计量计算。在大模型中（数百层 × 大量 token），节省显著</li>
+          <li><strong>理论等价性</strong>：在深层网络中，激活值均值往往接近零，减去均值的收益有限</li>
+          <li><strong>更少的参数</strong>：只有缩放参数 γ，没有偏移参数 β</li>
+        </ol>
+        <p>vLLM 中 RMSNorm 的实现：</p>
+        <pre><code>class RMSNorm(CustomOp):
+    """Root mean square normalization."""
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
+        self.hidden_size = hidden_size
+        self.variance_epsilon = eps
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+
+    def forward_native(self, x: torch.Tensor):
+        return ir.ops.rms_norm(x, self.weight.data, self.variance_epsilon)</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.4.3 Pre-norm vs Post-norm</h4>
+        <p><strong>Post-norm（后归一化）</strong></p>
+        <p>原始 Transformer 采用 Post-norm：归一化放在子层<strong>之后</strong>：</p>
+        <pre><code>x_{l+1} = LayerNorm(x_l + Attention(x_l))
+x_{l+1} = LayerNorm(x_l + FFN(x_l))</code></pre>
+        <p>问题：训练初期，残差路径 x_l 和子层输出 Attention(x_l) 的尺度可能差异巨大，归一化后的梯度不稳定，需要精心设计的 warmup 策略。</p>
+        <p><strong>Pre-norm（前归一化）</strong></p>
+        <p>现代 LLM（LLaMA、GPT-3）普遍采用 Pre-norm：归一化放在子层<strong>之前</strong>：</p>
+        <pre><code>x_{l+1} = x_l + Attention(LayerNorm(x_l))
+x_{l+1} = x_l + FFN(LayerNorm(x_l))</code></pre>
+        <p>优势：</p>
+        <ul>
+          <li><strong>训练稳定性</strong>：子层输入已归一化，避免梯度爆炸</li>
+          <li><strong>无需复杂学习率调度</strong>：可省去或缩短 warmup 阶段</li>
+          <li><strong>支持更深网络</strong>：实验证明 Pre-norm 能支持数百层 Transformer</li>
+        </ul>
+        <p>潜在缺点：归一化在残差路径之前，深层中各层对最终输出的贡献可能趋于均等，削弱了深层表示的"层次性"。但实践中这一缺点被训练稳定性的大幅提升所抵消。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.4.4 各归一化方法对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>LayerNorm</th><th>RMSNorm</th><th>Post-norm</th><th>Pre-norm</th></tr></thead>
+          <tbody>
+            <tr><td>归一化方式</td><td>(x-μ)/σ</td><td>x/RMS(x)</td><td>子层后归一化</td><td>子层前归一化</td></tr>
+            <tr><td>统计量计算</td><td>均值 + 方差</td><td>均方根</td><td>同 LayerNorm/RMSNorm</td><td>同 LayerNorm/RMSNorm</td></tr>
+            <tr><td>可学习参数</td><td>γ, β（2个）</td><td>γ（1个）</td><td>取决于使用 LN 或 RMS</td><td>取决于使用 LN 或 RMS</td></tr>
+            <tr><td>计算开销</td><td>O(2d)</td><td>O(d)</td><td>与归一化方法相同</td><td>与归一化方法相同</td></tr>
+            <tr><td>训练稳定性</td><td>稳定</td><td>稳定</td><td>较差（需 warmup）</td><td>稳定（无需 warmup）</td></tr>
+            <tr><td>代表模型</td><td>BERT, T5</td><td>LLaMA, Mistral, Qwen</td><td>原始 Transformer</td><td>GPT-3, LLaMA, DeepSeek</td></tr>
+            <tr><td>实现复杂度</td><td>标准</td><td>简化</td><td>标准</td><td>标准</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6.5 MoE -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.5 混合专家模型（Mixture of Experts, MoE）</h3>
+        <span class="tag tag-purple">架构变体</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义与概述</h4>
+        <p>MoE（混合专家模型）是一种神经网络架构范式，核心思想是<strong>条件计算</strong>（Conditional Computation）：不是为每个输入激活全部参数，而是根据输入内容动态选择并激活一部分"专家"子网络。MoE 概念最早由 Jacobs 等人在 1991 年提出，在 LLM 时代由 DeepSeek、Mixtral 等模型发扬光大。</p>
+        <p>MoE 的核心优势：</p>
+        <ul>
+          <li><strong>参数扩展</strong>：在推理成本不显著增加的情况下大幅增加总参数量</li>
+          <li><strong>专业化学习</strong>：不同专家可学习不同输入模式</li>
+          <li><strong>计算效率</strong>：活跃参数量远小于总参数量</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>MoE 层结构</h4>
+        <p>在标准 Transformer 中，FFN 层是密集的（所有参数参与计算）。在 Sparse MoE 中，FFN 被替换为 N 个并行的专家网络 E₁, ..., E_N，每个专家是一个小型 FFN。</p>
+        <pre><code>输入 Token x
+    │
+    v
+[Router/Gating Network]  →  计算每个专家的分数
+    │
+    v
+[Top-K Selection]  ←  选择分数最高的 K 个专家
+    │
+    v
+[E₁] [E₂] ... [Eₙ]  (N 个专家 FFN，大部分不激活)
+  │    │         │
+  v    v         v
+[Weighted Sum]  =  Σ g_i · E_i(x)  对选中的 K 个专家加权求和
+    │
+    v
+  输出</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>Router/Gating Network</h4>
+        <p>路由网络是 MoE 的核心组件，负责决定每个 token 应该分配给哪些专家：</p>
+        <div class="formula-box"><code>h(x) = x · W_g + b_g              # 线性投影到 N 维<br>g_i(x) = softmax(h(x))_i          # Softmax 归一化</code></div>
+        <p>其中 W_g ∈ R^{d_model × N}, N 是专家数量。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Top-K Routing</h4>
+        <p>对于每个 token，选择门控值最高的 K 个专家：</p>
+        <div class="formula-box"><code>𝒯(x) = TopK({g₁(x), ..., g_N(x)}, K)</code></div>
+        <p>对选中的专家门控值重新归一化：</p>
+        <div class="formula-box"><code>g'_i(x) = g_i(x) / Σ_{j∈𝒯(x)} g_j(x),  for i ∈ 𝒯(x)</code></div>
+        <p>最终输出为选中专家输出的加权和：</p>
+        <div class="formula-box"><code>y = Σ_{i∈𝒯(x)} g'_i(x) · E_i(x)</code></div>
+        <p><strong>Top-1 vs Top-K 对比</strong>：</p>
+        <table>
+          <thead><tr><th>属性</th><th>Top-1 (K=1)</th><th>Top-K (K=2/4)</th></tr></thead>
+          <tbody>
+            <tr><td>实现复杂度</td><td>简单</td><td>中等</td></tr>
+            <tr><td>表达力</td><td>受限（仅一个专家）</td><td>强（多专家融合）</td></tr>
+            <tr><td>负载均衡</td><td>困难（专家竞争激烈）</td><td>更容易</td></tr>
+            <tr><td>通信开销</td><td>低</td><td>高（K 越大越高）</td></tr>
+            <tr><td>典型使用</td><td>早期 MoE</td><td>Mixtral 8x7B (K=2), DeepSeek-V3 (K=8)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>Load Balancing Loss（负载均衡损失）</h4>
+        <p><strong>负载不均衡问题</strong></p>
+        <p>如果没有约束，路由网络倾向于将所有 token 分配给少数"受欢迎"的专家，导致：</p>
+        <ul>
+          <li><strong>专家崩溃</strong>：大部分专家退化，少数专家承担所有工作</li>
+          <li><strong>计算效率下降</strong>：有效利用的参数很少</li>
+          <li><strong>训练不稳定</strong>：梯度集中在少数路径上</li>
+        </ul>
+        <p><strong>辅助损失函数</strong></p>
+        <p><strong>Importance Loss</strong>（重要性损失）：鼓励每个专家接收相似的总门控值：</p>
+        <div class="formula-box"><code>L_importance = N · Σ_{i=1}^N (1/B · Σ_{x∈batch} g_i(x))²</code></div>
+        <p><strong>Load Loss</strong>（负载损失）：鼓励每个专家处理相似数量的 token：</p>
+        <div class="formula-box"><code>L_load = N · Σ_{i=1}^N (1/B · Σ_{x∈batch} 𝟙[i ∈ TopK(x)])²</code></div>
+        <p>总损失：L_total = L_task + α · L_aux，α 通常取 0.01。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Expert Choice Routing</h4>
+        <p><strong>核心思想</strong></p>
+        <p>由 Google 在 2022 年提出，反转路由方向：<strong>让专家选择 token，而非 token 选择专家</strong>。</p>
+        <p><strong>数学描述</strong></p>
+        <p>对于专家 i，从 batch 中选择 token 集合：</p>
+        <div class="formula-box"><code>𝒮_i = TopC({g_i(x₁), ..., g_i(x_B)}, C)</code></div>
+        <p>其中 C 是每个专家的容量（capacity）。</p>
+        <p><strong>优缺点</strong></p>
+        <table>
+          <thead><tr><th>属性</th><th>Token-Choice</th><th>Expert-Choice</th></tr></thead>
+          <tbody>
+            <tr><td>负载均衡</td><td>需辅助损失 + Capacity Factor</td><td>天然完美均衡</td></tr>
+            <tr><td>Token Dropping</td><td>可能（超容量时丢弃）</td><td>可能（未被任何专家选中时）</td></tr>
+            <tr><td>实现复杂度</td><td>较低</td><td>较高</td></tr>
+            <tr><td>通信模式</td><td>不可预测</td><td>可预测（固定大小）</td></tr>
+            <tr><td>典型使用</td><td>Mixtral, DeepSeek</td><td>部分 Google 研究模型</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>DeepSeek-V2/V3 的 MoE 架构</h4>
+        <p><strong>共享专家 + 路由专家的混合设计</strong></p>
+        <p>DeepSeek-V3（671B 总参数，37B 活跃参数）采用了创新的 MoE 设计：</p>
+        <ul>
+          <li><strong>共享专家</strong>（N_s 个）：所有 token 都会经过这些专家，学习通用语言表示</li>
+          <li><strong>路由专家</strong>（N_r 个）：每个 token 通过 Top-K 路由选择 K_r 个</li>
+        </ul>
+        <p>这种设计保证了基础语言能力的稳定性（共享专家），同时保留了多样化的语义模式学习（路由专家）。</p>
+        <p><strong>无辅助损失的负载均衡</strong></p>
+        <p>DeepSeek-V3 提出了无需辅助损失的动态负载均衡方法：</p>
+        <ul>
+          <li>动态监测每个专家的负载</li>
+          <li>对过载专家在路由分数上加动态偏置（抑制选择）</li>
+          <li>对欠载专家加反向偏置（鼓励选择）</li>
+          <li>偏置根据实时统计量调整，不通过梯度学习</li>
+        </ul>
+        <p><strong>MLA（Multi-Head Latent Attention）+ MoE 组合</strong></p>
+        <p>DeepSeek 的另一创新是将 MLA 与 MoE 结合。MLA 通过低秩压缩降低 KV Cache 存储量：</p>
+        <div class="formula-box"><code>c_t^KV = W_DKV · h_t                        # 压缩到低维潜在空间<br>k_t^h = W_UK_h · c_t^KV, v_t^h = W_UV_h · c_t^KV  # 解压缩到每个头</code></div>
+        <p>推理时只缓存 c_t^KV（低维），而非完整的 K 和 V，大幅减少显存占用。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>MoE 在推理中的挑战</h4>
+        <table>
+          <thead><tr><th>挑战</th><th>原因</th><th>vLLM 解决方案</th></tr></thead>
+          <tbody>
+            <tr><td>显存占用增加</td><td>需要加载所有专家参数</td><td>Expert Parallelism（EP）将专家分布到不同 GPU</td></tr>
+            <tr><td>通信开销</td><td>All-to-all 通信传输中间激活</td><td>Fused MoE Kernel 减少通信次数</td></tr>
+            <tr><td>负载不均衡</td><td>某些 GPU 上专家过载</td><td>EPLB（Expert Parallel Load Balancing）</td></tr>
+            <tr><td>Kernel 效率低</td><td>稀疏激活模式利用率低于密集 GEMM</td><td>Fused MoE CUDA Kernel，Monolithic/Modular 实现</td></tr>
+          </tbody>
+        </table>
+        <p>在 vLLM 中，MoE 通过 <code>vllm/model_executor/layers/fused_moe/</code> 目录下的融合 Kernel 实现，支持 Monolithic 和 Modular 两种执行策略。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Dense vs MoE 对比</h4>
+        <table>
+          <thead><tr><th>模型</th><th>架构</th><th>总参数量</th><th>活跃参数量</th><th>推理 FLOPs/token</th></tr></thead>
+          <tbody>
+            <tr><td>LLaMA-2 70B</td><td>Dense</td><td>70B</td><td>70B</td><td>~140B</td></tr>
+            <tr><td>Mixtral 8x7B</td><td>MoE (8 experts, Top-2)</td><td>47B</td><td>~13B</td><td>~26B</td></tr>
+            <tr><td>Mixtral 8x22B</td><td>MoE (8 experts, Top-2)</td><td>141B</td><td>~39B</td><td>~78B</td></tr>
+            <tr><td>DeepSeek-V2</td><td>MoE</td><td>236B</td><td>21B</td><td>~42B</td></tr>
+            <tr><td>DeepSeek-V3</td><td>MoE (256 experts, Top-8)</td><td>671B</td><td>37B</td><td>~74B</td></tr>
+          </tbody>
+        </table>
+        <p>MoE 以与密集模型相当的推理 FLOPs 实现了更大的总参数量，这意味着更高的知识容量和更强的模型能力。</p>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6.6 SSM / Mamba -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.6 状态空间模型（SSM / Mamba）</h3>
+        <span class="tag tag-amber">架构变体</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义与概述</h4>
+        <p>State Space Model（SSM，状态空间模型）源于控制工程，用于描述动态系统。在深度学习领域，SSM 被重新引入作为 Transformer 的替代架构，解决 O(n²) 计算复杂度在超长序列上的瓶颈问题。</p>
+        <p>Mamba 由 Gu 和 Dao 在 2023 年提出，通过<strong>选择性状态空间</strong>（Selective State Space）在保持线性 O(n) 复杂度的同时实现与 Transformer 相媲美的建模能力。Mamba-2（2024）通过<strong>状态空间对偶性</strong>（SSD）统一了 SSM 和 Attention 的理论框架。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.6.2 S4（Structured State Space）</h4>
+        <p><strong>连续时间状态空间模型</strong></p>
+        <p>经典的连续 SSM 由两个方程定义：</p>
+        <div class="formula-box"><code>h'(t) = A · h(t) + B · x(t)        # 状态方程<br>y(t) = C · h(t) + D · x(t)         # 输出方程</code></div>
+        <p>其中：</p>
+        <ul>
+          <li>x(t) ∈ R：输入信号（标量）</li>
+          <li>h(t) ∈ R^N：隐藏状态向量（N 是状态维度）</li>
+          <li>y(t) ∈ R：输出信号（标量）</li>
+          <li>A ∈ R^{N×N}：状态转移矩阵</li>
+          <li>B ∈ R^{N×1}, C ∈ R^{1×N}：输入/输出投影矩阵</li>
+          <li>D ∈ R：跳跃连接（通常设为 0）</li>
+        </ul>
+        <p><strong>离散化（Zero-Order Hold）</strong></p>
+        <p>使用零阶保持（ZOH）将连续 SSM 离散化：</p>
+        <div class="formula-box"><code>h_k = bar_A · h_{k-1} + bar_B · x_k<br>y_k = C · h_k<br><br>bar_A = exp(Δ · A)<br>bar_B = (ΔA)^{-1}(exp(ΔA) - I) · ΔB</code></div>
+        <p><strong>HiPPO 初始化</strong></p>
+        <p>S4 使用 HiPPO（High-order Polynomial Projection Operators）理论初始化 A 矩阵，使隐藏状态编码输入历史的压缩表示。HiPPO 矩阵是特定下三角矩阵，其特征值具有负实部，确保系统稳定性。</p>
+        <p><strong>S4 的三种等价计算模式</strong></p>
+        <table>
+          <thead><tr><th>模式</th><th>公式</th><th>复杂度</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td>循环模式（Recurrent）</td><td>h_k = bar_A h_{k-1} + bar_B x_k</td><td>O(nN)</td><td>推理（高效，固定状态）</td></tr>
+            <tr><td>卷积模式（Convolutional）</td><td>y = K * x, K = (C·B, C·Ā·B, ...)</td><td>O(n log n)</td><td>训练（并行）</td></tr>
+            <tr><td>连续模式（Continuous）</td><td>保持连续参数，按需离散化</td><td>—</td><td>非均匀采样</td></tr>
+          </tbody>
+        </table>
+        <p>这种三模式等价性是 S4 的理论基石：训练用卷积（并行），推理用循环（高效）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.6.3 S6 / Mamba 的选择性状态空间</h4>
+        <p><strong>LTI 的局限</strong></p>
+        <p>S4 是线性时不变（LTI）系统：A, B, C 对所有时间步固定。这导致 SSM 无法根据内容选择性记忆或遗忘——在"选择性复制"和"归纳头"等合成任务上，LTI SSM 表现远逊于 Transformer。</p>
+        <p><strong>选择性机制（S6）</strong></p>
+        <p>Mamba 的核心创新：让参数 B, C 和步长 Δ <strong>依赖于输入</strong> x：</p>
+        <div class="formula-box"><code>Δ_k = softplus(Linear_Δ(x_k))<br>B_k = Linear_B(x_k)<br>C_k = Linear_C(x_k)</code></div>
+        <p>然后使用动态参数离散化和状态更新：</p>
+        <div class="formula-box"><code>bar_A_k = exp(Δ_k · A)<br>bar_B_k = Δ_k · B_k<br>h_k = bar_A_k ⊙ h_{k-1} + bar_B_k · x_k<br>y_k = C_k · h_k</code></div>
+        <p>关键变化：</p>
+        <ul>
+          <li>Δ_k 决定"关注当前输入还是依赖历史"。Δ 大 → 更关注当前输入；Δ 小 → 更依赖历史记忆</li>
+          <li>B_k 决定"当前输入如何影响状态"</li>
+          <li>C_k 决定"从状态中提取什么信息产生输出"</li>
+        </ul>
+        <p><strong>硬件感知的并行扫描</strong></p>
+        <p>选择性 SSM 打破了 LTI 假设（无法使用卷积模式），Mamba 的第二个贡献是硬件感知的并行扫描算法：</p>
+        <ol>
+          <li><strong>并行扫描</strong>：状态更新 h_k = bar_A_k h_{k-1} + B_k x_k 可通过分治策略在 O(log n) 并行步内完成</li>
+          <li><strong>Kernel Fusion</strong>：将输入投影、离散化、选择性扫描、输出投影融合为单个 CUDA Kernel</li>
+          <li><strong>重计算</strong>：反向传播时重新计算中间状态，避免从 HBM 读取大量中间结果</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.6.4 Mamba-2 的状态空间对偶性（SSD）</h4>
+        <p><strong>核心发现</strong></p>
+        <p>Mamba-2 发现：<strong>SSM 和 Attention 之间存在深刻的数学对偶性</strong>。</p>
+        <p>对于标量结构化 SSM（A_t 是标量），序列变换等价于：</p>
+        <p><strong>SSM 形式（循环）</strong>：</p>
+        <div class="formula-box"><code>h_t = a_t h_{t-1} + b_t x_t,  y_t = c_t · h_t</code></div>
+        <p><strong>Attention 形式（矩阵乘法）</strong>：</p>
+        <div class="formula-box"><code>y = (L ⊙ C · B^T) · x</code></div>
+        <p>其中 L 是下三角矩阵（元素为衰减因子的累积乘积）。这种形式与<strong>因果线性注意力</strong>几乎相同：</p>
+        <div class="formula-box"><code>Y = (L ⊙ Q · K^T) · V</code></div>
+        <p>将 (C, B, X) 映射为 (Q, K, V)，两者完全等价。</p>
+        <p><strong>Mamba-1 vs Mamba-2</strong></p>
+        <table>
+          <thead><tr><th>特性</th><th>Mamba-1 (S6)</th><th>Mamba-2 (SSD)</th></tr></thead>
+          <tbody>
+            <tr><td>A 结构</td><td>对角矩阵（每维度独立）</td><td>标量乘单位阵（所有维度共享）</td></tr>
+            <tr><td>头维度</td><td>P=1（每通道独立 SSM）</td><td>P>1（类似 MHA，如 64/128）</td></tr>
+            <tr><td>状态维度 N</td><td>较小（通常 16）</td><td>较大（64-256）</td></tr>
+            <tr><td>训练方式</td><td>并行扫描</td><td>块分解（混合 SSM + Attention）</td></tr>
+            <tr><td>训练速度</td><td>较慢（非 GEMM 友好）</td><td>快（大量矩阵乘法）</td></tr>
+            <tr><td>推理速度</td><td>快</td><td>快</td></tr>
+          </tbody>
+        </table>
+        <p><strong>SSD 块分解算法</strong></p>
+        <p>Mamba-2 的 SSD 算法结合 SSM 和 Attention 的优点：</p>
+        <ol>
+          <li>将序列分成若干块（chunk）</li>
+          <li>块内使用 Attention 形式（矩阵乘法），利用 GPU GEMM 效率</li>
+          <li>块间用 SSM 形式传递状态，保持线性复杂度</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.6.5 SSM 与 Transformer 的对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>Transformer Attention</th><th>Mamba/SSM</th></tr></thead>
+          <tbody>
+            <tr><td>训练时间复杂度</td><td>O(n²d)</td><td>O(ndN)</td></tr>
+            <tr><td>推理时间复杂度（每步）</td><td>O(nd)（KV Cache）</td><td>O(dN)（固定）</td></tr>
+            <tr><td>训练空间复杂度</td><td>O(n²)（注意力矩阵）</td><td>O(nN)</td></tr>
+            <tr><td>推理空间复杂度</td><td>O(nd)（线性增长）</td><td>O(Nd)（固定）</td></tr>
+            <tr><td>序列长度扩展性</td><td>二次增长，受限</td><td>线性增长，可扩展</td></tr>
+            <tr><td>短序列（n<2K）效率</td><td>高（高度优化）</td><td>中</td></tr>
+            <tr><td>超长序列（n>128K）</td><td>不可行</td><td>可行</td></tr>
+            <tr><td>生态成熟度</td><td>极高</td><td>发展中</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.6.6 注意力机制 vs 状态空间模型的本质差异</h4>
+        <table>
+          <thead><tr><th>本质属性</th><th>Attention</th><th>SSM (Mamba)</th></tr></thead>
+          <tbody>
+            <tr><td><strong>建模方式</strong></td><td>内容寻址（content-based addressing）</td><td>状态压缩（state compression）</td></tr>
+            <tr><td><strong>记忆机制</strong></td><td>显式存储所有历史（KV Cache 线性增长）</td><td>隐式压缩到固定状态（状态大小恒定）</td></tr>
+            <tr><td><strong>信息检索</strong></td><td>精确匹配（softmax 后权重显式）</td><td>压缩重建（从状态中提取）</td></tr>
+            <tr><td><strong>上下文窗口</strong></td><td>理论上无限制，但受内存限制</td><td>理论上无限制，状态固定</td></tr>
+            <tr><td><strong>信息损失</strong></td><td>无（保留全部历史）</td><td>有（压缩到有限状态有信息损失）</td></tr>
+            <tr><td><strong>硬件友好性</strong></td><td>低（内存带宽瓶颈在长序列时严重）</td><td>高（状态小，读带宽需求低）</td></tr>
+            <tr><td><strong>并行度</strong></td><td>序列维度完全并行</td><td>序列维度需扫描（但可并行化）</td></tr>
+          </tbody>
+        </table>
+        <p>本质差异的核心是：Attention 不压缩任何信息（使用所有历史 token 的精确表示），而 SSM 将历史压缩到固定大小的状态中。这使 SSM 具有线性的时间和空间复杂度，但代价是信息压缩带来的表达精度损失。选择性机制（S6）通过让模型自行决定压缩哪些信息来弥补这一缺陷。</p>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6.7 Tokenization -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.7 Tokenization（分词器）</h3>
+        <span class="tag tag-blue">基础组件</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>定义与概述</h4>
+        <p>Tokenization 是将原始文本转换为模型可处理的数值表示（token IDs）的过程。它是 LLM 流水线的第一步，直接影响模型的词汇表大小、序列长度、多语言能力和上下文窗口利用率。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.7.2 BPE（Byte Pair Encoding）</h4>
+        <p><strong>训练算法</strong></p>
+        <p>BPE 从字符/字节级开始，迭代合并最频繁的相邻 token 对，逐步构建子词词汇表：</p>
+        <ol>
+          <li>初始化：词汇表 = 256 个单字节 token</li>
+          <li>统计相邻 token 对 (t_i, t_{i+1}) 的出现频率</li>
+          <li>找到频率最高的 pair：(t_a, t_b) = arg max count(t_i, t_j)</li>
+          <li>创建新 token t_new = t_a + t_b，加入词汇表，分配新 ID</li>
+          <li>在所有文本中将 (t_a, t_b) 替换为 t_new</li>
+          <li>记录合并规则 (t_a, t_b) → t_new</li>
+          <li>重复步骤 2-6 直到词汇表达到目标大小</li>
+        </ol>
+        <p><strong>编码（推理时）</strong></p>
+        <p>按合并规则优先级（先学到的优先级高）从字节序列自底向上合并：</p>
+        <pre><code>def encode(self, text):
+    tokens = list(bytearray(text, "utf-8"))
+    symbols = [self.vocab[id_num] for id_num in tokens]
+    while True:
+        pairs = zip(symbols, symbols[1:])
+        # 找到优先级最高的 pair
+        bigram = min(pairs, key=lambda p: self.bpe_ranks.get(p, inf))
+        if bigram not in self.bpe_ranks:
+            break
+        # 合并所有出现
+        symbols = merge(symbols, bigram)
+    return [self.inverse_vocab[sym] for sym in symbols]</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.7.3 SentencePiece</h4>
+        <p><strong>特点</strong></p>
+        <p>SentencePiece 是 Google 开发的分词库，将空格视为普通字符（用 <code>▁</code> U+2581 表示），因此：</p>
+        <ul>
+          <li>不需要预先的空格分词</li>
+          <li>可端到端地从原始文本学习</li>
+          <li>对无明确词边界的语言（中文、日文）更友好</li>
+        </ul>
+        <p><strong>Unigram Language Model 模式</strong></p>
+        <p>Unigram 算法的核心思路：从大型初始子词集合出发，迭代删除对似然贡献最小的子词。</p>
+        <p><strong>训练</strong>（EM 算法）：</p>
+        <ol>
+          <li><strong>初始化</strong>：提取所有频繁字符序列作为初始词汇表（数十万个）</li>
+          <li><strong>E-step</strong>：对于每个句子，找到所有可能的分割方式，计算每种分割的概率</li>
+          <li><strong>M-step</strong>：根据期望分割统计重新估计每个子词的概率</li>
+          <li><strong>剪枝</strong>：删除对似然贡献最小的子词，逐步减小词汇表到目标大小</li>
+        </ol>
+        <p><strong>编码</strong>：使用维特比算法（Viterbi）找到概率最高的分割路径。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.7.4 BBPE（Byte-level BPE）</h4>
+        <p>BBPE 从<strong>字节级</strong>而非字符级开始。由于 UTF-8 中任何字符最多由 4 个字节表示，初始词汇表固定为 256 个字节值，完全与语言无关。</p>
+        <pre><code>英文 "hello" → UTF-8 字节: [104, 101, 108, 108, 111]
+中文 "你"   → UTF-8 字节: [228, 189, 160]</code></pre>
+        <p><strong>优势与劣势</strong></p>
+        <table>
+          <thead><tr><th>特性</th><th>标准 BPE（字符级）</th><th>BBPE（字节级）</th></tr></thead>
+          <tbody>
+            <tr><td>初始词汇表</td><td>语言相关（数万 Unicode 字符）</td><td>固定 256 字节</td></tr>
+            <tr><td>语言无关性</td><td>否</td><td>是</td></tr>
+            <tr><td>OOV（词表外）</td><td>有</td><td>无（任何 UTF-8 文本可编码）</td></tr>
+            <tr><td>序列长度</td><td>较短</td><td>对非拉丁语言较长</td></tr>
+            <tr><td>代表模型</td><td>早期 NMT 模型</td><td>GPT-2/3/4, LLaMA-3</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.7.5 tiktoken</h4>
+        <p>tiktoken 是 OpenAI 开发的高性能 BPE tokenizer，使用 Rust 实现核心算法：</p>
+        <pre><code>import tiktoken
+encoding = tiktoken.get_encoding("cl100k_base")  # GPT-4 tokenizer
+tokens = encoding.encode("Hello world!")
+# tokens: [9906, 1917, 0]</code></pre>
+        <p>核心优化：Rust 的快速哈希表 + 正则表达式预处理将文本分成可合并的块，实现高效批量编码。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.7.6 特殊 Token</h4>
+        <table>
+          <thead><tr><th>特殊 Token</th><th>作用</th><th>使用模型</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;s&gt;</code> / [BOS]</td><td>标记序列开始</td><td>LLaMA, BERT</td></tr>
+            <tr><td><code>&lt;/s&gt;</code> / [EOS]</td><td>标记序列结束，触发停止生成</td><td>LLaMA, GPT</td></tr>
+            <tr><td>[PAD]</td><td>填充变长序列到固定长度</td><td>BERT, T5</td></tr>
+            <tr><td>[MASK]</td><td>掩码语言建模中的被预测位置</td><td>BERT 系列</td></tr>
+            <tr><td>[UNK]</td><td>未知字符（BBPE 中不需要）</td><td>传统 tokenizer</td></tr>
+            <tr><td><code>&lt;|im_start|&gt;</code> / <code>&lt;|im_end|&gt;</code></td><td>对话角色标记</td><td>Qwen</td></tr>
+            <tr><td>[INST] / [/INST]</td><td>指令标记</td><td>LLaMA-2 Chat</td></tr>
+            <tr><td><code>&lt;|endoftext|&gt;</code></td><td>序列分隔</td><td>GPT 系列</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.7.7 Vocabulary Size 的影响</h4>
+        <table>
+          <thead><tr><th>词汇表大小</th><th>嵌入参数量（d=4096）</th><th>序列长度效率</th><th>多语言公平性</th><th>代表模型</th></tr></thead>
+          <tbody>
+            <tr><td>32,000</td><td>~2.6 亿</td><td>较短</td><td>差（非拉丁语言 token 数多）</td><td>LLaMA-2</td></tr>
+            <tr><td>50,257</td><td>~4.1 亿</td><td>中等</td><td>中等</td><td>GPT-2, GPT-3</td></tr>
+            <tr><td>100,256</td><td>~8.2 亿</td><td>较高效</td><td>较好</td><td>GPT-4 (cl100k_base)</td></tr>
+            <tr><td>128,256</td><td>~10.5 亿</td><td>高效</td><td>较好</td><td>LLaMA-3</td></tr>
+            <tr><td>151,936</td><td>~12.4 亿</td><td>高效</td><td>中文优化</td><td>Qwen-2</td></tr>
+            <tr><td>199,997</td><td>~16.4 亿</td><td>最高效</td><td>优秀</td><td>GPT-4o (o200k_base)</td></tr>
+          </tbody>
+        </table>
+        <p>趋势：新一代模型倾向于更大的词汇表（100K+），以支持更多语言和更高效的编码（减少每个词的 token 数）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>BPE vs Unigram vs BBPE 对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>BPE</th><th>Unigram</th><th>BBPE</th></tr></thead>
+          <tbody>
+            <tr><td>训练方向</td><td>从小到大（合并）</td><td>从大到小（删除）</td><td>同 BPE</td></tr>
+            <tr><td>编码方式</td><td>贪婪合并</td><td>Viterbi 最优路径</td><td>同 BPE</td></tr>
+            <tr><td>基础单元</td><td>字符</td><td>字符</td><td>字节</td></tr>
+            <tr><td>空格处理</td><td>需预处理</td><td>原生支持</td><td>需预处理</td></tr>
+            <tr><td>语言无关性</td><td>差</td><td>中等</td><td>极好</td></tr>
+            <tr><td>多语言性能</td><td>差</td><td>好</td><td>好</td></tr>
+            <tr><td>典型模型</td><td>GPT 系列 (via tiktoken)</td><td>T5, LLaMA-2</td><td>GPT-2/3/4, LLaMA-3</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 6.8 推理引擎对比 -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>6.8 推理引擎对比</h3>
+        <span class="tag tag-blue">生态</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.8.1 vLLM</h4>
+        <p><strong>定位</strong>：高吞吐 LLM 推理引擎，行业事实标准。</p>
+        <p><strong>核心创新</strong>：</p>
+        <ul>
+          <li><strong>PagedAttention</strong>：分页式 KV Cache 管理，内存利用率从 20-40% 提升至 95%+</li>
+          <li><strong>Continuous Batching</strong>：迭代级调度，GPU 几乎始终保持满载</li>
+          <li><strong>Chunked Prefill</strong>：长 Prefill 分块与 Decode 交错，降低 ITL 抖动</li>
+          <li><strong>Prefix Caching</strong>：Block Hash 内容寻址，多轮对话和 RAG 场景收益显著</li>
+        </ul>
+        <p><strong>优势</strong>：社区最活跃（GitHub 50K+ stars）、支持模型最广泛（HuggingFace 生态）、多 GPU 扩展性好（TP/PP/EP）、支持量化（FP8/INT4/AWQ/GPTQ）、V1 架构重构后性能大幅提升。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.8.2 TGI（Text Generation Inference）</h4>
+        <p><strong>定位</strong>：HuggingFace 生态的 LLM 推理服务器。</p>
+        <p><strong>核心特性</strong>：</p>
+        <ul>
+          <li>Safetensors 安全加载</li>
+          <li>FlashAttention 集成</li>
+          <li>支持 GPTQ/AWQ/BitsAndBytes 量化</li>
+          <li>OpenAI 兼容 API</li>
+        </ul>
+        <p><strong>与 vLLM 对比</strong>：</p>
+        <table>
+          <thead><tr><th>维度</th><th>TGI</th><th>vLLM</th></tr></thead>
+          <tbody>
+            <tr><td>核心创新</td><td>HuggingFace 生态集成</td><td>PagedAttention</td></tr>
+            <tr><td>易用性</td><td>高（HF 生态无缝）</td><td>中等</td></tr>
+            <tr><td>吞吐量</td><td>高</td><td>更高</td></tr>
+            <tr><td>多模态</td><td>较好</td><td>中等</td></tr>
+            <tr><td>部署方式</td><td>Docker 为主</td><td>Python 库 / 服务</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.8.3 TensorRT-LLM</h4>
+        <p><strong>定位</strong>：NVIDIA 官方 LLM 推理优化框架，在 NVIDIA GPU 上榨取最大性能。</p>
+        <p><strong>核心优化</strong>：</p>
+        <ul>
+          <li><strong>Kernel Fusion</strong>：将多个小算子融合为单个 CUDA Kernel</li>
+          <li><strong>Plugin 系统</strong>：预优化的 FMHA、GptAttentionPlugin 等</li>
+          <li><strong>FP8/INT8/INT4 量化</strong>：TensorRT Model Optimizer 原生支持</li>
+          <li><strong>Inflight Batching</strong>：NVIDIA 版 Continuous Batching</li>
+        </ul>
+        <p><strong>优势与局限</strong>：</p>
+        <table>
+          <thead><tr><th>优势</th><th>局限</th></tr></thead>
+          <tbody>
+            <tr><td>极致性能（NVIDIA GPU 最高吞吐）</td><td>仅支持 NVIDIA GPU</td></tr>
+            <tr><td>生产级稳定性</td><td>编译时间长（数分钟到数小时）</td></tr>
+            <tr><td>Triton Inference Server 无缝集成</td><td>灵活性低（新模型需写 Plugin）</td></tr>
+            <tr><td>Hopper FP8 Transformer Engine 原生支持</td><td>部分组件闭源</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.8.4 SGLang</h4>
+        <p><strong>定位</strong>：结构化 LLM 推理框架，引入编程语言概念控制生成过程。</p>
+        <p><strong>核心创新</strong>：</p>
+        <ul>
+          <li><strong>RadixAttention</strong>：基于 Radix Tree 的 KV Cache 管理和前缀复用，比 vLLM 的 Prefix Caching 更高效</li>
+          <li><strong>Structured Generation</strong>：原生支持正则 / CFG 约束输出</li>
+          <li><strong>Zero-overhead CPU Scheduler</strong>：将调度开销从 GPU 步循环中移除</li>
+        </ul>
+        <p><strong>与 vLLM 对比</strong>：</p>
+        <table>
+          <thead><tr><th>维度</th><th>SGLang</th><th>vLLM</th></tr></thead>
+          <tbody>
+            <tr><td>核心创新</td><td>RadixAttention + Structured Generation DSL</td><td>PagedAttention</td></tr>
+            <tr><td>编程模型</td><td>结构化编程语言</td><td>传统 API</td></tr>
+            <tr><td>前缀复用</td><td>自动、高效（Radix Tree）</td><td>需显式开启</td></tr>
+            <tr><td>多轮对话</td><td>原生优化</td><td>支持</td></tr>
+            <tr><td>结构化输出</td><td>原生支持</td><td>通过外部工具</td></tr>
+            <tr><td>社区规模</td><td>较小（增长迅速）</td><td>行业最大</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.8.5 llama.cpp</h4>
+        <p><strong>定位</strong>：纯 C/C++ LLM 推理实现，不依赖 PyTorch/CUDA。</p>
+        <p><strong>核心特性</strong>：</p>
+        <ul>
+          <li><strong>GGUF 格式</strong>：自包含模型文件，支持多种量化级别</li>
+          <li><strong>CPU 推理优化</strong>：AVX/AVX2/AVX-512/NEON SIMD 指令 + 多线程</li>
+          <li><strong>Metal / Vulkan / SYCL</strong>：支持 Apple Silicon、跨平台 GPU 和 Intel GPU</li>
+        </ul>
+        <p><strong>常用 GGUF 量化级别</strong>：</p>
+        <table>
+          <thead><tr><th>量化类型</th><th>每权重位数</th><th>7B 模型大小</th><th>质量损失</th></tr></thead>
+          <tbody>
+            <tr><td>F16</td><td>16</td><td>13 GB</td><td>无</td></tr>
+            <tr><td>Q8_0</td><td>8</td><td>6.7 GB</td><td>极小</td></tr>
+            <tr><td>Q5_K_M</td><td>5.5</td><td>4.5 GB</td><td>小</td></tr>
+            <tr><td>Q4_K_M</td><td>4.5</td><td>3.8 GB</td><td>中等</td></tr>
+            <tr><td>Q3_K_M</td><td>3.5</td><td>3.0 GB</td><td>明显</td></tr>
+            <tr><td>Q2_K</td><td>2.5</td><td>2.2 GB</td><td>显著</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.8.6 综合对比</h4>
+        <table>
+          <thead><tr><th>引擎</th><th>最佳场景</th><th>吞吐量</th><th>延迟</th><th>易用性</th><th>硬件支持</th><th>社区活跃度</th><th>是否开源</th></tr></thead>
+          <tbody>
+            <tr><td><strong>vLLM</strong></td><td>高吞吐生产服务、多租户</td><td>极高</td><td>低</td><td>中</td><td>NVIDIA/AMD/Intel/XPU</td><td>最活跃 (50K+ ⭐)</td><td>完全开源</td></tr>
+            <tr><td><strong>TGI</strong></td><td>HuggingFace 生态集成</td><td>高</td><td>低</td><td>高</td><td>NVIDIA/Intel</td><td>活跃</td><td>开源</td></tr>
+            <tr><td><strong>TensorRT-LLM</strong></td><td>NVIDIA GPU 极致性能</td><td>最高</td><td>最低</td><td>低</td><td>NVIDIA only</td><td>高 (NVIDIA 维护)</td><td>部分开源</td></tr>
+            <tr><td><strong>SGLang</strong></td><td>多轮对话、结构化生成</td><td>高</td><td>低</td><td>中</td><td>NVIDIA/AMD</td><td>增长迅速</td><td>开源</td></tr>
+            <tr><td><strong>llama.cpp</strong></td><td>本地/边缘推理、CPU</td><td>低</td><td>高</td><td>高</td><td>CPU/GPU/Metal/Vulkan</td><td>极活跃</td><td>开源</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>6.8.7 选型建议</h4>
+        <table>
+          <thead><tr><th>需求场景</th><th>推荐引擎</th><th>理由</th></tr></thead>
+          <tbody>
+            <tr><td><strong>生产环境高吞吐 API 服务</strong></td><td>vLLM</td><td>社区最活跃，PagedAttention 内存效率最高，支持模型最广</td></tr>
+            <tr><td><strong>NVIDIA GPU 极致性能</strong></td><td>TensorRT-LLM</td><td>Kernel Fusion + FP8 + Inflight Batching 组合性能最优</td></tr>
+            <tr><td><strong>快速原型、HF 生态</strong></td><td>TGI</td><td>一键 docker 部署，与 HF Hub 无缝集成</td></tr>
+            <tr><td><strong>多轮对话 / Agent 系统</strong></td><td>SGLang</td><td>RadixAttention 自动前缀复用，结构化生成原生支持</td></tr>
+            <tr><td><strong>本地隐私推理 / 边缘设备</strong></td><td>llama.cpp</td><td>CPU/手机均可运行，GGUF 量化灵活，数据不出本地</td></tr>
+            <tr><td><strong>AMD / Intel / 国产 GPU</strong></td><td>vLLM</td><td>硬件支持最广泛，社区驱动适配</td></tr>
+            <tr><td><strong>需要 JSON / 结构化输出</strong></td><td>SGLang / vLLM+Outlines</td><td>SGLang 原生支持，vLLM 通过 Guidance/Outlines 实现</td></tr>
+            <tr><td><strong>学术研究 / 快速实验</strong></td><td>vLLM / llama.cpp</td><td>vLLM Python API 灵活，llama.cpp 无需 GPU</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- 概念依赖关系 -->
+    <!-- ============================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>模块六概念依赖关系</h3>
+        <span class="tag tag-emerald">全景</span>
+      </div>
+
+      <div class="mermaid-wrapper">
+        <pre class="mermaid">
+graph TD
+    T[Transformer 架构] --> PE[位置编码: RoPE/ALiBi]
+    T --> AF[激活函数: GELU/SwiGLU]
+    T --> NM[归一化: LayerNorm/RMSNorm]
+    NM --> PN[Pre-norm/Post-norm]
+    MoE[MoE 混合专家模型] --> T
+    MoE --> NM
+    MoE --> AF
+    MoE --> TK[Tokenization]
+    SSM[SSM/Mamba] --> T
+    TK --> ALL[所有模型的前置条件]
+    IE[推理引擎] --> T
+    IE --> PE
+    IE --> AF
+    IE --> NM
+    IE --> MoE
+    IE --> SSM
+    IE --> TK
+        </pre>
+      </div>
+    </div>
+
+    <p class="text-muted" style="color: var(--text-muted); font-size: 0.875rem; text-align: center; margin-top: 2rem;">本模块共覆盖 8 个大节、40+ 个核心概念，与 vLLM 推理优化相关的底层 AI 基础知识至此全部接入。</p>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="section-5.html" class="module-nav-prev">
+    <div class="module-nav-label">← 上一模块</div>
+    <div class="module-nav-title">生态项目</div>
+  </a>
+    <a href="section-7.html" class="module-nav-next">
+    <div class="module-nav-label">下一模块 →</div>
+    <div class="module-nav-title">高级 AI（上）</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 6: AI 领域通用概念 | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>

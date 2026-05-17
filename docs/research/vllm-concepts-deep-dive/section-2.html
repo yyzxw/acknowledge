@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块2: vLLM 核心创新 — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 2 / 8</span>
+  </div>
+</div>
+
+<section id="sec-2" data-section="module">
+  <div class="module-content">
+
+    <!-- ============================================== -->
+    <!-- 2.1 PagedAttention -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>2.1 PagedAttention</h3>
+        <span class="tag tag-blue">核心创新</span>
+      </div>
+
+      <p>PagedAttention 是 vLLM 提出的核心注意力算法，旨在解决大语言模型服务中的 KV Cache 内存管理低效问题。它借鉴了操作系统虚拟内存和分页的设计思想，将每个序列的 KV Cache 分割为固定大小的块（block），使得逻辑上连续的 KV 数据可以映射到物理上非连续的 GPU 内存块中 [S1][S29]。</p>
+      <p>在传统 LLM 推理框架中，KV Cache 通常以连续内存块的形式预先分配，大小为 max_model_len * per_token_kv_size。这种方式导致严重的内存浪费。PagedAttention 通过块级内存管理，将内存浪费降至接近零，同时支持灵活的请求间内存共享。</p>
+
+      <div class="sub-section">
+        <h4>Block Table 数据结构</h4>
+        <p>PagedAttention 的核心数据结构是 <strong>Block Table</strong>，它建立了从逻辑块到物理块的映射。在 vLLM V1 中，这一结构通过 BlockPool、KVCacheBlock、KVCacheManager 等类协同实现 [S4][S5][S7]。</p>
+        <p><strong>KVCacheBlock（物理块元数据）</strong>：</p>
+        <pre><code>@dataclass(slots=True)
+class KVCacheBlock:
+    block_id: int                                    # 物理块 ID，范围 0 到 num_gpu_blocks - 1
+    ref_cnt: int = 0                                 # 引用计数，表示有多少请求正在使用此块
+    _block_hash: BlockHashWithGroupId | None = None  # 块内容哈希
+    prev_free_block: "KVCacheBlock | None" = None    # 空闲队列双向链表前驱
+    next_free_block: "KVCacheBlock | None" = None    # 空闲队列双向链表后继
+    is_null: bool = False                            # 是否为 null_block（占位块，永不缓存）</code></pre>
+        <p><code>ref_cnt</code> 是引用计数机制的核心。当多个请求共享同一个物理块（如前缀缓存命中、并行采样共享 prompt）时，<code>ref_cnt</code> 递增；当请求释放块时，<code>ref_cnt</code> 递减。仅当 <code>ref_cnt == 0</code> 时，块才会被放回空闲队列。</p>
+        <p><strong>块哈希计算</strong>（<code>hash_block_tokens</code>）：</p>
+        <pre><code>def hash_block_tokens(
+    hash_function: Callable[[Any], bytes],
+    parent_block_hash: BlockHash | None,
+    curr_block_token_ids: Sequence[int],
+    extra_keys: tuple[Any, ...] | None = None,
+) -> BlockHash:
+    if not parent_block_hash:
+        parent_block_hash = NONE_HASH
+    curr_block_token_ids_tuple = tuple(curr_block_token_ids)
+    return BlockHash(
+        hash_function((parent_block_hash, curr_block_token_ids_tuple, extra_keys))
+    )</code></pre>
+        <p>这里使用了<strong>父哈希链式结构</strong>：每个块的哈希不仅取决于自身包含的 token IDs，还取决于其父块（前一个块）的哈希。这确保了具有相同前缀的序列必然产生相同的块哈希序列，从而支持前缀缓存的精确匹配。</p>
+        <p><strong>BlockPool（块池管理器）</strong>：</p>
+        <p><code>BlockPool</code> 是块级内存管理的核心 [S4]，其主要职责包括：</p>
+        <ol>
+          <li><strong>分配新块</strong>: <code>get_new_blocks(num_blocks)</code> 从 <code>free_block_queue</code> 头部弹出指定数量的块，并将 <code>ref_cnt</code> 设为 1。</li>
+          <li><strong>释放块</strong>: <code>free_blocks(ordered_blocks)</code> 递减 <code>ref_cnt</code>，将 <code>ref_cnt == 0</code> 的块追加回空闲队列。</li>
+          <li><strong>触摸块（touch）</strong>: <code>touch(blocks)</code> 将前缀缓存命中的块从空闲队列中移除（防止被驱逐），并递增 <code>ref_cnt</code>。</li>
+          <li><strong>缓存完整块</strong>: <code>cache_full_blocks()</code> 将请求中已填满的块注册到 <code>cached_block_hash_to_block</code> 哈希表中。</li>
+          <li><strong>驱逐缓存块</strong>: <code>_maybe_evict_cached_block()</code> 在分配新块时，若该块当前被缓存，则清除其哈希元数据并从缓存表中移除。</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>Copy-on-Write 机制</h4>
+        <p>Copy-on-Write（CoW）是 PagedAttention 支持并行采样和束搜索的关键机制 [S1][S29]。当多个序列共享同一个物理块时，该块的 <code>ref_cnt &gt; 1</code>。如果其中一个序列需要修改该块中的内容（如束搜索中某个分支对某个 token 的注意力输出不同），系统会创建一个该物理块的副本，而不是直接修改共享块。</p>
+        <p>在 vLLM V1 中，CoW 的实现细节体现在 <code>allocate_slots</code> 和 <code>get_num_blocks_to_allocate</code> 的交互中 [S6][S7]：</p>
+        <ol>
+          <li>当请求需要写入新 token 到某个逻辑块时，<code>KVCacheManager</code> 检查该逻辑块对应的物理块是否被多个请求共享（<code>ref_cnt &gt; 1</code>）。</li>
+          <li>如果是共享状态，系统从 <code>BlockPool</code> 分配一个新的物理块，将原块内容复制到新块，然后将原块的 <code>ref_cnt</code> 减 1。</li>
+          <li>请求的逻辑块指针更新为新分配的物理块，新块的 <code>ref_cnt</code> 设为 1。</li>
+        </ol>
+        <p>这种块粒度的 CoW 比序列粒度的复制更高效：在束搜索中，只有发生分歧的块需要复制，共享前缀仍然保持共享。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>非连续存储与内存分配策略</h4>
+        <p>PagedAttention 的根本创新在于打破了 KV Cache 必须物理连续的假设：</p>
+        <ul>
+          <li><strong>逻辑连续性</strong>: 每个请求的 KV Cache 在逻辑上仍是一个 token 序列，可通过逻辑块索引和块内偏移访问任意位置。</li>
+          <li><strong>物理非连续性</strong>: 相邻逻辑块可以映射到任意可用的物理块，由 <code>BlockTable</code> 维护映射关系。</li>
+        </ul>
+        <p>在 vLLM V1 的 <code>SingleTypeKVCacheManager</code> 中，<code>req_to_blocks</code> 字典维护了每个请求的逻辑块到物理块的映射 [S6]：</p>
+        <pre><code>self.req_to_blocks: defaultdict[str, list[KVCacheBlock]] = defaultdict(list)</code></pre>
+        <p>当模型执行注意力计算时，attention backend（如 FlashAttention、FlashInfer）接收的是 block table（物理块 ID 列表）和 slot mapping（每个 token 对应的物理块内偏移），而非连续的内存指针。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>内存计算公式</h4>
+        <p>vLLM V1 中，PagedAttention 的 <code>block_size</code> 默认通常为 16 tokens。对于 70B 模型（FP16，80 层，8 KV heads，head_dim=128），每个 block 的内存约为：</p>
+        <pre><code>block_memory = block_size * 2 * num_layers * num_kv_heads * head_dim * 2 bytes
+             = 16 * 2 * 80 * 8 * 128 * 2
+             = 16 * 2 * 80 * 8 * 256
+             = 5,242,880 bytes ≈ 5.24 MB</code></pre>
+        <p>在 80GB GPU 上，若 GPU 内存利用率为 0.9，预留约 72GB 给 KV Cache，则可容纳约 13,700 个 block，对应约 <strong>219,000 个 token</strong> 的并发容量。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 OS 虚拟内存分页的类比和差异</h4>
+        <table>
+          <thead>
+            <tr><th>维度</th><th>OS 虚拟内存</th><th>PagedAttention</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>页/块大小</td><td>通常 4KB</td><td>可配置，默认 16 tokens</td></tr>
+            <tr><td>逻辑-物理映射</td><td>页表 (Page Table)</td><td>Block Table (req_to_blocks)</td></tr>
+            <tr><td>物理内存组织</td><td>非连续（分散的物理页框）</td><td>非连续（分散的 GPU 内存块）</td></tr>
+            <tr><td>共享机制</td><td>写时复制 (Copy-on-Write)</td><td>块级 CoW (ref_cnt &gt; 1 时复制)</td></tr>
+            <tr><td>缓存机制</td><td>TLB (快表)</td><td>BlockHashToBlockMap (前缀缓存)</td></tr>
+            <tr><td>置换策略</td><td>LRU / Clock</td><td>LRU (free_block_queue 顺序)</td></tr>
+            <tr><td>零页</td><td>null page</td><td>null_block (block_id=0)</td></tr>
+          </tbody>
+        </table>
+        <p><strong>关键差异</strong>：</p>
+        <ol>
+          <li><strong>块大小语义不同</strong>: OS 页大小是固定的内存字节数（如 4KB），而 PagedAttention 的 block_size 是 token 数量（如 16 tokens）。</li>
+          <li><strong>无硬件 TLB</strong>: OS 有硬件 TLB 加速页表查询，PagedAttention 的 block table 查询由 GPU kernel 中的软件逻辑完成。</li>
+          <li><strong>内容寻址缓存</strong>: OS 通常不使用内容寻址的页缓存，而 PagedAttention 的 prefix caching 本质上是内容寻址缓存。</li>
+          <li><strong>分配粒度</strong>: OS 支持按需分页（demand paging），而 PagedAttention 目前是在调度阶段预分配块。</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>性能数据</h4>
+        <p>根据 vLLM 原始论文 [S1]：</p>
+        <ul>
+          <li><strong>吞吐量提升</strong>: 在多种模型（GPT、OPT、LLaMA）和工作负载下，vLLM 的吞吐量比 FasterTransformer 和 Orca 提升 <strong>2-4 倍</strong>。</li>
+          <li><strong>内存节省</strong>:
+            <ul>
+              <li>并行采样（parallel sampling）: 节省 <strong>6.1% - 9.8%</strong> 内存</li>
+              <li>束搜索（beam search）: 节省 <strong>37.6% - 55.2%</strong> 内存</li>
+            </ul>
+          </li>
+          <li><strong>批处理规模</strong>: 由于内存碎片几乎消除，vLLM 可以支持更大的批处理规模，从而提升 GPU 利用率。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 2.2 Continuous Batching -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>2.2 Continuous Batching</h3>
+        <span class="tag tag-amber">调度策略</span>
+      </div>
+
+      <p>Continuous Batching（持续批处理），又称 Iteration-level Scheduling（迭代级调度）或 Dynamic Batching（动态批处理），是一种 LLM 推理调度策略。与传统 Static Batching（静态批处理）不同，continuous batching 允许请求在<strong>每个模型前向传播迭代（iteration/step）</strong>的粒度上动态地加入或退出当前批处理，而不是等待整个批处理的所有请求都完成生成后才启动新批处理 [S2][S16][S17]。</p>
+      <p>这种调度方式的核心洞察是：LLM 的 decode 阶段每次只生成一个 token，不同请求的生成长度差异巨大。在静态批处理中，先完成的请求必须等待最后完成的请求，导致 GPU 在批次后期严重欠利用。</p>
+
+      <div class="sub-section">
+        <h4>静态批处理的工作流程</h4>
+        <ol>
+          <li>收集一批请求，直到达到 batch_size 或超时。</li>
+          <li>对所有请求执行 prefill（计算 prompt 的 KV Cache）。</li>
+          <li>进入 decode 循环：每步为批处理中所有请求各生成一个 token。</li>
+          <li>当某个请求生成结束符（EOS）或达到最大长度时，该请求完成，但<strong>继续占用批处理槽位</strong>，用 padding 填充。</li>
+          <li>直到批处理中<strong>所有</strong>请求都完成后，才释放整个批处理，接收下一批请求。</li>
+        </ol>
+        <p><strong>问题分析</strong>：假设批处理中有 4 个请求，其生成长度分别为 100、200、300、400 tokens。在静态批处理中：</p>
+        <ul>
+          <li>第 100 步后，请求 1 已完成，但批处理继续运行 300 步，请求 1 的槽位被 padding 浪费。</li>
+          <li>第 400 步后，整个批处理才结束。</li>
+          <li>总 GPU 计算量中，padding 浪费的比例约为 (300×1 + 200×2 + 100×3) / (400×4) = 37.5%。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>持续批处理的工作流程</h4>
+        <ol>
+          <li>每步开始时，调度器检查当前 running 请求的状态。</li>
+          <li>对于已完成的请求，立即从批处理中移除，释放其 KV Cache 槽位。</li>
+          <li>从 waiting 队列中选取新请求加入批处理（受限于 token budget 和 KV Cache 容量）。</li>
+          <li>新加入的请求可能处于 prefill 阶段（需要计算 prompt 的 KV），而现有请求处于 decode 阶段。</li>
+          <li>执行一步模型前向传播（可能混合 prefill 和 decode）。</li>
+          <li>重复步骤 1-5。</li>
+        </ol>
+        <p><strong>关键优势</strong>：</p>
+        <ul>
+          <li><strong>零等待时间</strong>: 请求完成后立即被替换，不存在 padding 浪费。</li>
+          <li><strong>更高的 GPU 利用率</strong>: 批处理规模在每个 step 都保持较大，因为新请求不断补充。</li>
+          <li><strong>更优的延迟-吞吐量权衡</strong>: 不需要在 batch_size 和 latency 之间做痛苦的折中。</li>
+        </ul>
+        <p>根据 Anyscale 的实测 [S17]，continuous batching 相比 HuggingFace Transformers（静态批处理）可实现 <strong>23 倍吞吐量提升</strong>，p50 延迟降低。ORCA 论文 [S2] 报告在等效延迟目标下，相比 FasterTransformer 吞吐量提升 <strong>36.9 倍</strong>。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 调度器的三个队列</h4>
+        <p><strong>waiting 队列</strong>：等待被调度的请求队列。新到达的请求首先进入此队列。调度器按照 <code>SchedulingPolicy</code>（默认 FCFS，即先来先服务）排序。</p>
+        <p><strong>skipped_waiting 队列</strong>：用于存放因异步依赖或约束而暂时无法调度的请求 [S3]。例如：</p>
+        <ul>
+          <li>请求正在等待远程 KV 传输完成（<code>WAITING_FOR_REMOTE_KVS</code>）</li>
+          <li>请求正在等待结构化输出语法编译（<code>WAITING_FOR_STRUCTURED_OUTPUT_GRAMMAR</code>）</li>
+          <li>请求正在等待流式输入（<code>WAITING_FOR_STREAMING_REQ</code>）</li>
+        </ul>
+        <p>这些请求不会被调度执行，但会在每个 step 被检查是否可以"晋升"回 <code>waiting</code> 队列。</p>
+        <p><strong>running 列表</strong>：当前正在执行的请求列表。注意这是一个 <code>list[Request]</code> 而非队列，因为调度器需要遍历它来决定每个 step 调度哪些请求。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>每步调度的决策逻辑</h4>
+        <p><strong>Token Budget 与 Sequence Budget</strong>：</p>
+        <pre><code>self.max_num_running_reqs = self.scheduler_config.max_num_seqs
+self.max_num_scheduled_tokens = (
+    self.scheduler_config.max_num_scheduled_tokens
+    if self.scheduler_config.max_num_scheduled_tokens
+    else self.scheduler_config.max_num_batched_tokens
+)</code></pre>
+        <p>调度受两个关键约束限制：</p>
+        <ol>
+          <li><strong><code>max_num_running_reqs</code>（最大并发请求数）</strong>: 限制同时处于 running 状态的请求数量。</li>
+          <li><strong><code>max_num_scheduled_tokens</code>（每步最大调度 token 数）</strong>: 限制单个 step 中所有请求的总 token 数。</li>
+        </ol>
+        <p><strong>调度 RUNNING 请求</strong>：</p>
+        <p>调度器首先遍历 <code>running</code> 列表，为每个请求计算 <code>num_new_tokens</code>：</p>
+        <pre><code>num_new_tokens = (
+    request.num_tokens_with_spec
+    + request.num_output_placeholders
+    - request.num_computed_tokens
+)
+if 0 &lt; self.scheduler_config.long_prefill_token_threshold &lt; num_new_tokens:
+    num_new_tokens = self.scheduler_config.long_prefill_token_threshold
+num_new_tokens = min(num_new_tokens, token_budget)</code></pre>
+        <p>对于每个请求，调度器尝试通过 <code>kv_cache_manager.allocate_slots()</code> 分配 KV Cache 块。若分配失败（内存不足），则触发<strong>抢占（preemption）</strong>。</p>
+        <p><strong>抢占（Preemption）机制</strong>：</p>
+        <p>当 KV Cache 不足时，调度器选择优先级最低的 running 请求进行抢占 [S3]：</p>
+        <pre><code>if self.policy == SchedulingPolicy.PRIORITY:
+    preempted_req = max(
+        self.running,
+        key=lambda r: (r.priority, r.arrival_time),
+    )
+else:
+    preempted_req = self.running.pop()
+
+self._preempt_request(preempted_req, scheduled_timestamp)</code></pre>
+        <p>被抢占的请求：</p>
+        <ul>
+          <li>状态从 <code>RUNNING</code> 变为 <code>PREEMPTED</code></li>
+          <li><code>num_computed_tokens</code> 重置为 0（丢弃已计算的 KV Cache）</li>
+          <li>释放所有 KV Cache 块（<code>kv_cache_manager.free(request)</code>）</li>
+          <li>放回 <code>waiting</code> 队列头部（<code>self.waiting.prepend_request(request)</code>）</li>
+          <li><code>num_preemptions</code> 计数增加</li>
+        </ul>
+        <p>值得注意的是，vLLM V1 目前采用的是<strong>重新计算（recomputation）</strong>策略而非<strong>换出（swap out）</strong>。即被抢占的请求不将 KV Cache 换出到 CPU 内存，而是直接丢弃，下次调度时重新计算。</p>
+        <p><strong>调度 WAITING 请求</strong>：</p>
+        <p>在处理完所有 running 请求后，若还有剩余 token budget 且未达到 <code>max_num_running_reqs</code>，调度器开始处理 waiting 请求。对于 waiting 请求，调度器首先尝试<strong>前缀缓存命中</strong>：</p>
+        <pre><code>new_computed_blocks, num_new_local_computed_tokens = (
+    self.kv_cache_manager.get_computed_blocks(request)
+)</code></pre>
+        <p>若命中前缀缓存，则 <code>num_computed_tokens</code> 直接跳到缓存长度，无需重新计算前缀部分的 KV。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>AsyncScheduler 异步调度机制</h4>
+        <p><code>AsyncScheduler</code>（<code>vllm/v1/core/sched/async_scheduler.py</code>）[S8] 继承自 <code>Scheduler</code>，实现了<strong>异步调度</strong>能力。其核心思想是：调度器在 CPU 上准备下一个 batch 的同时，GPU 正在执行当前 batch 的前向传播。这消除了 CPU 调度延迟对 GPU 利用率的影响。</p>
+        <p><code>AsyncScheduler</code> 的关键修改在于 <code>_update_after_schedule</code>：</p>
+        <pre><code>def _update_after_schedule(self, scheduler_output: SchedulerOutput) -> None:
+    super()._update_after_schedule(scheduler_output)
+    spec_decode_tokens = scheduler_output.scheduled_spec_decode_tokens
+    for req_id in scheduler_output.num_scheduled_tokens:
+        request = self.requests[req_id]
+        if request.is_prefill_chunk:
+            continue
+        cur_num_spec_tokens = len(spec_decode_tokens.get(req_id, ()))
+        request.num_output_placeholders += 1 + cur_num_spec_tokens
+        request.spec_token_ids = self._spec_token_placeholders</code></pre>
+        <p>这里引入了 <code>num_output_placeholders</code> 概念：对于每个被调度的 decode 请求，AsyncScheduler 预期它将在当前 step 生成 <code>1 + num_spec_tokens</code> 个新 token（1 个确定性的新 token + 若干个 speculative token）。这些 token 在调度时还未实际生成，因此用 placeholder 计数。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>性能数据</h4>
+        <table>
+          <thead>
+            <tr><th>指标</th><th>静态批处理 (HF Transformers)</th><th>Continuous Batching (vLLM)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>相对吞吐量</td><td>1x</td><td>23x (Anyscale) / 24x (vLLM 论文)</td></tr>
+            <tr><td>等效延迟下吞吐量 vs FasterTransformer</td><td>1x</td><td>36.9x (ORCA)</td></tr>
+            <tr><td>GPU 利用率</td><td>20-40%</td><td>80-95%</td></tr>
+            <tr><td>批处理尾部 padding 浪费</td><td>30-60%</td><td>~0%</td></tr>
+          </tbody>
+        </table>
+        <p>在实际生产环境中，continuous batching 的收益取决于工作负载的生成长度方差。方差越大（即请求间输出长度差异越大），continuous batching 相比 static batching 的优势越明显。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Continuous Batching 与 PagedAttention 的关系</h4>
+        <p><strong>Continuous Batching 依赖 PagedAttention 的灵活内存管理</strong>。在 static batching 中，每个请求的 KV Cache 槽位是固定的；而在 continuous batching 中，请求在每步结束后动态加入或退出，KV Cache 的分配和释放极其频繁。没有 PagedAttention 的细粒度 block 管理，这种动态调度将导致严重的内存碎片和分配失败。</p>
+        <p><strong>PagedAttention 的 Copy-on-Write 机制使 continuous batching 中的并行采样和束搜索成为可能</strong>。当多个请求共享前缀时，它们可以共用相同的物理块，只在发生分歧时才复制，这大幅降低了 continuous batching 场景下的内存压力。</p>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 2.3 Chunked Prefill -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>2.3 Chunked Prefill</h3>
+        <span class="tag tag-cyan">性能优化</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>为什么需要 Chunked Prefill</h4>
+        <p>在 LLM 推理中，Prefill 阶段和 Decode 阶段具有截然不同的计算特征：</p>
+        <ul>
+          <li><strong>Prefill</strong>: 计算密集型（compute-bound），一次性处理整个 prompt，可利用矩阵乘法的并行性。</li>
+          <li><strong>Decode</strong>: 内存密集型（memory-bound），每次只处理一个（或少数几个）新 token，主要开销在于读取庞大的 KV Cache。</li>
+        </ul>
+        <p>在没有 chunked prefill 的系统中，当一个长 prompt 请求（如 4096 tokens）进入系统时，它会在一个 step 中独占整个 GPU，执行 prefill 计算。在此期间：</p>
+        <ul>
+          <li>所有正在 decode 的请求必须等待，导致它们的 <strong>ITL（Inter-Token Latency）</strong> 急剧增加。</li>
+          <li>若批处理中同时存在 prefill 和 decode 请求，整个 step 的执行时间由 prefill 决定（因为 prefill 的计算量远大于 decode），decode 请求被"阻塞"。</li>
+        </ul>
+        <p>Chunked Prefill 通过将长 prefill 拆分为多个小块，使得 prefill 和 decode 可以<strong>交错执行</strong>，从而显著改善 ITL 和系统响应性 [S19][S25]。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Chunk 大小如何确定</h4>
+        <p>Chunk 大小由 <strong><code>max_num_batched_tokens</code></strong> 参数控制 [S19][S25]。</p>
+        <p>在 vLLM V1 中，chunked prefill 默认开启。调度器在每个 step 中：</p>
+        <ol>
+          <li>优先调度所有 pending decode 请求（因为 decode 请求的延迟敏感度高）。</li>
+          <li>将剩余 token budget 分配给 waiting 请求进行 prefill。</li>
+          <li>若某个 waiting 请求的 prefill token 数超过剩余 budget，则只调度 budget 内的部分，剩余部分留到下一个 step。</li>
+        </ol>
+        <p>代码逻辑体现在 <code>scheduler.py</code> [S3]：</p>
+        <pre><code>if (
+    not self.scheduler_config.enable_chunked_prefill
+    and num_new_tokens &gt; token_budget
+):
+    break
+num_new_tokens = min(num_new_tokens, token_budget)</code></pre>
+        <p><strong><code>max_num_batched_tokens</code> 的调优</strong>：</p>
+        <ul>
+          <li><strong>较小值（如 512-2048）</strong>:
+            <ul>
+              <li>优点：更好的 ITL，因为 prefill chunk 较小，不会长时间阻塞 decode 请求。</li>
+              <li>缺点：更差的 TTFT（Time To First Token），因为长 prompt 需要更多 step 才能完成 prefill。</li>
+              <li>适用场景：对流式输出、低延迟聊天应用敏感的场景。</li>
+            </ul>
+          </li>
+          <li><strong>较大值（如 8192-32768）</strong>:
+            <ul>
+              <li>优点：更好的 TTFT 和吞吐量，因为更大的 chunk 可以更充分地利用 GPU 计算单元。</li>
+              <li>缺点：更高的 ITL，因为大 chunk 的 prefill 会阻塞 decode 更长时间。</li>
+              <li>适用场景：离线批处理、高吞吐量优先的场景。</li>
+            </ul>
+          </li>
+        </ul>
+        <p>vLLM V1 的默认值：</p>
+        <ul>
+          <li>在线服务（online serving）: 8192</li>
+          <li>离线处理（offline）: 16384</li>
+        </ul>
+        <p>AMD ROCm 文档建议 [S26]：</p>
+        <ul>
+          <li>交互式场景（低 TTFT）: max_num_batched_tokens &lt;= 8k-16k</li>
+          <li>流式 decode（低 ITL）: 16k-32k</li>
+          <li>离线最大吞吐量: &gt;= 32k</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>Prefill 和 Decode 的交错执行策略</h4>
+        <p>在 vLLM V1 的调度策略中，decode 请求被<strong>优先调度</strong> [S19]。具体流程：</p>
+        <ol>
+          <li><strong>Decode 优先</strong>: 在 <code>schedule()</code> 的第一阶段，所有 <code>running</code> 请求（主要是 decode 阶段的请求）首先被考虑。它们的 <code>num_new_tokens</code> 通常为 1（或少量 speculative tokens）。</li>
+          <li><strong>Prefill 填充</strong>: 处理完所有 decode 请求后，剩余的 <code>token_budget</code> 用于调度 waiting 请求的 prefill。</li>
+          <li><strong>混合执行</strong>: 一个 batch 中可能同时包含 prefill tokens（来自新请求的 chunk）和 decode tokens（来自现有请求）。vLLM V1 的 attention backend（如 FlashAttention）支持这种混合 batch 的注意力计算。</li>
+        </ol>
+        <p>这种策略的好处是：</p>
+        <ul>
+          <li><strong>计算与内存带宽重叠</strong>: Prefill 是计算密集的，decode 是内存带宽密集的。将它们放在同一个 batch 中，可以更均衡地利用 GPU 资源。</li>
+          <li><strong>延迟隐藏</strong>: 长 prefill 被拆分为多个 chunk，每个 chunk 只阻塞 decode 一小段时间。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM V1 中默认开启的实现</h4>
+        <p>vLLM V1 的 chunked prefill 实现是<strong>默认开启</strong>的，与 V0 需要显式设置 <code>--enable-chunked-prefill</code> 不同 [S19]。</p>
+        <p>在 <code>Scheduler.__init__</code> 中 [S3]：</p>
+        <pre><code>self.max_num_scheduled_tokens = (
+    self.scheduler_config.max_num_scheduled_tokens
+    if self.scheduler_config.max_num_scheduled_tokens
+    else self.scheduler_config.max_num_batched_tokens
+)</code></pre>
+        <p><code>max_num_scheduled_tokens</code> 实际上就是 <code>max_num_batched_tokens</code>。调度器在每个 step 中确保总调度 token 数不超过此限制。</p>
+        <p>对于 waiting 请求，<code>long_prefill_token_threshold</code> 参数提供了额外的限制 [S3]：</p>
+        <pre><code>if 0 &lt; self.scheduler_config.long_prefill_token_threshold &lt; num_new_tokens:
+    num_new_tokens = self.scheduler_config.long_prefill_token_threshold</code></pre>
+        <p>这允许用户设置一个上限，防止单个请求在一个 step 中占用过多 token budget。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>对 TTFT 和 ITL 的 Trade-off 分析</h4>
+        <p><strong>数学分析</strong>：</p>
+        <p>假设：</p>
+        <ul>
+          <li>Prompt 长度: P</li>
+          <li>max_num_batched_tokens = B</li>
+          <li>Decode 阶段每个 step 生成 1 个 token</li>
+        </ul>
+        <p><strong>无 chunked prefill 时</strong>：</p>
+        <ul>
+          <li>Prefill 在 1 个 step 内完成，耗时 T_prefill(P)。</li>
+          <li>TTFT = T_prefill(P)。</li>
+          <li>对于正在 decode 的其他请求，该 step 中它们被完全阻塞，ITL 增加 T_prefill(P)。</li>
+        </ul>
+        <p><strong>有 chunked prefill 时</strong>：</p>
+        <ul>
+          <li>Prefill 被拆分为 ceil(P / B) 个 chunk。</li>
+          <li>每个 chunk 的耗时约为 T_prefill(B)（假设 prefill 时间与 token 数近似线性）。</li>
+          <li>TTFT = ceil(P / B) × T_step，其中 T_step 是每个 step 的总时间（包含交错 decode）。</li>
+          <li>对于其他 decode 请求，每个 step 仅被阻塞 T_prefill(B)，ITL 增加显著降低。</li>
+        </ul>
+        <p><strong>实际性能数据</strong>：</p>
+        <p>根据 vLLM 官方文档 [S19]：</p>
+        <ul>
+          <li>当 <code>max_num_batched_tokens</code> 从 512 提升到 8192 时：
+            <ul>
+              <li>TTFT 改善约 <strong>3-5 倍</strong>（因为更大的 chunk 减少了 prefill step 数）</li>
+              <li>ITL 轻微增加（约 <strong>10-20%</strong>）</li>
+              <li>整体吞吐量提升约 <strong>20-40%</strong></li>
+            </ul>
+          </li>
+        </ul>
+        <p>在 ShareGPT 等真实工作负载上，推荐的 <code>max_num_batched_tokens</code> 设置：</p>
+        <ul>
+          <li>小型模型（&lt; 13B）+ 大 GPU（A100/H100）: 16384 或更高</li>
+          <li>大型模型（70B+）: 8192-16384</li>
+          <li>低延迟场景: 2048-4096</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>Chunked Prefill 与 Continuous Batching 的关系</h4>
+        <p><strong>Chunked Prefill 是 Continuous Batching 的增强</strong>。在纯 Continuous Batching 中，长 prefill 请求一旦开始就会阻塞所有 decode 请求直到完成。Chunked Prefill 通过将长 prefill 切分为小块，使得 prefill 和 decode 可以在同一个 step 中交错执行，从而在保持 high batch utilization 的同时，避免长 prefill 对 decode ITL 的剧烈冲击。</p>
+        <p><strong>两者结合的工作流程</strong>：每个 step 中，调度器首先为所有 running decode 请求分配 token slot（每个 1 token），然后将剩余的 token budget 用于 waiting 请求的 prefill chunk。这样，decode 请求几乎不会被完全阻塞，而 prefill 请求也能逐步推进。</p>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 2.4 Prefix Caching -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>2.4 Prefix Caching</h3>
+        <span class="tag tag-emerald">缓存优化</span>
+      </div>
+
+      <p>Prefix Caching（前缀缓存）是一种避免重复计算共享前缀 KV Cache 的优化技术。在 LLM 服务中，多个请求经常共享相同的前缀，例如：</p>
+      <ul>
+        <li>多轮对话中的系统 prompt 和历史记录</li>
+        <li>RAG（检索增强生成）中的相同检索上下文</li>
+        <li>批量推理中使用相同的指令模板</li>
+        <li>并行采样（parallel sampling）中相同的输入 prompt</li>
+      </ul>
+      <p>Prefix Caching 的核心思想是：将已计算的前缀 KV Cache 存储在内存中，当新请求到达时，检查其前缀是否与已缓存的内容匹配。若匹配，则直接复用缓存的 KV Cache，只需计算不匹配的后缀部分。</p>
+
+      <div class="sub-section">
+        <h4>vLLM 的 Block Hash 内容寻址机制</h4>
+        <p>vLLM 的 Prefix Caching 实现基于 PagedAttention 的块级内容寻址 [S4][S5][S6]。</p>
+        <p><strong>块哈希链</strong>：</p>
+        <p>每个块的哈希不仅取决于其包含的 token IDs，还取决于其父块的哈希。这形成了一个<strong>哈希链</strong>：</p>
+        <pre><code>Block 0 hash = hash(NONE_HASH, tokens[0:BS], extra_keys_0)
+Block 1 hash = hash(Block 0 hash, tokens[BS:2*BS], extra_keys_1)
+Block 2 hash = hash(Block 1 hash, tokens[2*BS:3*BS], extra_keys_2)
+...</code></pre>
+        <p>其中 BS 是 block_size。这种链式结构确保了：</p>
+        <ul>
+          <li>两个请求若前 N 个 token 完全相同，则它们的前 N/BS 个块哈希必然完全相同。</li>
+          <li>即使块内 token 相同，若父块不同，哈希也不同（防止不相关序列的碰撞）。</li>
+        </ul>
+        <p><strong>BlockHashToBlockMap</strong>：</p>
+        <p><code>BlockHashToBlockMap</code> 是前缀缓存的核心索引结构 [S4]：</p>
+        <pre><code>class BlockHashToBlockMap:
+    def __init__(self):
+        self._cache: dict[BlockHashWithGroupId, KVCacheBlock | dict[int, KVCacheBlock]] = {}</code></pre>
+        <p>它支持三种操作：</p>
+        <ol>
+          <li><code>get_one_block(key)</code>: 返回具有给定哈希的任意一个物理块。</li>
+          <li><code>insert(key, block)</code>: 将新块插入缓存。</li>
+          <li><code>pop(key, block_id)</code>: 按块 ID 从缓存中移除特定块。</li>
+        </ol>
+        <p>值得注意的是，vLLM <strong>不进行块去重</strong> [S4]：</p>
+        <pre><code>NOTE #1: We currently don't de-duplicate the blocks in the cache,
+meaning that if a block becomes full and is cached, we don't check
+if there is already an identical block in the cache.</code></pre>
+        <p>这是为了保持 block table 的追加-only 语义，简化调度器逻辑。</p>
+        <p><strong>前缀缓存命中查找</strong>：</p>
+        <p><code>FullAttentionManager.find_longest_cache_hit</code> [S6] 实现了最长前缀缓存命中查找：</p>
+        <pre><code>@classmethod
+def find_longest_cache_hit(cls, block_hashes, max_length, kv_cache_group_ids, block_pool, ...):
+    computed_blocks = tuple([] for _ in range(len(kv_cache_group_ids)))
+    block_size = kv_cache_spec.block_size
+    max_num_blocks = max_length // block_size
+    for block_hash in itertools.islice(block_hashes, max_num_blocks):
+        if cached_block := block_pool.get_cached_block(block_hash, kv_cache_group_ids):
+            for computed, cached in zip(computed_blocks, cached_block):
+                computed.append(cached)
+        else:
+            break
+    if use_eagle and computed_blocks[0]:
+        for computed in computed_blocks:
+            computed.pop()  # EAGLE 需要丢弃最后一个匹配块
+    return computed_blocks</code></pre>
+        <p>查找逻辑是<strong>顺序扫描</strong>：从第一个块开始，依次检查每个块哈希是否在缓存中。一旦遇到未缓存的块，立即停止（因为哈希链的性质保证了后续块必然也未缓存）。</p>
+        <p><strong>块缓存与驱逐</strong>：</p>
+        <p>当请求完成一个块的计算后，<code>cache_blocks</code> 方法将其注册到缓存 [S6][S7]：</p>
+        <pre><code>def cache_blocks(self, request: Request, num_tokens: int) -> None:
+    num_cached_blocks = self.num_cached_block.get(request.request_id, 0)
+    num_full_blocks = num_tokens // self.block_size
+    if num_cached_blocks >= num_full_blocks:
+        return
+    self.block_pool.cache_full_blocks(
+        request=request,
+        blocks=self.req_to_blocks[request.request_id],
+        num_cached_blocks=num_cached_blocks,
+        num_full_blocks=num_full_blocks,
+        block_size=self.block_size,
+        kv_cache_group_id=self.kv_cache_group_id,
+    )
+    self.num_cached_block[request.request_id] = num_full_blocks</code></pre>
+        <p>只有<strong>完整填满</strong>的块（即包含 block_size 个 token）才会被缓存。这是为了避免缓存不完整的块，因为不完整块的内容可能在后续步骤中改变。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>SGLang 的 RadixAttention（Radix Tree）对比</h4>
+        <table>
+          <thead>
+            <tr><th>特性</th><th>vLLM (PagedAttention + APC)</th><th>SGLang (RadixAttention)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>数据结构</td><td>哈希表 (BlockHashToBlockMap)</td><td>Radix Tree（压缩 Trie）</td></tr>
+            <tr><td>匹配粒度</td><td>块级 (block_size tokens)</td><td>令牌级 (token-level)</td></tr>
+            <tr><td>匹配方式</td><td>精确块哈希匹配</td><td>最长公共前缀匹配</td></tr>
+            <tr><td>分支支持</td><td>有限（块表追加-only）</td><td>原生支持（树的分支结构）</td></tr>
+            <tr><td>配置需求</td><td>需显式开启 --enable-prefix-caching</td><td>自动，零配置</td></tr>
+            <tr><td>驱逐策略</td><td>LRU（free_block_queue 顺序）</td><td>LRU（叶节点）</td></tr>
+            <tr><td>生成结果缓存</td><td>不支持</td><td>支持（多轮历史复用）</td></tr>
+          </tbody>
+        </table>
+        <p><strong>Radix Tree 工作原理</strong>：</p>
+        <p>RadixAttention 将 KV Cache 块组织为一棵 Radix Tree（基数树/压缩前缀树）[S24]：</p>
+        <ul>
+          <li><strong>边（Edge）</strong>: 存储 token 序列（而非单个 token）。</li>
+          <li><strong>节点（Node）</strong>: 对应一个 KV Cache 块。</li>
+          <li><strong>根到叶路径</strong>: 表示一个完整的 token 序列。</li>
+        </ul>
+        <p>当新请求到达时：</p>
+        <ol>
+          <li>从根节点开始，沿树向下遍历。</li>
+          <li>将请求的 token 序列与边上的 token 序列逐一匹配。</li>
+          <li>找到最长公共前缀对应的节点。</li>
+          <li>若在某个边上部分匹配，则将该边分裂为两条：公共前缀部分和新后缀部分。</li>
+          <li>从匹配点继续计算剩余的 token。</li>
+        </ol>
+        <p><strong>关键差异分析</strong>：</p>
+        <p><strong>vLLM 的优势</strong>：</p>
+        <ul>
+          <li>块级哈希实现简单，查找速度快（O(num_blocks)）。</li>
+          <li>与 PagedAttention 的块管理天然契合。</li>
+          <li>工业验证充分，vLLM 已被广泛部署。</li>
+        </ul>
+        <p><strong>vLLM 的劣势</strong>：</p>
+        <ul>
+          <li>匹配粒度受限于 block_size（默认 16 tokens）。若前缀长度不是 block_size 的整数倍，最后一块无法命中。</li>
+          <li>不支持动态分支。一旦某请求修改了共享块中的内容（如 beam search 中的分支），需要 CoW 复制整个块。</li>
+        </ul>
+        <p><strong>SGLang 的优势</strong>：</p>
+        <ul>
+          <li>令牌级匹配精度更高，不受 block_size 限制。</li>
+          <li>天然支持分支和树形结构（如多轮对话、agent 工具调用）。</li>
+          <li>自动发现缓存机会，无需配置。</li>
+        </ul>
+        <p><strong>SGLang 的劣势</strong>：</p>
+        <ul>
+          <li>Radix Tree 的遍历和维护开销高于哈希表。</li>
+          <li>在高度随机的请求分布下，Radix Tree 的缓存命中率可能不如块级哈希稳定。</li>
+        </ul>
+        <p>实际性能对比 [S22]：</p>
+        <ul>
+          <li>在 80% 共享前缀的工作负载下，SGLang 的 TTFT 比 vLLM 快 <strong>2-6 倍</strong>。</li>
+          <li>在无共享前缀的随机工作负载下，两者性能差异缩小到 <strong>10-20%</strong>。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>自动前缀缓存的命中条件和失效策略</h4>
+        <p><strong>命中条件</strong>：</p>
+        <p>在 vLLM V1 中，前缀缓存命中需要满足以下条件 [S6][S7]：</p>
+        <ol>
+          <li><strong>块满</strong>: 只有包含完整 block_size 个 token 的块才会被缓存。</li>
+          <li><strong>哈希一致</strong>: 块的哈希必须与请求当前位置的预期哈希完全匹配（包括父块哈希链和 extra_keys）。</li>
+          <li><strong>KV Cache Group 一致</strong>: 对于混合模型，每个 KV cache group 必须独立命中。</li>
+          <li><strong>EAGLE 特殊处理</strong>: 若启用 EAGLE，最后一个匹配块会被丢弃，因为 EAGLE 需要该块的隐藏状态来生成 draft token。</li>
+          <li><strong>滑动窗口约束</strong>: 对于 sliding window attention，需要至少 sliding_window_contiguous_blocks 个连续命中块。</li>
+        </ol>
+        <p><strong>失效策略</strong>：</p>
+        <p>vLLM V1 的前缀缓存失效策略包括 [S4][S7]：</p>
+        <ol>
+          <li><strong>LRU 驱逐</strong>: 当需要分配新块且空闲队列耗尽时，从队列头部（最久未使用）取出的块若带有缓存哈希，则自动驱逐。</li>
+          <li><strong>显式重置</strong>: <code>reset_prefix_cache()</code> 方法可清空所有缓存。</li>
+          <li><strong>滑动窗口回收</strong>: 对于 sliding window attention，超出窗口范围的块被自动释放。</li>
+          <li><strong>请求完成释放</strong>: 请求完成后，<code>free_blocks</code> 递减 <code>ref_cnt</code>。当 <code>ref_cnt</code> 降为 0 时，块回到空闲队列，但<strong>不自动清除其缓存哈希</strong>。只有当该块被重新分配时，其缓存哈希才会被驱逐。</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>多轮对话和 RAG 场景中的收益</h4>
+        <p><strong>多轮对话</strong>：</p>
+        <p>在多轮对话中，后续轮次通常共享前几轮的对话历史作为前缀。Prefix Caching 的收益取决于：</p>
+        <ul>
+          <li><strong>命中长度</strong>: 若每轮新增内容较少（如 50 tokens），而历史较长（如 2000 tokens），则缓存命中率可达 2000 / 2050 ≈ 97.5%。</li>
+          <li><strong>块对齐</strong>: 由于 vLLM 按块缓存，若历史长度不是 block_size 的倍数，最后一块（最多 block_size-1 个 token）需要重新计算。</li>
+          <li><strong>动态变化</strong>: 若对话历史在不同请求间有细微差异（如时间戳、用户名），前缀缓存可能完全失效。此时 SGLang 的 RadixAttention 更具优势，因为它可以在树的不同分支上共享公共前缀。</li>
+        </ul>
+        <p><strong>RAG 场景</strong>：</p>
+        <p>在 RAG 中，多个请求可能使用相同的检索文档作为上下文：</p>
+        <ul>
+          <li><strong>文档级共享</strong>: 若多个查询使用相同的检索结果，文档部分的 KV Cache 可完全共享。</li>
+          <li><strong>查询级差异</strong>: 每个查询的问题部分不同，但从文档末尾开始分叉。vLLM 的块级缓存可以有效共享文档块，而查询块独立计算。</li>
+          <li><strong>收益估算</strong>: 假设文档长度为 1024 tokens，查询长度为 64 tokens，block_size=16。则文档部分有 64 个块可共享，查询部分有 4 个块独立计算。Prefill 计算量减少约 64/68 ≈ 94%。</li>
+        </ul>
+        <p><strong>性能数据</strong>：</p>
+        <table>
+          <thead>
+            <tr><th>场景</th><th>前缀共享比例</th><th>TTFT 降低</th><th>吞吐量提升</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>多轮聊天（系统 prompt 共享）</td><td>60-80%</td><td>40-60%</td><td>1.5-2x</td></tr>
+            <tr><td>RAG（相同文档）</td><td>80-95%</td><td>60-80%</td><td>2-4x</td></tr>
+            <tr><td>批量模板推理</td><td>90-99%</td><td>80-90%</td><td>3-6x</td></tr>
+            <tr><td>无共享前缀</td><td>0%</td><td>0%</td><td>无变化</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>Prefix Caching 与 PagedAttention 的关系</h4>
+        <p><strong>Prefix Caching 建立在 PagedAttention 的 block 管理之上</strong>。没有 PagedAttention 的细粒度 block 分配和引用计数机制，Prefix Caching 无法实现：</p>
+        <ul>
+          <li>多个请求共享同一个物理块的 KV Cache（通过 <code>ref_cnt</code> 管理）。</li>
+          <li>块级别的内容寻址（通过 <code>_block_hash</code> 字段）。</li>
+          <li>缓存块的按需分配和驱逐（通过 <code>BlockPool</code> 的空闲队列管理）。</li>
+        </ul>
+        <p><strong>PagedAttention 的 Copy-on-Write 机制是 Prefix Caching 安全共享的前提</strong>。当多个请求共享缓存的前缀块时，若其中一个请求需要修改该块（如生成了新的内容），CoW 机制会自动复制该块，确保其他请求仍能安全地读取原始缓存内容。</p>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 2.5 Speculative Decoding -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>2.5 Speculative Decoding</h3>
+        <span class="tag tag-purple">加速技术</span>
+      </div>
+
+      <p>Speculative Decoding（投机解码）是一种加速 LLM 自回归生成的技术。其核心思想是：使用一个<strong>快速的 Draft Model（草稿模型）</strong>预测未来若干个 token，然后用<strong>慢速但精确的 Target Model（目标模型）</strong>并行验证这些预测。验证过程中，目标模型一次性处理 draft tokens 序列，通过概率比较决定接受或拒绝每个 draft token。被接受的 draft tokens 直接输出，无需重新计算；被拒绝位置之后的 tokens 被丢弃，从拒绝点重新开始 [S21][S27]。</p>
+      <p>投机解码的关键洞察是：在 GPU 上执行一次大规模前向传播（验证多个 token）的速度远快于执行多次小规模前向传播（逐个生成 token）。即使 draft model 的准确率不高，只要验证步骤足够快，整体吞吐量仍可显著提升。</p>
+
+      <div class="sub-section">
+        <h4>Draft 方式对比</h4>
+        <table>
+          <thead>
+            <tr><th>方法</th><th>原理</th><th>额外内存开销</th><th>加速比</th><th>典型接受长度</th><th>适用场景</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>N-gram</strong></td><td>基于输入序列本身的 n-gram 匹配生成 draft token</td><td>无</td><td>1.0-1.3x</td><td>1.1-1.5</td><td>重复性高的文本（代码、模板）</td></tr>
+            <tr><td><strong>Draft Model（独立小模型）</strong></td><td>使用完整独立小模型（如 7B draft 70B target）</td><td>~10%</td><td>1.5-2.0x</td><td>2-3</td><td>通用场景</td></tr>
+            <tr><td><strong>EAGLE</strong></td><td>在 target model 隐藏状态之上训练的轻量级外推头（1-2 层 Transformer）</td><td>~3-5%</td><td>1.54-2.36x</td><td>2.5-3.5</td><td>高质量 draft 需求</td></tr>
+            <tr><td><strong>MLP Draft（Medusa）</strong></td><td>使用简单 MLP 层从 target 隐藏状态预测未来 token</td><td>很小</td><td>1.2-1.5x</td><td>1.5-2</td><td>快速部署</td></tr>
+            <tr><td><strong>MTP（Multi-Token Prediction）</strong></td><td>将投机解码能力内建到目标模型中（如 DeepSeek V3）</td><td>内建</td><td>1.5-1.8x</td><td>2-3</td><td>模型原生支持</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>N-gram 方法</h4>
+        <p><code>NgramProposer</code> 不需要任何额外模型，完全基于输入序列本身的 n-gram 匹配来生成 draft token。实现上使用 Numba JIT 编译加速的 LPS（Longest Prefix Suffix）算法 [S11]：</p>
+        <pre><code>@jit(nopython=True)
+def _find_longest_matched_ngram_and_propose_tokens(origin_tokens, min_ngram, max_ngram, ...):
+    tokens = origin_tokens[::-1]
+    lps = np.zeros(max_ngram, dtype=np.int32)
+    longest_ngram = 0
+    position = 0
+    prev_lps = 0
+    i = 1
+    while i &lt; total_token:
+        if tokens[prev_lps] == tokens[i]:
+            prev_lps += 1
+            if prev_lps &gt;= longest_ngram:
+                longest_ngram = prev_lps
+                position = i
+            if i &lt; max_ngram:
+                lps[i] = prev_lps
+            if prev_lps == max_ngram:
+                prev_lps = lps[max_ngram - 1]
+            i += 1
+        elif prev_lps != 0:
+            prev_lps = lps[prev_lps - 1]
+        else:
+            i += 1</code></pre>
+        <p>优势：零额外内存开销，对重复性高的文本效果极佳。</p>
+        <p>劣势：对创造性文本效果差。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>EAGLE 方法</h4>
+        <p><code>EagleProposer</code> 使用 EAGLE 方法。EAGLE 不是完整的独立模型，而是在 target model 的隐藏状态之上训练的一个轻量级外推头（通常只有 1-2 层 Transformer）。</p>
+        <pre><code>class EagleProposer(SpecDecodeBaseProposer):
+    def __init__(self, vllm_config, device, runner=None):
+        super().__init__(vllm_config, device,
+                         pass_hidden_states_to_model=True, runner=runner)</code></pre>
+        <p><code>pass_hidden_states_to_model=True</code> 表示 EAGLE 需要接收 target model 的隐藏状态作为输入，而非原始 token IDs。</p>
+        <p>EAGLE 的优势：</p>
+        <ul>
+          <li>模型体积极小（通常只有 target 模型的 1-5%）。</li>
+          <li>直接利用 target 的特征表示，draft 质量高。</li>
+          <li>可与 target 模型共享部分 KV Cache。</li>
+        </ul>
+        <p>SGLang 的测试显示 [S27]，EAGLE-2 在 LLaMA-3.1-8B 上可达 <strong>1.54x 加速</strong>，EAGLE-3 可达 <strong>2.36x 加速</strong>。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>原生 Multi-Token Prediction（MTP）</h4>
+        <p>Multi-Token Prediction（MTP）是一种将投机解码能力<strong>内建到目标模型</strong>中的技术 [S21][S24][S28]。与需要独立 draft model 的方法不同，MTP 在目标模型的训练阶段就加入了多个预测头，每个头负责预测未来不同位置的 token。</p>
+        <p><strong>DeepSeek V3 的 MTP</strong>：</p>
+        <p>DeepSeek V3 采用了 MTP 架构 [S21]。其结构特点：</p>
+        <ul>
+          <li>在主模型的每个 Transformer 层（或顶层）附加多个预测头。</li>
+          <li>第 i 个预测头基于当前隐藏状态预测第 i+1 个未来 token。</li>
+          <li>所有预测头共享主模型的 KV Cache。</li>
+        </ul>
+        <p>在推理时：</p>
+        <ol>
+          <li>主模型执行一次前向传播。</li>
+          <li>各 MTP 头并行输出多个候选 token。</li>
+          <li>主模型的最终输出层验证这些候选 token。</li>
+        </ol>
+        <p><strong>Gemma 4 的 Assistant Models</strong>：</p>
+        <p>Gemma 4 使用了专门的 Assistant Model（助手模型）实现 MTP [S20][S28]。vLLM 中的 <code>Gemma4Proposer</code> [S13] 专门处理这种情况：</p>
+        <pre><code>class Gemma4Proposer(SpecDecodeBaseProposer):
+    def __init__(self, vllm_config, device, runner=None):
+        super().__init__(vllm_config, device,
+                         pass_hidden_states_to_model=True, runner=runner)
+        self.constant_draft_positions = True</code></pre>
+        <p><code>constant_draft_positions = True</code> 是 Gemma 4 MTP 的关键特征：所有 draft 步骤从<strong>同一位置</strong>预测（即 target model 的最后一个位置），而不是像自回归那样逐步前进。这是因为 Gemma 4 的 assistant model 使用 cross-attention 或 Q-only attention 机制，直接基于 target 的完整上下文预测未来 token。</p>
+        <p><code>Gemma4Proposer</code> 还实现了与 target model 的 <strong>KV Cache 共享</strong> [S13]：</p>
+        <pre><code>def _setup_gemma4_kv_sharing(self, target_attn_layer_names):
+    for draft_idx, layer in enumerate(self.model.model.layers):
+        attn = getattr(layer.self_attn, "attn", None)
+        draft_layer_type = draft_layer_types[draft_idx]
+        candidates = type_to_target_indices.get(draft_layer_type, [])
+        target_idx = candidates[-1]
+        target_layer_name = f"{target_prefix}.{target_idx}.self_attn.attn"
+        attn.kv_sharing_target_layer_name = target_layer_name</code></pre>
+        <p>每个 draft decoder layer 映射到相同 attention 类型的最后一个非共享 target layer，从而实现 KV Cache 的跨模型复用。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>验证流程的详细步骤与接受率计算</h4>
+        <p><strong>标准验证流程</strong>：</p>
+        <p>投机解码的验证流程如下 [S12][S27]：</p>
+        <ol>
+          <li><strong>Draft 阶段</strong>: Draft model 生成 k 个候选 token：d₁, d₂, ..., dₖ。</li>
+          <li><strong>Target 前向传播</strong>: Target model 接收原始序列 [x₁, ..., xₜ] 和 draft tokens [d₁, ..., dₖ]，一次性计算 k+1 个位置的概率分布：
+            <ul>
+              <li>p₀ = P(target | x₁, ..., xₜ)（原始下一个 token 的分布）</li>
+              <li>p₁ = P(target | x₁, ..., xₜ, d₁)</li>
+              <li>...</li>
+              <li>pₖ = P(target | x₁, ..., xₜ, d₁, ..., dₖ)</li>
+            </ul>
+          </li>
+          <li><strong>逐位置接受/拒绝</strong>:
+            <ul>
+              <li>对于位置 i，计算 draft model 在该位置的概率 qᵢ = P(draft | context, d₁, ..., dᵢ₋₁)。</li>
+              <li>接受概率为 min(1, pᵢ(dᵢ) / qᵢ(dᵢ))。</li>
+              <li>以该概率接受 dᵢ。若接受，继续验证 dᵢ₊₁。</li>
+              <li>若拒绝，从修正分布 norm(max(0, pᵢ − qᵢ)) 中采样一个新 token x'，输出 x'，并丢弃 dᵢ₊₁, ..., dₖ。</li>
+            </ul>
+          </li>
+          <li><strong>Bonus Token</strong>: 若所有 k 个 draft token 都被接受，target model 在最后一个位置已经计算了 pₖ，可以直接从中采样一个额外的 token，相当于一次验证获得了 k+1 个 token。</li>
+        </ol>
+        <p><strong>接受率计算</strong>：</p>
+        <p>接受率（Acceptance Rate）是衡量投机解码效果的核心指标 [S14]：</p>
+        <pre><code>@dataclass
+class SpecDecodingStats:
+    num_spec_tokens: int
+    num_drafts: int = 0
+    num_draft_tokens: int = 0
+    num_accepted_tokens: int = 0
+    num_accepted_tokens_per_pos: list[int] = field(default_factory=list)
+
+    def observe_draft(self, num_draft_tokens: int, num_accepted_tokens: int):
+        self.num_drafts += 1
+        self.num_draft_tokens += num_draft_tokens
+        self.num_accepted_tokens += num_accepted_tokens</code></pre>
+        <p>关键指标：</p>
+        <ul>
+          <li><strong>Draft Acceptance Rate</strong> = num_accepted_tokens / num_draft_tokens × 100%</li>
+          <li><strong>Mean Acceptance Length</strong> = 1 + (num_accepted_tokens / num_drafts)（包含 bonus token）</li>
+          <li><strong>Per-position Acceptance Rate</strong>: 第 i 个 draft 位置被接受的概率，通常随位置增加而递减。</li>
+        </ul>
+        <p>在 vLLM V1 的 <code>Scheduler.update_from_output</code> [S3] 中，验证结果的统计如下：</p>
+        <pre><code>if scheduled_spec_token_ids and generated_token_ids:
+    num_draft_tokens = len(scheduled_spec_token_ids)
+    num_accepted = len(generated_token_ids) - 1
+    num_rejected = num_draft_tokens - num_accepted
+    if request.num_computed_tokens &gt; 0:
+        request.num_computed_tokens -= num_rejected</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 Continuous Batching 的兼容性（Ragged Tensor）</h4>
+        <p>投机解码与 continuous batching 的结合面临一个关键挑战：<strong>Ragged Tensor</strong>（不规则张量）[S12]。</p>
+        <p>在标准 continuous batching 中，每个请求每步只生成 1 个 token，batch 中所有请求的序列长度增量相同，便于组织张量。但在投机解码中：</p>
+        <ul>
+          <li>不同请求可能生成不同数量的 draft tokens（如 0 到 num_speculative_tokens）。</li>
+          <li>验证后，不同请求实际接受的 token 数也不同。</li>
+          <li>这导致 batch 中各请求的序列长度不一致，形成 "ragged" 结构。</li>
+        </ul>
+        <p>vLLM V1 通过 <strong>Padded Drafter Batch</strong> 解决这个问题 [S12][S15]：</p>
+        <pre><code>self.disable_padded_drafter_batch: bool = False
+"""Disable input padding for speculative decoding. If set to True,
+speculative input batches can contain sequences of different lengths,
+which may only be supported by certain attention backends."""</code></pre>
+        <p>默认情况下，vLLM 使用 padding 方式：将所有请求扩展到 batch 中最长序列的长度，用特殊 token（如 padding token 或 rejected token mask）填充。这虽然增加了少量无效计算，但保持了张量的规则性，便于与各种 attention backend 兼容。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 的 speculative_config 配置</h4>
+        <p><code>SpeculativeConfig</code>（<code>vllm/config/speculative.py</code>）[S15] 是投机解码的配置中心：</p>
+        <pre><code>@config
+class SpeculativeConfig:
+    num_speculative_tokens: int = Field(default=None, gt=0)
+    model: str | None = None
+    method: SpeculativeMethod | None = None
+    draft_tensor_parallel_size: int | None = Field(default=None, ge=1)
+    prompt_lookup_max: int | None = Field(default=None, ge=1)
+    prompt_lookup_min: int | None = Field(default=None, ge=1)
+    parallel_drafting: bool = False
+    disable_padded_drafter_batch: bool = False
+    use_local_argmax_reduction: bool = False
+    rejection_sample_method: RejectionSampleMethod = "standard"</code></pre>
+        <p><strong>关键配置项</strong>：</p>
+        <ul>
+          <li><code>num_speculative_tokens</code>: 每次 draft 生成的 token 数。值越大，潜在加速越高，但 draft 错误率也可能增加。</li>
+          <li><code>method</code>: 投机方法，可选值包括 "ngram", "medusa", "mlp_speculator", "draft_model", "eagle", "eagle3", "mtp", "dflash" 等。</li>
+          <li><code>model</code>: draft 模型路径（用于 draft_model、EAGLE、MTP 等方法）。</li>
+          <li><code>parallel_drafting</code>: 是否启用并行 draft。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>Speculative Decoding 与其他概念的关系</h4>
+        <p><strong>与 Continuous Batching 的关系</strong>：投机解码增加了 batch 中序列长度的方差，对 continuous batching 的调度提出了更高要求。AsyncScheduler 的 <code>num_output_placeholders</code> 机制专门用于管理 speculative decode tokens 的调度占位。</p>
+        <p><strong>与 PagedAttention 的关系</strong>：每接受一个 draft token，对应请求的 block table 和 seq_len 需要更新。<code>eagle_step_update_slot_mapping_and_metadata</code> Triton kernel 负责此操作 [S12]。EAGLE 和 Gemma 4 MTP 等方法还需要 draft model 与 target model 共享 KV Cache。</p>
+        <p><strong>与 Chunked Prefill 的关系</strong>：在长 prefill 场景中，投机解码的收益可能降低，因为 prefill 阶段本身已经是计算密集的，decode 阶段的比例相对较小。</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="section-1.html" class="module-nav-prev">
+    <div class="module-nav-label">← 上一模块</div>
+    <div class="module-nav-title">LLM 推理基础概念</div>
+  </a>
+    <a href="section-3.html" class="module-nav-next">
+    <div class="module-nav-label">下一模块 →</div>
+    <div class="module-nav-title">vLLM API 模型类型</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 2: vLLM 核心创新 | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>

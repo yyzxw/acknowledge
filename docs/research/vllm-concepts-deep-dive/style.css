@@ -1,0 +1,367 @@
+/* ============================================
+   vLLM Concepts Deep Dive - Design System
+   Dark theme, slate/blue palette
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --primary: #3b82f6;
+  --primary-light: #60a5fa;
+  --primary-dark: #1d4ed8;
+  --accent-emerald: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-rose: #f43f5e;
+  --accent-purple: #a78bfa;
+  --accent-cyan: #22d3ee;
+
+  --bg-base: #0f172a;
+  --bg-card: #1e293b;
+  --bg-card-hover: #334155;
+  --bg-code: #020617;
+  --bg-tag: rgba(59, 130, 246, 0.15);
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-code: #34d399;
+
+  --border: rgba(148, 163, 184, 0.15);
+  --border-hover: rgba(148, 163, 184, 0.3);
+
+  --font-sans: 'Noto Sans SC', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, monospace;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+}
+
+/* Reset & Base */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography */
+h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 1.25rem; font-weight: 600; }
+h4 { font-size: 1.1rem; font-weight: 600; }
+
+p { margin-bottom: var(--space-4); color: var(--text-secondary); }
+strong { color: var(--text-primary); font-weight: 600; }
+
+/* Links */
+a { color: var(--primary-light); text-decoration: none; transition: color 0.2s; }
+a:hover { color: #93c5fd; }
+
+/* Code */
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  overflow-x: auto;
+  line-height: 1.5;
+  margin-bottom: var(--space-4);
+  color: var(--text-code);
+}
+code:not(pre code) {
+  background: rgba(52, 211, 153, 0.1);
+  color: var(--text-code);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+/* Module Page Layout */
+.module-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-4) var(--space-8);
+}
+.module-header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.module-header a {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.module-header a:hover { color: var(--text-primary); }
+
+.module-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-8);
+}
+
+/* Concept Card */
+.concept-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  transition: border-color 0.2s, background 0.2s;
+}
+.concept-card:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+.concept-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.concept-title h3 {
+  color: var(--text-primary);
+}
+.concept-tag {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  background: var(--bg-tag);
+  color: var(--primary-light);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  white-space: nowrap;
+}
+
+/* Sub-section */
+.sub-section {
+  background: rgba(2, 6, 23, 0.3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.sub-section h4 {
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-bottom: var(--space-4);
+}
+thead th {
+  background: rgba(51, 65, 85, 0.5);
+  color: var(--text-secondary);
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+}
+tbody td {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+tbody tr:nth-child(even) {
+  background: rgba(51, 65, 85, 0.2);
+}
+tbody tr:hover {
+  background: rgba(51, 65, 85, 0.4);
+}
+td:first-child {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+td.font-mono {
+  font-family: var(--font-mono);
+  color: var(--text-code);
+  font-size: 0.8125rem;
+}
+
+/* Tags */
+.tag-blue {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--primary-light);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+.tag-emerald {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--accent-emerald);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+.tag-amber {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--accent-amber);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+.tag-rose {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--accent-rose);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+}
+.tag-purple {
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--accent-purple);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+}
+.tag-cyan {
+  background: rgba(34, 211, 238, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Formula boxes */
+.formula-box {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(139, 92, 246, 0.05));
+  border-left: 3px solid var(--primary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  overflow-x: auto;
+}
+.formula-box code {
+  font-size: 0.9rem;
+}
+
+/* Lists */
+ul, ol {
+  margin-bottom: var(--space-4);
+  padding-left: var(--space-6);
+  color: var(--text-secondary);
+}
+li { margin-bottom: var(--space-2); }
+
+/* Info callouts */
+.callout {
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.callout-info {
+  background: rgba(59, 130, 246, 0.1);
+  border-left: 3px solid var(--primary);
+}
+.callout-warning {
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 3px solid var(--accent-amber);
+}
+.callout-tip {
+  background: rgba(52, 211, 153, 0.1);
+  border-left: 3px solid var(--accent-emerald);
+}
+
+/* Module navigation at bottom */
+.module-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-top: var(--space-12);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border);
+}
+.module-nav-prev, .module-nav-next {
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+.module-nav-prev:hover, .module-nav-next:hover {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+.module-nav-next {
+  text-align: right;
+}
+.module-nav-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-1);
+}
+.module-nav-title {
+  color: var(--primary-light);
+  font-weight: 600;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--bg-card-hover); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Mermaid diagrams */
+.mermaid-wrapper {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: var(--radius);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  overflow-x: auto;
+}
+
+/* Loading screen */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .module-content { padding: var(--space-4); }
+  .module-header { padding: var(--space-3) var(--space-4); }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  .module-nav { grid-template-columns: 1fr; }
+  table { font-size: 0.75rem; }
+  .concept-card { padding: var(--space-4); }
+}
+
+/* Print */
+@media print {
+  .module-header { display: none; }
+  body { background: white; color: black; }
+  .concept-card { break-inside: avoid; }
+}

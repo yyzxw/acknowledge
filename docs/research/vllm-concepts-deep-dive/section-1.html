@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块1: LLM 推理基础概念 — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 1 / 8</span>
+  </div>
+</div>
+
+<section id="sec-1" data-section="module">
+  <div class="module-content">
+
+    <!-- ============================================== -->
+    <!-- 1.1 Prefill / Decode -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>1.1 Prefill / Decode 阶段</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>LLM 推理过程本质上分为两个截然不同的计算阶段：<strong>Prefill（预填充/上下文处理）</strong>和 <strong>Decode（解码/自回归生成）</strong>。Prefill 阶段接收完整的输入 prompt token 序列，通过一次前向传播计算所有 prompt token 的 KV Cache，同时生成第一个输出 token。Decode 阶段则进入自回归循环，每次只处理一个新 token，利用已缓存的 KV Cache 逐 token 生成后续输出 [S1][S2]。</p>
+
+      <div class="sub-section">
+        <h4>Prefill 阶段的计算特性</h4>
+        <p>Prefill 阶段具有以下核心特征：</p>
+        <ol>
+          <li><strong>计算密集型（Compute-bound）</strong>：Prefill 一次性处理整个 prompt（如 4096 tokens），可以充分利用 GPU 的矩阵乘法并行性。Attention 计算复杂度为 O(n²)（n = prompt 长度），当 n 较大时，计算量非常可观。</li>
+          <li><strong>内存写入为主</strong>：Prefill 阶段需要将每层的 Key 和 Value 张量写入 KV Cache。对于 L 层、H 个 KV head、head dimension D 的模型，每个 token 的 KV Cache 大小为：</li>
+          <li><strong>Batch 效应显著</strong>：Prefill 阶段将多个请求的 prompt 拼接后一起处理，可以摊薄 kernel launch 开销和权重加载开销。</li>
+        </ol>
+        <pre><code>per_token_kv_size = 2 * L * H * D * dtype_size</code></pre>
+        <p>其中 2 表示 Key 和 Value 两组张量，dtype_size 为数据类型字节数（FP16 为 2 字节，FP8 为 1 字节）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Decode 阶段的计算特性</h4>
+        <p>Decode 阶段具有以下核心特征：</p>
+        <ol>
+          <li><strong>内存带宽密集型（Memory-bound）</strong>：Decode 每次只处理 1 个新 token（或少量 speculative tokens），计算量很小。主要开销在于从 HBM（高带宽显存）读取庞大的模型参数和 KV Cache。对于 70B 模型（FP16，约 140GB 参数），在 A100（HBM 带宽 2TB/s）上，理论最小 TPOT（Time Per Output Token）约为 70ms/token（无 batching 时）。</li>
+          <li><strong>KV Cache 读取主导</strong>：Decode 阶段需要读取之前所有 token 的 KV Cache。对于长序列（如 128K tokens），KV Cache 读取量可能超过模型参数读取量，成为主要瓶颈。</li>
+          <li><strong>Sequential 性质</strong>：Decode 必须严格按顺序生成 token，无法像 Prefill 那样利用序列内并行性。</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>关键指标公式</h4>
+        <table>
+          <thead>
+            <tr><th>指标</th><th>公式</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>TTFT</td><td class="font-mono">t_first_token_output - t_request_received</td><td>从请求到第一个输出 token 的时间，主要由 Prefill 决定</td></tr>
+            <tr><td>TPOT</td><td class="font-mono">Total decode time / (Output tokens - 1)</td><td>每个输出 token 的平均时间，反映 Decode 速度</td></tr>
+            <tr><td>ITL</td><td class="font-mono">t_{i+1} - t_i</td><td>相邻 token 间隔，反映生成平滑度</td></tr>
+            <tr><td>E2E Latency</td><td class="font-mono">TTFT + (Output length - 1) * TPOT</td><td>端到端总延迟</td></tr>
+            <tr><td>Prefill FLOPs</td><td class="font-mono">approx 2 * B * n² * d</td><td>Batch size B，序列长度 n，模型维度 d</td></tr>
+            <tr><td>Decode FLOPs/token</td><td class="font-mono">approx 2 * B * n * d</td><td>每生成一个 token 的计算量</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>Prefill 与 Decode 的关系</h4>
+        <p><strong>Prefill 是 Decode 的前置条件</strong>：没有 Prefill 阶段计算的 KV Cache，Decode 阶段无法开始。在传统系统中，当一个长 prompt 请求进入时，它会在一个 step 中独占整个 GPU 执行 Prefill，期间所有正在 Decode 的请求必须等待，导致它们的 ITL 急剧增加。这是 Chunked Prefill（模块二）和 Disaggregated Serving（模块四）等技术要解决的核心问题。</p>
+        <p><strong>资源需求矛盾</strong>：Prefill 需要强算力、大 batch（摊薄开销）；Decode 需要高内存带宽、低延迟、持续调度。当两者混合在同一 GPU 上时，Prefill 会抢占 Decode 的计算资源，导致 Decode token 延迟剧增。</p>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 1.2 KV Cache -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>1.2 KV Cache</h3>
+        <span class="tag tag-emerald">存储优化</span>
+      </div>
+
+      <p>KV Cache（Key-Value Cache）是 LLM 推理中的核心优化技术。在 Transformer 的自回归生成过程中，每个新 token 的 Attention 计算需要与之前所有 token 的 Key 和 Value 进行交互。如果每次都重新计算所有历史 token 的 K 和 V，将产生大量的重复计算。KV Cache 技术将之前计算过的 Key 和 Value 张量缓存起来，在后续步骤中直接复用，从而将每步的计算复杂度从 O(n²) 降低到 O(n)（n 为序列长度）[S1]。</p>
+
+      <div class="sub-section">
+        <h4>KV Cache 大小计算公式</h4>
+        <p>对于单个请求，KV Cache 的总大小为：</p>
+        <pre><code>KV_Cache_Size = 2 * L * S * H * D * dtype_size</code></pre>
+        <p>其中：</p>
+        <ul>
+          <li>L = 模型层数（如 LLaMA-70B 有 80 层）</li>
+          <li>S = 当前序列长度（已生成的 token 数）</li>
+          <li>H = KV head 数量（如 LLaMA-70B 有 8 个 KV head）</li>
+          <li>D = head dimension（如 128）</li>
+          <li>2 = Key 和 Value 两组张量</li>
+          <li>dtype_size = 数据类型字节数</li>
+        </ul>
+        <p><strong>示例</strong>：LLaMA3-70B（FP16）每 token 的 KV Cache：</p>
+        <pre><code>2 * 80 * 1 * 8 * 128 * 2 = 327,680 bytes approx 320 KB</code></pre>
+        <p>对于 4K context，KV Cache approx 1.28 GB；对于 128K context，KV Cache approx 40 GB。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>传统分配的问题</h4>
+        <p>在 PagedAttention 出现之前，主流推理系统为每个请求预分配一块连续的 GPU 内存，容量按该请求的最大可能序列长度计算。这种方案的内存浪费来源包括 [S1][S29]：</p>
+        <ol>
+          <li><strong>内部碎片（Internal Fragmentation）</strong>：大多数请求的实际生成长度远小于最大长度。若 max_model_len = 4096 但平均输出长度仅 256，则内部碎片率约为 (4096 - 256) / 4096 ≈ 93.75%。</li>
+          <li><strong>外部碎片（External Fragmentation）</strong>：不同请求释放内存后，剩余空闲块可能不连续，导致后续大请求无法分配，即使总空闲内存足够。</li>
+          <li><strong>冗余复制（Redundant Duplication）</strong>：在并行采样（parallel sampling）和束搜索（beam search）中，多个序列共享相同的前缀 prompt，但传统方案为每个序列独立存储完整的 KV Cache，导致前缀部分被重复存储多次。</li>
+        </ol>
+        <p>vLLM 论文报告的实验数据显示，在 OPT-13B 模型和 Alpaca trace 上，传统方案的 KV Cache 内存利用率通常只有 <strong>20-40%</strong>，而 PagedAttention 可将利用率提升至 <strong>95% 以上</strong>。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>KV Cache 与 PagedAttention 的关系</h4>
+        <p><strong>KV Cache 是 PagedAttention 的管理对象</strong>。PagedAttention 本质上是一种 KV Cache 的内存管理方案，它将 KV Cache 分为固定大小的 block，通过 Block Table 实现逻辑到物理的非连续映射。没有 KV Cache 的概念，PagedAttention 就失去了管理目标；没有 PagedAttention，KV Cache 的内存利用效率极低。</p>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 1.3 Attention Mechanism -->
+    <!-- ============================================== -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>1.3 Attention Mechanism</h3>
+        <span class="tag tag-purple">核心概念</span>
+      </div>
+
+      <p>Attention Mechanism（注意力机制）是 Transformer 架构的核心组件，它允许模型在处理序列时动态地关注输入的不同部分。Self-Attention（自注意力）是 Attention 的一种特殊形式，其中 Query、Key、Value 都来源于同一个输入序列，使模型能够捕捉序列内部任意两个位置之间的依赖关系 [S1]。</p>
+
+      <div class="sub-section">
+        <h4>Self-Attention 完整数学公式</h4>
+        <p>对于输入序列 X ∈ R^{n × d_model}，Self-Attention 的计算步骤如下：</p>
+        <p><strong>Step 1: Q/K/V 投影</strong></p>
+        <div class="formula-box"><code>Q = X W<sup>Q</sup>,  K = X W<sup>K</sup>,  V = X W<sup>V</sup></code></div>
+        <p>其中 W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> ∈ R^{d_model × d_k} 是可学习的投影矩阵。</p>
+        <p><strong>Step 2: 缩放点积</strong></p>
+        <div class="formula-box"><code>score<sub>i,j</sub> = (q<sub>i</sub> · k<sub>j</sub>) / √(d<sub>k</sub>)</code></div>
+        <p>除以 √(d_k) 的缩放因子是为了防止当 d_k 较大时点积数值过大，导致 softmax 进入梯度饱和区。</p>
+        <p><strong>Step 3: Softmax 归一化</strong></p>
+        <div class="formula-box"><code>α<sub>i,j</sub> = softmax( (q<sub>i</sub> · k<sub>j</sub>) / √(d<sub>k</sub>) )<sub>j</sub> = exp( (q<sub>i</sub> · k<sub>j</sub>) / √(d<sub>k</sub>) ) / Σ<sub>l=1</sub><sup>n</sup> exp( (q<sub>i</sub> · k<sub>l</sub>) / √(d<sub>k</sub>) )</code></div>
+        <p>在 Decoder 的自注意力中，还需要应用因果掩码（Causal Mask）M：</p>
+        <div class="formula-box"><code>α<sub>i,j</sub> = softmax( (q<sub>i</sub> · k<sub>j</sub>) / √(d<sub>k</sub>) + M<sub>i,j</sub> )</code></div>
+        <p>其中 M<sub>i,j</sub> = 0 如果 j ≤ i，否则 M<sub>i,j</sub> = -∞。</p>
+        <p><strong>Step 4: 加权聚合</strong></p>
+        <div class="formula-box"><code>Attention(Q, K, V) = softmax( Q K<sup>T</sup> / √(d<sub>k</sub>) ) V</code></div>
+      </div>
+
+      <div class="sub-section">
+        <h4>Multi-Head Attention（MHA）</h4>
+        <p>Multi-Head Attention 通过并行运行多组独立的注意力机制，让模型同时从多个表示子空间中捕捉不同类型的关系：</p>
+        <div class="formula-box"><code>head<sub>i</sub> = Attention(Q W<sub>i</sub><sup>Q</sup>, K W<sub>i</sub><sup>K</sup>, V W<sub>i</sub><sup>V</sup>)<br>MultiHead(Q, K, V) = Concat(head<sub>1</sub>, head<sub>2</sub>, ..., head<sub>h</sub>) W<sup>O</sup></code></div>
+        <p>其中 W<sup>O</sup> ∈ R^{h d_v × d_model} 是最终的输出投影矩阵。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>MHA / MQA / GQA 对比</h4>
+        <table>
+          <thead>
+            <tr><th>特性</th><th>MHA（Multi-Head Attention）</th><th>MQA（Multi-Query Attention）</th><th>GQA（Grouped-Query Attention）</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>定义</td><td>每个头有独立的 Q/K/V 投影</td><td>所有头共享同一组 K/V</td><td>K/V head 数介于 MHA 和 MQA 之间</td></tr>
+            <tr><td>KV Cache 大小</td><td>O(n · h · d)</td><td>O(n · 1 · d)</td><td>O(n · g · d)</td></tr>
+            <tr><td>内存效率</td><td>低</td><td>高</td><td>中等</td></tr>
+            <tr><td>质量损失</td><td>无（基线）</td><td>可能有轻微损失</td><td>损失较小</td></tr>
+            <tr><td>代表模型</td><td>原始 Transformer</td><td>PaLM</td><td>LLaMA-2/3, Mistral</td></tr>
+            <tr><td>适用场景</td><td>追求质量优先</td><td>极致内存压缩</td><td>质量与效率平衡</td></tr>
+          </tbody>
+        </table>
+        <p><strong>GQA 的具体机制</strong>：将 h 个 Query head 分成 g 组（g &lt; h），每组共享一组 K/V。例如 LLaMA-2 有 32 个 Q head 和 8 个 KV head（g = 8），即每 4 个 Q head 共享 1 个 KV head。这减少了 KV Cache 到 1/4，同时质量损失远小于 MQA。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Attention 与 KV Cache 的关系</h4>
+        <p><strong>Attention 的计算依赖 KV Cache</strong>：在 Decode 阶段，Attention 的计算公式变为：</p>
+        <div class="formula-box"><code>Attention(q<sub>t</sub>, K<sub>≤t</sub>, V<sub>≤t</sub>) = softmax( q<sub>t</sub> K<sub>≤t</sub><sup>T</sup> / √(d<sub>k</sub>) ) V<sub>≤t</sub></code></div>
+        <p>其中 K<sub>≤t</sub> 和 V<sub>≤t</sub> 就是 KV Cache 中存储的历史 Key 和 Value。没有 KV Cache，每次 Decode 都需要重新计算所有历史 token 的 K 和 V，计算量从 O(n) 暴涨到 O(n²)。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Attention 与 PagedAttention 的关系</h4>
+        <p><strong>PagedAttention 要求 Attention Kernel 支持非连续 KV Cache 访问</strong>。传统 Attention Kernel 假设 K 和 V 是连续的内存块，而 PagedAttention 的 K 和 V 存储在分散的物理 block 中。因此，FlashAttention、FlashInfer 等后端需要接收 block table（物理块 ID 列表）和 slot mapping（每个 token 对应的物理块内偏移），而非连续的内存指针 [S12]。</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="index.html" class="module-nav-prev">
+    <div class="module-nav-label">← 返回目录</div>
+    <div class="module-nav-title">封面与导航</div>
+  </a>
+    <a href="section-2.html" class="module-nav-next">
+    <div class="module-nav-label">下一模块 →</div>
+    <div class="module-nav-title">vLLM 核心创新</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 1: LLM 推理基础概念 | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>

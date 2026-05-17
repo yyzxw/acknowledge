@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块3: vLLM API 模型类型 — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 3 / 8</span>
+  </div>
+</div>
+
+<section id="sec-3" data-section="module">
+  <div class="module-content">
+
+    <!-- ============================================================ -->
+    <!-- 3.1 Generation Task -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>3.1 Generation Task</h3>
+        <span class="tag tag-blue">生成任务</span>
+      </div>
+
+      <p>GenerationTask 是 vLLM 中最核心、最广泛使用的任务类型，对应于标准的自回归语言模型（Autoregressive LM）推理，模型逐 Token 生成输出序列。在 vLLM 中，GenerationTask 包含三种具体任务：<code>generate</code>（文本生成）、<code>transcription</code>（语音转录）和 <code>realtime</code>（实时交互）。</p>
+
+      <p>从代码层面看，vLLM 的任务类型定义极为精简但语义明确：</p>
+
+      <pre><code># vllm/tasks.py (lines 5-28)
+GenerationTask = Literal["generate", "transcription", "realtime"]
+GENERATION_TASKS: tuple[GenerationTask, ...] = get_args(GenerationTask)</code></pre>
+
+      <!-- generate -->
+      <div class="sub-section">
+        <h4>generate（文本生成）</h4>
+        <p><code>generate</code> 是 vLLM 最核心、最广泛使用的任务类型。它对应于标准的自回归语言模型推理，模型逐 Token 生成输出序列。</p>
+        <p><strong>原理与机制：</strong></p>
+        <ul>
+          <li>使用 PagedAttention 机制管理 KV Cache，将连续的 KV 缓存分页存储在非连续内存中。</li>
+          <li>支持 Continuous Batching，在生成阶段动态批处理不同长度的请求。</li>
+          <li>支持 Speculative Decoding、Prefix Caching、Chunked Prefill 等优化。</li>
+        </ul>
+        <p><strong>代码级细节：</strong></p>
+        <ul>
+          <li>模型必须实现 <code>VllmModelForTextGeneration</code> 接口（定义于 <code>vllm/model_executor/models/interfaces_base.py</code>）。</li>
+          <li>该接口要求模型实现 <code>compute_logits(self, hidden_states)</code> 方法，用于在生成阶段计算下一个 Token 的对数概率。</li>
+          <li><code>compute_logits</code> 在 TP（Tensor Parallel）rank &gt; 0 时返回 <code>None</code>，仅在 rank 0 上实际计算。</li>
+        </ul>
+        <p><strong>API 端点：</strong></p>
+        <ul>
+          <li>离线：<code>LLM.generate(prompts, sampling_params)</code></li>
+          <li>在线：<code>POST /v1/completions</code>（兼容 OpenAI API）、<code>POST /v1/chat/completions</code></li>
+        </ul>
+      </div>
+
+      <!-- transcription -->
+      <div class="sub-section">
+        <h4>transcription（语音转录）</h4>
+        <p><code>transcription</code> 任务专用于 Whisper 等自动语音识别（ASR）模型。它将音频输入转录为文本输出。</p>
+        <p><strong>原理与机制：</strong></p>
+        <ul>
+          <li>基于 Encoder-Decoder 架构（如 Whisper）。</li>
+          <li>音频通过编码器转换为隐藏状态，解码器自回归生成转录文本。</li>
+          <li>vLLM 对 Whisper 的支持包括 <code>WhisperForConditionalGeneration</code> 等架构。</li>
+        </ul>
+        <p><strong>代码级细节：</strong></p>
+        <ul>
+          <li>在模型注册表中，<code>WhisperForConditionalGeneration</code> 被归类为 <code>_MULTIMODAL_MODELS</code>。</li>
+          <li>模型通过 <code>supports_transcription</code> 接口标记声明支持转录任务。</li>
+          <li>音频输入通过多模态预处理管道转换为 mel-spectrogram 特征。</li>
+        </ul>
+      </div>
+
+      <!-- realtime -->
+      <div class="sub-section">
+        <h4>realtime（实时交互）</h4>
+        <p><code>realtime</code> 任务是 vLLM 较新引入的任务类型，用于支持实时音频/语音交互场景。这对应于 OpenAI 的 Realtime API 模式，模型需要以低延迟处理流式音频输入并产生流式音频或文本输出。</p>
+        <p><strong>原理与机制：</strong></p>
+        <ul>
+          <li>支持流式输入和输出。</li>
+          <li>需要模型具备低延迟处理能力。</li>
+          <li>通常与 VAD（Voice Activity Detection）和音频 tokenization 结合。</li>
+        </ul>
+        <p><strong>代码级细节：</strong></p>
+        <ul>
+          <li>在注册表中，<code>Qwen3ASRRealtimeGeneration</code> 和 <code>VoxtralRealtimeGeneration</code> 支持此任务。</li>
+          <li>模型需要实现特定的实时处理接口。</li>
+          <li>调度器需要支持更细粒度的请求切分和优先级管理。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>Generation Task 与其他概念的关系</h4>
+        <p><strong>Generation Task 依赖 PagedAttention 和 Continuous Batching：</strong>所有生成任务的核心执行路径都使用 PagedAttention 管理 KV Cache，并通过 Continuous Batching 进行调度。没有这两项技术，vLLM 无法高效地服务大量并发生成请求。</p>
+        <p><strong>Generation Task 使用 Sampling 策略：</strong>生成任务在每一步都需要从模型输出的 logits 分布中采样下一个 token。vLLM 支持 Greedy、Temperature、Top-p、Top-k、Beam Search 等多种采样策略（详见模块四 4.7 节）。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 3.2 Pooling Task -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>3.2 Pooling Task</h3>
+        <span class="tag tag-purple">池化任务</span>
+      </div>
+
+      <p>PoolingTask 是 vLLM 对非生成类模型的统一抽象，涵盖了嵌入、分类、Token 级任务等。这些模型的共同特点是：它们不对隐藏状态进行自回归解码，而是通过某种 "pooling" 操作从隐藏状态中提取固定维度的输出。</p>
+
+      <p>从代码层面：</p>
+
+      <pre><code>PoolingTask = Literal[
+    "embed",
+    "classify",
+    "token_embed",
+    "token_classify",
+    "plugin",
+    "embed&amp;token_classify",
+]
+POOLING_TASKS: tuple[PoolingTask, ...] = get_args(PoolingTask)</code></pre>
+
+      <!-- embed -->
+      <div class="sub-section">
+        <h4>embed（序列嵌入）</h4>
+        <p><code>embed</code> 任务将输入序列（文本、图像等）编码为单个固定维度的向量表示。这是最常见的嵌入模型任务。</p>
+        <p><strong>原理与机制：</strong></p>
+        <ul>
+          <li>输入经过 Transformer 编码器产生每个 Token 的隐藏状态。</li>
+          <li>通过 Sequence Pooling（如 LAST、MEAN、CLS）将 Token 级隐藏状态聚合为单个序列级向量。</li>
+          <li>可选归一化（L2 normalize）使向量位于单位球面上。</li>
+        </ul>
+        <p><strong>代码级细节：</strong></p>
+        <ul>
+          <li>对应 <code>PoolerConfig.task = "embed"</code>。</li>
+          <li>默认 <code>seq_pooling_type = "LAST"</code>，<code>use_activation = True</code>（归一化）。</li>
+          <li>输出通过 <code>EmbeddingPoolerHead</code> 处理，支持 Matryoshka 降维和 Sentence Transformers projector。</li>
+        </ul>
+        <p><strong>API 端点：</strong></p>
+        <ul>
+          <li>离线：<code>LLM.embed(...)</code>、<code>LLM.encode(..., pooling_task="embed")</code></li>
+          <li>在线：<code>POST /v1/embeddings</code>（OpenAI 兼容）、<code>POST /v2/embed</code>（Cohere 兼容）、<code>POST /pooling</code></li>
+        </ul>
+      </div>
+
+      <!-- classify -->
+      <div class="sub-section">
+        <h4>classify（序列分类）</h4>
+        <p><code>classify</code> 任务对输入序列进行分类，输出每个预定义类别的概率分布。</p>
+        <p><strong>原理与机制：</strong></p>
+        <ul>
+          <li>输入经过编码器后，通过 Sequence Pooling 提取序列表示。</li>
+          <li>序列表示经过分类头（通常是线性层）映射到类别数量维度。</li>
+          <li>应用 softmax（或 sigmoid，对于多标签）得到概率分布。</li>
+        </ul>
+        <p><strong>代码级细节：</strong></p>
+        <ul>
+          <li>对应 <code>PoolerConfig.task = "classify"</code>。</li>
+          <li>默认 <code>seq_pooling_type = "LAST"</code>，<code>use_activation = True</code>（softmax）。</li>
+          <li>支持 <code>logit_mean</code> 和 <code>logit_sigma</code> 进行仿射分数校准（Platt scaling）。</li>
+          <li>输出通过 <code>ClassifierPoolerHead</code> 处理。</li>
+        </ul>
+      </div>
+
+      <!-- token_embed -->
+      <div class="sub-section">
+        <h4>token_embed（Token 嵌入）</h4>
+        <p><code>token_embed</code> 任务保留每个输入 Token 的向量表示，不进行序列级聚合。这支持需要细粒度 Token 级表示的场景。</p>
+        <p><strong>原理与机制：</strong></p>
+        <ul>
+          <li>输入经过编码器后，直接输出每个 Token 的隐藏状态（或经过投影后的表示）。</li>
+          <li>不进行 CLS/MEAN/LAST 等序列级 pooling。</li>
+          <li>支持 late-interaction（如 ColBERT 系列模型）。</li>
+        </ul>
+        <p><strong>代码级细节：</strong></p>
+        <ul>
+          <li>对应 <code>PoolerConfig.task = "token_embed"</code>。</li>
+          <li>默认 <code>tok_pooling_type = "ALL"</code>。</li>
+          <li>输出通过 <code>TokenEmbeddingPoolerHead</code> 处理。</li>
+          <li>支持 chunked prefill 时的隐藏状态缓存和拼接。</li>
+        </ul>
+      </div>
+
+      <!-- token_classify -->
+      <div class="sub-section">
+        <h4>token_classify（Token 分类）</h4>
+        <p><code>token_classify</code> 任务对每个输入 Token 进行分类，输出每个 Token 的类别概率分布。这用于命名实体识别（NER）、分词、词性标注、奖励模型等场景。</p>
+        <p><strong>原理与机制：</strong></p>
+        <ul>
+          <li>输入经过编码器后，每个 Token 的隐藏状态独立经过分类头。</li>
+          <li>输出形状为 <code>[batch_size, seq_len, num_labels]</code>。</li>
+          <li>支持 <code>step_tag_id</code> 过滤（用于奖励模型中的步骤标签）。</li>
+        </ul>
+        <p><strong>代码级细节：</strong></p>
+        <ul>
+          <li>对应 <code>PoolerConfig.task = "token_classify"</code>。</li>
+          <li>默认 <code>tok_pooling_type = "ALL"</code>。</li>
+          <li>输出通过 <code>TokenClassifierPoolerHead</code> 处理。</li>
+          <li>支持 <code>returned_token_ids</code> 提取特定维度（如奖励模型中的 good/bad token）。</li>
+        </ul>
+      </div>
+
+      <!-- plugin -->
+      <div class="sub-section">
+        <h4>plugin（插件任务）</h4>
+        <p><code>plugin</code> 任务是 vLLM 为 IO Processor 插件预留的任务类型。它允许用户自定义处理流程，在模型推理前后插入自定义逻辑。</p>
+      </div>
+
+      <!-- embed&amp;token_classify -->
+      <div class="sub-section">
+        <h4>embed&amp;token_classify（组合任务）</h4>
+        <p><code>embed&amp;token_classify</code> 是组合任务，允许模型同时输出序列嵌入和 Token 级分类结果。这在某些多任务学习模型中有用。</p>
+      </div>
+
+      <h4>Pooling Task 与 Score Type 的映射</h4>
+      <p>vLLM 通过 <code>SCORE_TYPE_MAP</code> 将 PoolingTask 映射到 ScoreType：</p>
+
+      <table>
+        <thead><tr><th>PoolingTask</th><th>ScoreType</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>embed</td><td>bi-encoder</td><td>独立编码 query 和 document，用余弦相似度评分</td></tr>
+          <tr><td>classify</td><td>cross-encoder</td><td>联合编码 query+document，用线性分类器评分</td></tr>
+          <tr><td>token_embed</td><td>late-interaction</td><td>保留 Token 级表示，用 MaxSim 评分</td></tr>
+        </tbody>
+      </table>
+
+      <p>这一映射决定了 <code>LLM.score(...)</code> API 使用哪种评分机制。</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 3.3 Embedding Model -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>3.3 Embedding Model</h3>
+        <span class="tag tag-emerald">嵌入模型</span>
+      </div>
+
+      <p>Embedding Model（嵌入模型）是一类将离散的非结构化数据（文本、图像、音频等）映射到连续向量空间（通常是 R<sup>d</sup>）的机器学习模型。在 vLLM 中，嵌入模型属于 Pooling Model 的子集，通过 <code>embed</code> 任务提供服务。</p>
+
+      <p>从信息检索的角度，嵌入模型通常采用 <strong>Bi-encoder（双编码器）</strong> 架构：query 和 document 分别独立编码，然后通过向量相似度（如余弦相似度）计算相关性。</p>
+
+      <div class="sub-section">
+        <h4>Bi-encoder 架构的详细工作原理</h4>
+        <p><strong>架构定义：</strong></p>
+        <p>Bi-encoder 由两个共享权重的编码器组成（通常实际上是同一个模型）：</p>
+
+        <div class="formula-box"><code>q_vec = f_Q(query),  d_vec = f_D(document)</code></div>
+
+        <p>其中 f_Q 和 f_D 通常是相同的 Transformer 编码器（如 BERT、RoBERTa、LLaMA 等），q_vec, d_vec in R<sup>d</sup> 是输出的嵌入向量。</p>
+
+        <p>相关性得分通过向量相似度计算：</p>
+
+        <div class="formula-box"><code>score(q, d) = (q_vec . d_vec) / (||q_vec|| ||d_vec||) = cos(theta)</code></div>
+
+        <p>即余弦相似度，取值范围为 [-1, 1]。在实际应用中，通常会先对嵌入向量进行 L2 归一化，这样内积等价于余弦相似度。</p>
+
+        <p><strong>独立编码的优势与代价：</strong></p>
+
+        <p>优势：</p>
+        <ol>
+          <li><strong>可预计算</strong>：document 嵌入可以离线预计算并存储在向量数据库（如 Milvus、Pinecone、Qdrant、Weaviate）中。</li>
+          <li><strong>高吞吐</strong>：query 时只需编码 query，然后在向量索引中做近似最近邻（ANN）搜索，毫秒级响应。</li>
+          <li><strong>可扩展</strong>：可以轻松扩展到数十亿文档的索引。</li>
+        </ol>
+
+        <p>代价：</p>
+        <ol>
+          <li><strong>精度损失</strong>：query 和 document 在编码时没有交互，无法捕捉细粒度的词级匹配关系。</li>
+          <li><strong>信息瓶颈</strong>：将整个文档压缩为单个向量，长文档的信息可能丢失。</li>
+          <li><strong>语义偏差</strong>：不同意图的文档可能有相似的嵌入。</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>Pooling 方式：CLS、LAST、MEAN</h4>
+        <p>在 Bi-encoder 中，将 Token 级隐藏状态聚合为序列级向量是核心步骤。vLLM 支持三种序列级 Pooling 方式：</p>
+
+        <p><strong>CLS Pooling：</strong></p>
+        <div class="formula-box"><code>h_CLS = H[0]</code></div>
+        <p>其中 H in R<sup>n x d</sup> 是最后一层 Transformer 的隐藏状态矩阵，H[0] 取第一个位置（<code>[CLS]</code> token）的隐藏状态。</p>
+        <p>适用场景：BERT、RoBERTa 等双向编码器模型。原始 BERT 论文中，<code>[CLS]</code> 被设计为聚合序列信息的特殊 token。</p>
+        <p><strong>注意：</strong>CLS pooling 不支持 chunked prefill，因为需要完整的序列才能确定 CLS 位置。</p>
+
+        <p><strong>LAST Pooling：</strong></p>
+        <div class="formula-box"><code>h_LAST = H[n-1]</code></div>
+        <p>取序列最后一个有效 token 的隐藏状态。对于因果（causal）语言模型（如 LLaMA、GPT、Qwen），最后一个 token 的隐藏状态天然聚合了前面所有 token 的信息（由于自回归掩码）。</p>
+        <p>适用场景：因果语言模型作为嵌入模型时（如 e5-mistral、GritLM）。vLLM 的默认 pooling 方式。</p>
+        <p>LAST pooling 天然支持 chunked prefill，因为只需要知道最后一个 token 的索引。</p>
+
+        <p><strong>MEAN Pooling：</strong></p>
+        <div class="formula-box"><code>h_MEAN = (1/n) * sum_{i=0}^{n-1} H[i]</code></div>
+        <p>对所有有效 token 的隐藏状态取平均。这比 LAST pooling 更充分利用序列中所有 token 的信息。</p>
+        <p>适用场景：Sentence Transformers 系列模型（如 all-MiniLM-L6-v2、multilingual-e5-large）。</p>
+        <p>注意 MEAN pooling 也不支持 chunked prefill（需要完整序列），但 vLLM 通过 <code>enable_chunked_processing</code> 参数为长文本提供了分块处理机制。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Matryoshka Representation Learning（嵌套表示学习）</h4>
+        <p>Matryoshka Representation Learning（MRL，嵌套表示学习/俄罗斯套娃表示学习）是一种训练技术，使得嵌入向量的前 m 个维度（m &lt; d）本身构成一个有效的 m 维嵌入，无需额外的降维操作。</p>
+
+        <p><strong>核心思想：</strong></p>
+        <ul>
+          <li>传统嵌入模型训练时只优化完整维度的损失。</li>
+          <li>MRL 在训练时对多个截断维度同时计算损失并求和。</li>
+          <li>例如，对于 768 维嵌入，同时优化 768、512、256、128、64 维的损失。</li>
+        </ul>
+
+        <p><strong>数学形式：</strong></p>
+        <div class="formula-box"><code>L_MRL = sum_{m in M} w_m * L(f(x)_{1:m}, f(x')_{1:m})</code></div>
+        <p>其中 M 是预定义的维度集合（如 {64, 128, 256, 512, 768}），w_m 是各维度的权重，f(x)_{1:m} 表示取前 m 维。</p>
+
+        <p><strong>为什么 MRL 有效：</strong></p>
+        <p>MRL 的关键洞察是：<strong>嵌入向量的不同维度承载的信息重要性不同</strong>。通过联合优化，模型被迫将最重要的语义信息编码到前面的维度中，次要信息放在后面的维度。</p>
+        <p>实验表明，MRL 嵌入即使截断到 8.3% 的原始尺寸，仍能保留 98.37% 的性能。这远优于后处理降维方法（如 PCA、SVD），因为：</p>
+        <ol>
+          <li>PCA 是数据相关的，需要拟合转换矩阵。</li>
+          <li>MRL 的降维只需简单截断，零额外计算开销。</li>
+          <li>MRL 的优化目标直接面向下游检索质量。</li>
+        </ol>
+
+        <p><strong>vLLM 中的 MRL 支持：</strong></p>
+        <p>vLLM 在 <code>PoolerConfig</code> 中提供 <code>dimensions</code> 参数支持 MRL：</p>
+
+        <pre><code>class PoolerConfig:
+    dimensions: int | None = None
+    """Reduce the dimensions of embeddings if model support matryoshka
+    representation. Defaults to None."""</code></pre>
+
+        <p>在 <code>EmbeddingPoolerHead</code> 中的实现：</p>
+
+        <pre><code>class EmbeddingPoolerHead:
+    def forward(self, pooled_data, pooling_metadata):
+        dimensions_list = [pooling_param.dimensions for pooling_param in pooling_params]
+        if any(d is not None for d in dimensions_list):
+            if len(set(dimensions_list)) == 1 and not isinstance(embeddings, list):
+                d = dimensions_list[0]
+                embeddings = embeddings[..., :d]  # 截断到前 d 维</code></pre>
+
+        <p>注意事项：并非所有嵌入模型都支持 MRL。vLLM 会检查模型配置中的 <code>is_matryoshka</code> 或 <code>matryoshka_dimensions</code> 字段。对于不支持的模型设置 <code>dimensions</code> 参数会报错。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>常见 Embedding 模型</h4>
+        <p><strong>BertModel / RobertaModel：</strong>基于 Transformer 编码器，双向注意力。原始 BERT-base 有 110M 参数，hidden_size=768。使用 <code>[CLS]</code> token 进行序列表示（配合 CLS pooling）。典型模型：<code>BAAI/bge-base-en-v1.5</code>、<code>sentence-transformers/all-MiniLM-L6-v2</code>、<code>BAAI/bge-m3</code>。</p>
+        <p><strong>GteModel / SnowflakeGteNewModel：</strong>GTE（General Text Embeddings）是阿里巴巴达摩院开发的嵌入模型系列。基于 BERT-with-RoPE 架构，结合 RoPE（旋转位置编码）和双向注意力。</p>
+        <p><strong>JinaEmbeddings：</strong>Jina AI 开发的嵌入模型。以其优秀的多语言支持和长文本处理能力著称。</p>
+        <p><strong>ColBERT（作为 Token Embedding 模型）：</strong>虽然 ColBERT 主要归类为 late-interaction 模型，但它在 token_embed 任务中也产生 Token 级嵌入。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>在 RAG 流程中的位置和作用</h4>
+        <p>在典型的 RAG（Retrieval-Augmented Generation）流程中，Embedding Model 位于 <strong>检索阶段（Retrieval Stage）</strong>：</p>
+
+        <pre><code>User Query -&gt; Query Embedding -&gt; Vector Search (ANN) -&gt; Top-K Documents
+                                                  ^
+                                    Document Embeddings (Precomputed &amp; Indexed)</code></pre>
+
+        <p><strong>具体作用：</strong></p>
+        <ol>
+          <li><strong>索引阶段</strong>：将知识库中的文档分块（chunking），用 Embedding Model 编码为向量，存入向量数据库。</li>
+          <li><strong>查询阶段</strong>：将用户查询编码为向量，在向量数据库中检索最相似的文档块。</li>
+          <li><strong>增强生成</strong>：将检索到的文档块与用户查询一起送入生成模型（LLM）产生回答。</li>
+        </ol>
+
+        <p><strong>性能考量：</strong></p>
+        <ul>
+          <li>Bi-encoder 的检索精度通常低于 cross-encoder，但速度是 cross-encoder 的 100-1000 倍。</li>
+          <li>典型 RAG 采用 "Bi-encoder 粗排 + Cross-encoder/Reranker 精排" 的两阶段策略。</li>
+          <li>在 MS MARCO 等基准上，Bi-encoder Top-100 精度约 60%，经 Cross-encoder 重排后可达 85%+。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 3.4 Rerank Model -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>3.4 Rerank Model</h3>
+        <span class="tag tag-amber">重排序模型</span>
+      </div>
+
+      <p>Rerank Model（重排序模型）是 RAG 流程中 <strong>精排阶段（Reranking Stage）</strong> 使用的模型。它接收一个 query 和候选文档，输出它们的相关性分数，用于对粗排结果进行重新排序。</p>
+
+      <p>在 vLLM 中，reranker 是 classification model 的一个子集：当分类模型的 <code>num_labels == 1</code> 时，它可以作为评分模型（scoring model）使用，其输出经过适当的激活函数后即为相关性分数。</p>
+
+      <div class="sub-section">
+        <h4>Cross-encoder 架构的详细工作原理</h4>
+        <p><strong>架构定义：</strong></p>
+        <p>Cross-encoder 与 Bi-encoder 的根本区别在于：query 和 document 不是独立编码，而是被拼接成单个序列后一起输入 Transformer：</p>
+
+        <div class="formula-box"><code>Input: [CLS] query tokens [SEP] document tokens [SEP]</code></div>
+        <div class="formula-box"><code>score(q, d) = f_cls(Transformer([q; d]))</code></div>
+
+        <p>其中 f_cls 通常是 <code>[CLS]</code> token 的隐藏状态经过一个线性层得到的标量分数。</p>
+
+        <p><strong>全交互注意力机制：</strong></p>
+        <p>Cross-encoder 的核心优势在于 <strong>early interaction（早期交互）</strong>：</p>
+        <ul>
+          <li>Query 的每个 token 都可以通过自注意力机制直接 attend to document 的每个 token。</li>
+          <li>模型可以捕捉细粒度的词级匹配关系（如 "machine learning" 与 "deep learning" 的局部语义关联）。</li>
+          <li>可以识别否定、条件等复杂语义关系。</li>
+        </ul>
+
+        <p><strong>数学形式：</strong></p>
+        <div class="formula-box"><code>H = Transformer([q_1, ..., q_m, d_1, ..., d_n])<br>score = W . H_[CLS] + b</code></div>
+        <p>其中 W in R<sup>1 x d</sup>，b in R 是分类头的参数。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 Bi-encoder 的详细对比</h4>
+
+        <table>
+          <thead><tr><th>维度</th><th>Bi-encoder</th><th>Cross-encoder</th></tr></thead>
+          <tbody>
+            <tr><td>架构</td><td>独立双编码器</td><td>单编码器联合处理</td></tr>
+            <tr><td>编码方式</td><td>Query 和 Doc 分别编码</td><td>Query 和 Doc 拼接编码</td></tr>
+            <tr><td>交互时机</td><td>无交互 / 晚期交互</td><td>早期交互</td></tr>
+            <tr><td>相似度计算</td><td>余弦相似度 / 点积</td><td>线性分类器输出</td></tr>
+            <tr><td>速度</td><td>快（ms 级，支持 ANN）</td><td>慢（每对需要一次前向传播）</td></tr>
+            <tr><td>可预计算</td><td>Document 可离线预计算</td><td>不可预计算</td></tr>
+            <tr><td>精度</td><td>中等（NDCG@10 ~ 30-40）</td><td>高（NDCG@10 ~ 45-55）</td></tr>
+            <tr><td>适用阶段</td><td>粗排（召回）</td><td>精排（重排序）</td></tr>
+            <tr><td>典型延迟</td><td>5ms / 百万文档</td><td>50ms / 100 文档</td></tr>
+            <tr><td>存储成本</td><td>低（每文档一个向量）</td><td>无额外存储</td></tr>
+            <tr><td>长文本处理</td><td>受限于最大长度，需截断</td><td>同样受限，但交互更细粒度</td></tr>
+          </tbody>
+        </table>
+
+        <p><strong>实际应用场景：</strong></p>
+        <ul>
+          <li>Bi-encoder：从百万级文档库中快速召回 Top-100 候选。</li>
+          <li>Cross-encoder：对这 100 个候选重新排序，选出 Top-10 最相关的。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>在 RAG 流程中的精排阶段</h4>
+        <p>典型的两阶段 RAG 检索流程：</p>
+
+        <pre><code>Stage 1 (Retrieval - Bi-encoder):
+  Query -&gt; Embed -&gt; ANN Search -&gt; Top-K Candidates (K=100~1000)
+
+Stage 2 (Reranking - Cross-encoder):
+  (Query, Doc_i) for i in Top-K -&gt; Cross-encode -&gt; Score -&gt; Sort -&gt; Top-M (M=5~20)
+
+Stage 3 (Generation - LLM):
+  Query + Top-M Documents -&gt; LLM -&gt; Answer</code></pre>
+
+        <p>Cross-encoder 在精排阶段的提升效果显著：</p>
+        <ul>
+          <li>Bi-encoder Top-10 精度约 60%</li>
+          <li>经 Cross-encoder 重排后可达 85%+</li>
+          <li>提升主要来自纠正 Bi-encoder 的 "假阳性"（语义相似但不相关）和 "假阴性"（语义不相似但相关）</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 中常见的 Rerank 模型和实现</h4>
+        <p><strong>基于序列分类的 Reranker：</strong></p>
+        <p>在模型注册表中，<code>_SEQUENCE_CLASSIFICATION_MODELS</code> 中的模型可用于 reranking：</p>
+
+        <pre><code>_SEQUENCE_CLASSIFICATION_MODELS = {
+    "BertForSequenceClassification": ("bert", "BertForSequenceClassification"),
+    "GteNewForSequenceClassification": ("bert_with_rope", "GteNewForSequenceClassification"),
+    "JambaForSequenceClassification": ("jamba", "JambaForSequenceClassification"),
+    "ModernBertForSequenceClassification": ("modernbert", "ModernBertForSequenceClassification"),
+    "LlamaBidirectionalForSequenceClassification": ("llama", "LlamaBidirectionalForSequenceClassification"),
+    # ...
+}</code></pre>
+
+        <p>这些模型通过 <code>as_seq_cls_model</code> 适配器将生成模型转换为分类模型。关键代码在 <code>adapters.py</code>：</p>
+
+        <pre><code>def as_seq_cls_model(cls):
+    class ModelForSequenceClassification(_create_pooling_model_cls(cls), SupportsCrossEncoding):
+        def _init_pooler(self, vllm_config, prefix=""):
+            self.score = ReplicatedLinear(
+                model_config.get_hidden_size(),
+                text_config.num_labels,
+                bias=False,
+                params_dtype=model_config.head_dtype,
+                quant_config=quant_config,
+            )
+            return DispatchPooler.for_seq_cls(pooler_config, classifier=self.score)</code></pre>
+
+        <p>注意 <code>SupportsCrossEncoding</code> 接口标记了 <code>score_type = "cross-encoder"</code>，这使得 Score API 知道使用 <code>classify</code> 任务而非 <code>embed</code> 任务。</p>
+
+        <p><strong>Jina Reranker：</strong></p>
+        <pre><code>"JinaForRanking": ("jina", "JinaForRanking"),</code></pre>
+        <p>Jina Reranker 是基于 Qwen3 架构的专门重排序模型，在多个基准上表现优异。</p>
+
+        <p><strong>Qwen3 Reranker：</strong></p>
+        <pre><code>vllm serve Qwen/Qwen3-Reranker-0.6B \
+  --hf_overrides '{"architectures": ["Qwen3ForSequenceClassification"],"classifier_from_token": ["no", "yes"],"is_original_qwen3_reranker": true}'</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>Rerank Model 与 Embedding Model 的关系</h4>
+        <p><strong>Rerank Model 是 Embedding Model 的精排补充。</strong>在 RAG 流程中：</p>
+        <ul>
+          <li>Embedding Model（Bi-encoder）负责从海量文档中快速召回候选（粗排）。</li>
+          <li>Rerank Model（Cross-encoder）负责对候选进行精细排序（精排）。</li>
+          <li>两者是串联关系：没有 Bi-encoder 的粗排，Cross-encoder 无法处理百万级文档；没有 Cross-encoder 的精排，Bi-encoder 的召回质量不足以直接用于生成。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 3.5 Classification Model -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>3.5 Classification Model</h3>
+        <span class="tag tag-rose">分类模型</span>
+      </div>
+
+      <p>Classification Model（分类模型）将输入序列映射到预定义类别集合的概率分布。在 vLLM 中，分类模型通过 <code>classify</code> 和 <code>token_classify</code> 任务提供服务，是 <code>_SEQUENCE_CLASSIFICATION_MODELS</code> 和 <code>_TOKEN_CLASSIFICATION_MODELS</code> 的核心用途。</p>
+
+      <div class="sub-section">
+        <h4>序列分类（Sequence Classification）</h4>
+        <p>定义：为整个输入序列输出一个类别概率分布。</p>
+        <p>输出形状：<code>[batch_size, num_labels]</code></p>
+        <p><strong>典型应用：</strong></p>
+        <ul>
+          <li>情感分析（正面/负面/中性）</li>
+          <li>主题分类（体育/政治/科技）</li>
+          <li>文本蕴含（蕴含/矛盾/中立）</li>
+          <li>Reranking（相关/不相关，num_labels=1 时）</li>
+        </ul>
+        <p><strong>vLLM 中的实现：</strong></p>
+        <ul>
+          <li>使用 <code>SequencePooler</code> + <code>ClassifierPoolerHead</code></li>
+          <li>默认 <code>seq_pooling_type = "LAST"</code></li>
+          <li>默认激活函数：softmax（单标签）或 sigmoid（多标签）</li>
+        </ul>
+        <p>代码级细节（<code>seqwise/heads.py</code> 中的 <code>ClassifierPoolerHead</code>）：</p>
+
+        <pre><code>class ClassifierPoolerHead(SequencePoolerHead):
+    def __init__(self, classifier, logit_mean, logit_sigma, head_dtype, activation):
+        self.classifier = classifier  # 线性分类层
+        self.logit_mean = logit_mean  # 分数校准：均值偏移
+        self.logit_sigma = logit_sigma  # 分数校准：尺度缩放
+        self.activation = activation  # 如 softmax
+
+    def forward(self, pooled_data, pooling_metadata):
+        if self.classifier is not None:
+            logits = self.classifier(pooled_data)  # [batch, num_labels]
+
+        # Affine score calibration
+        if self.logit_mean is not None:
+            logits = logits - self.logit_mean
+        if self.logit_sigma is not None:
+            logits = logits / self.logit_sigma
+
+        if self.activation is not None:
+            logits = self.activation(logits)
+
+        return logits</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>Token 分类（Token Classification / NER）</h4>
+        <p>定义：为输入序列中的每个 Token 输出一个类别概率分布。</p>
+        <p>输出形状：<code>[batch_size, seq_len, num_labels]</code></p>
+        <p><strong>典型应用：</strong></p>
+        <ul>
+          <li>命名实体识别（NER）：识别 Person、Organization、Location 等</li>
+          <li>词性标注（POS）</li>
+          <li>强制对齐（Forced Alignment，如 ASR 中的音素对齐）</li>
+          <li>奖励模型（评估每个生成步骤的质量）</li>
+        </ul>
+        <p><strong>vLLM 中的实现：</strong></p>
+        <ul>
+          <li>使用 <code>TokenPooler</code> + <code>TokenClassifierPoolerHead</code></li>
+          <li>默认 <code>tok_pooling_type = "ALL"</code></li>
+          <li>支持 <code>step_tag_id</code> 过滤（奖励模型专用）</li>
+          <li>支持 <code>returned_token_ids</code> 提取特定维度</li>
+        </ul>
+        <p>代码级细节（<code>tokwise/heads.py</code> 中的 <code>TokenClassifierPoolerHead</code>）：</p>
+
+        <pre><code>class TokenClassifierPoolerHead(TokenPoolerHead):
+    def forward_chunk(self, pooled_data, pooling_param):
+        if self.classifier is not None:
+            logits = self.classifier(pooled_data)  # [n_tokens, num_labels]
+
+        if self.logit_mean is not None:
+            logits = logits - self.logit_mean
+        if self.logit_sigma is not None:
+            logits = logits / self.logit_sigma
+
+        if self.activation is not None and pooling_param.use_activation:
+            logits = self.activation(logits)
+
+        return logits</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>logit_mean / logit_sigma 分数校准</h4>
+        <p><code>logit_mean</code> 和 <code>logit_sigma</code> 是 vLLM 提供的 <strong>仿射分数校准（Affine Score Calibration）</strong> 参数，对应于 Platt Scaling 的简化形式：</p>
+
+        <div class="formula-box"><code>p = sigma( (logit - mu) / sigma_scale )</code></div>
+
+        <p>其中：</p>
+        <ul>
+          <li>mu = logit_mean：logits 的均值偏移量</li>
+          <li>sigma_scale = logit_sigma：logits 的尺度缩放因子</li>
+          <li>sigma(.) 是激活函数（通常是 softmax 或 sigmoid）</li>
+        </ul>
+
+        <p><strong>为什么需要分数校准：</strong></p>
+        <p>神经网络输出的原始 logits 分布可能：</p>
+        <ol>
+          <li><strong>有偏（Biased）</strong>：均值不为 0，导致概率估计系统性地偏高或偏低。</li>
+          <li><strong>尺度不当</strong>：方差过大或过小，导致概率过于极端（接近 0 或 1）或过于平缓。</li>
+        </ol>
+        <p>分数校准通过简单的仿射变换 z = (x - mu) / sigma 将 logits 调整到更合适的范围，使得输出的概率更接近真实的置信度。</p>
+
+        <p>在 <code>PoolerConfig</code> 中：</p>
+
+        <pre><code>class PoolerConfig:
+    logit_mean: float | None = None
+    """If provided, subtract this value from classification logits before activation."""
+
+    logit_sigma: float | None = None
+    """If provided, divide the classification logits by this value after mean subtraction."""</code></pre>
+
+        <p>历史兼容性：<code>logit_bias</code>（已弃用，v0.21 移除）映射到 <code>logit_mean</code>；<code>logit_scale</code>（已弃用，v0.21 移除）映射到 <code>logit_sigma = 1/logit_scale</code>。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 3.6 Reward Model -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>3.6 Reward Model</h3>
+        <span class="tag tag-cyan">奖励模型</span>
+      </div>
+
+      <p>Reward Model（奖励模型）是 RLHF（Reinforcement Learning from Human Feedback）流程中的核心组件。它接收一个 prompt-completion 对，输出一个标量奖励值，用于评估生成质量，替代人类直接标注偏好。</p>
+
+      <p>在 vLLM 中，奖励模型通过 <code>token_classify</code> 任务实现，因为奖励模型本质上是 Token 级分类器：它为每个生成步骤（或最终输出）预测一个质量分数。</p>
+
+      <div class="sub-section">
+        <h4>在 RLHF 流程中的位置和作用</h4>
+        <p><strong>RLHF 三阶段流程：</strong></p>
+
+        <pre><code>Stage 1: SFT (Supervised Fine-Tuning)
+  预训练模型 + 高质量指令数据 -&gt; 指令遵循模型
+
+Stage 2: Reward Modeling
+  指令遵循模型 + 人类偏好比较数据 -&gt; 奖励模型
+  数据格式：(prompt, completion_A, completion_B, preference)
+  训练目标： Bradley-Terry 模型，最大化偏好数据的似然
+
+Stage 3: RL Optimization (PPO / DPO / IPO / etc.)
+  指令遵循模型 + 奖励模型 -&gt; 对齐人类偏好的最终模型
+  目标：最大化奖励，同时保持与 SFT 模型的 KL 散度约束</code></pre>
+
+        <p><strong>奖励模型的具体作用：</strong></p>
+        <ol>
+          <li><strong>偏好压缩</strong>：将复杂的人类偏好（如有用性、无害性、诚实性）压缩为标量奖励。</li>
+          <li><strong>可扩展的评估</strong>：训练后无需人类即可自动评估任意生成结果。</li>
+          <li><strong>RL 优化信号</strong>：为策略梯度方法（如 PPO）提供可微分的优化目标。</li>
+        </ol>
+
+        <p><strong>数学形式</strong>（Bradley-Terry 模型）：</p>
+        <div class="formula-box"><code>P(y_w &gt; y_l | x) = sigma( r(x, y_w) - r(x, y_l) )</code></div>
+        <p>其中 r(x, y) 是奖励模型对 prompt x 和 completion y 的输出，y_w 是人类偏好的输出，y_l 是非偏好的输出，sigma 是 sigmoid 函数。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>step_tag_id 和奖励模型步长标签</h4>
+        <p><code>step_tag_id</code> 是 vLLM <code>PoolerConfig</code> 中的一个关键参数，用于 <strong>Process Reward Models（PRM，过程奖励模型）</strong>：</p>
+
+        <pre><code>class PoolerConfig:
+    step_tag_id: int | None = None
+    """If set, only the score corresponding to the step_tag_id in the
+    generated sentence should be returned."""
+
+    returned_token_ids: list[int] | None = None
+    """A list of indices for the vocabulary dimensions to be extracted,
+    such as the token IDs of good_token and bad_token."""</code></pre>
+
+        <p><strong>过程奖励模型（PRM）：</strong></p>
+        <p>PRM 不仅评估最终答案，还评估中间推理步骤的质量。这在数学推理、代码生成等需要多步思考的任务中尤为重要。</p>
+
+        <p><strong>工作原理：</strong></p>
+        <ul>
+          <li>模型在生成过程中插入特殊的步骤标签（如 <code>&lt;step&gt;</code>）。</li>
+          <li><code>step_tag_id</code> 是这个特殊标签对应的 vocabulary ID。</li>
+          <li>Pooler 在 <code>StepPool</code> 中识别这些标签的位置，只提取步骤标签处的隐藏状态作为奖励。</li>
+        </ul>
+
+        <p>代码实现（<code>tokwise/methods.py</code> 中的 <code>StepPool</code>）：</p>
+
+        <pre><code>class StepPool(AllPool):
+    def forward(self, hidden_states, pooling_metadata):
+        pooled_data_lst = super().forward(hidden_states, pooling_metadata)
+        prompt_token_ids_cpu = pooling_metadata.get_prompt_token_ids_cpu()
+
+        for data, token_id_cpu, pooling_param in zip(pooled_data_lst, ...):
+            step_tag_id = pooling_param.step_tag_id
+            returned_token_ids = pooling_param.returned_token_ids
+
+            if returned_token_ids is not None:
+                data = data[:, returned_token_ids]  # 只保留指定维度
+
+            if step_tag_id is not None:
+                idx_cpu = (token_id_cpu == step_tag_id).nonzero(as_tuple=True)[0]
+                idx = idx_cpu.to(data.device, non_blocking=True)
+                data = data[idx]  # 只保留 step_tag 位置的输出
+
+            pooled_data.append(data)</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>常见 Reward 模型</h4>
+        <p><strong>InternLM2ForRewardModel：</strong></p>
+        <pre><code>_REWARD_MODELS = {
+    "InternLM2ForRewardModel": ("internlm2", "InternLM2ForRewardModel"),
+}</code></pre>
+        <p>典型模型：<code>internlm/internlm2-1_8b-reward</code>、<code>internlm/internlm2-7b-reward</code>。基于 InternLM2 架构，支持 LoRA 和 Pipeline Parallelism，输出单维度奖励分数。</p>
+
+        <p><strong>Qwen2ForRewardModel / Qwen2ForProcessRewardModel：</strong></p>
+        <pre><code>_REWARD_MODELS = {
+    "Qwen2ForRewardModel": ("qwen2_rm", "Qwen2ForRewardModel"),
+    "Qwen2ForProcessRewardModel": ("qwen2_rm", "Qwen2ForProcessRewardModel"),
+}</code></pre>
+        <p>典型模型：<code>Qwen/Qwen2.5-Math-RM-72B</code>、<code>Qwen/Qwen2.5-Math-PRM-7B</code>。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 3.7 Score Type 体系 -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>3.7 Score Type 体系</h3>
+        <span class="tag tag-blue">评分类型</span>
+      </div>
+
+      <p>vLLM 的 Score Type 体系定义了三种不同的语义相似度计算范式，分别对应不同的模型架构和应用场景。Score Type 在 <code>vllm/tasks.py</code> 中定义为：</p>
+
+      <pre><code>ScoreType = Literal["bi-encoder", "cross-encoder", "late-interaction"]
+SCORE_TYPE_MAP: dict[PoolingTask, ScoreType] = {
+    "embed": "bi-encoder",
+    "classify": "cross-encoder",
+    "token_embed": "late-interaction",
+}</code></pre>
+
+      <div class="sub-section">
+        <h4>bi-encoder（余弦相似度）</h4>
+        <p>Bi-encoder 独立编码 query 和 document，然后通过向量相似度评分。</p>
+        <p><strong>数学公式：</strong></p>
+        <div class="formula-box"><code>score(q, d) = (q_vec . d_vec) / (||q_vec|| ||d_vec||) = cos(theta)</code></div>
+        <p><strong>工作流程：</strong></p>
+        <ol>
+          <li>分别编码 query 和 document 为向量 q_vec 和 d_vec。</li>
+          <li>计算余弦相似度（或点积）。</li>
+          <li>得分越高表示越相关。</li>
+        </ol>
+        <p><strong>特点：</strong>可预计算 document 嵌入；速度快，支持 ANN 搜索；但 query 和 document 在编码时无交互，精度有限。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>cross-encoder（线性分类器输出）</h4>
+        <p>Cross-encoder 将 query 和 document 拼接后联合编码，输出标量相关性分数。</p>
+        <p><strong>数学公式：</strong></p>
+        <div class="formula-box"><code>score(q, d) = W . H_[CLS] + b</code></div>
+        <p>其中 H = Transformer([q; d])，W in R<sup>1 x d</sup>，b in R。</p>
+        <p><strong>工作流程：</strong></p>
+        <ol>
+          <li>将 query 和 document 拼接为单个序列。</li>
+          <li>输入 Transformer 编码器。</li>
+          <li>取 <code>[CLS]</code> 隐藏状态经过线性层得到分数。</li>
+        </ol>
+        <p><strong>特点：</strong>query 和 document 在编码时充分交互，精度高；不可预计算，每对需要一次前向传播；速度慢，适合精排阶段。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>late-interaction（MaxSim，ColBERT 系列）</h4>
+        <p>Late-interaction 是一种折中方案：独立编码 query 和 document 到 token 级向量，但在最后阶段进行细粒度交互（MaxSim）。</p>
+        <p><strong>数学公式：</strong></p>
+        <p>对于 query token 嵌入 Q in R<sup>m x d</sup> 和 document token 嵌入 D in R<sup>n x d</sup>：</p>
+        <div class="formula-box"><code>score(Q, D) = sum_{i=1}^{m} max_{j=1}^{n} (Q_i . D_j)</code></div>
+        <p>即：对每个 query token，找到与之最相似的 document token，取点积；然后对所有 query token 的 best match 求和。</p>
+        <p><strong>工作流程：</strong></p>
+        <ol>
+          <li>分别编码 query 和 document 为 token 级向量矩阵。</li>
+          <li>对每个 query token，计算与所有 document token 的点积，取最大值。</li>
+          <li>对所有 query token 的最大值求和得到最终分数。</li>
+        </ol>
+        <p><strong>特点：</strong>保留了 query 和 document 的 token 级信息，交互比 bi-encoder 更细粒度；document token 嵌入可以预计算和索引（但索引复杂度高于 bi-encoder）；计算量介于 bi-encoder 和 cross-encoder 之间。</p>
+      </div>
+
+      <h4>Score Type 三维对比表格</h4>
+
+      <table>
+        <thead><tr><th>维度</th><th>bi-encoder</th><th>cross-encoder</th><th>late-interaction</th></tr></thead>
+        <tbody>
+          <tr><td>编码方式</td><td>独立双编码</td><td>联合编码</td><td>独立编码 + 后期交互</td></tr>
+          <tr><td>交互时机</td><td>无 / 晚期（向量点积）</td><td>早期（Attention 中）</td><td>晚期（MaxSim）</td></tr>
+          <tr><td>相似度计算</td><td>余弦相似度 / 点积</td><td>线性分类器输出</td><td>MaxSim（逐 token 匹配）</td></tr>
+          <tr><td>速度</td><td>快（ms 级，支持 ANN）</td><td>慢（每对一次前向传播）</td><td>中等（需计算所有 token 对）</td></tr>
+          <tr><td>可预计算</td><td>Document 向量可预计算</td><td>不可预计算</td><td>Document token 向量可预计算</td></tr>
+          <tr><td>精度</td><td>中等</td><td>高</td><td>中高</td></tr>
+          <tr><td>适用阶段</td><td>粗排（召回）</td><td>精排（重排序）</td><td>粗排 / 精排均可</td></tr>
+          <tr><td>代表模型</td><td>BERT, GTE, Jina</td><td>BERT-for-Ranking, JinaReranker</td><td>ColBERT, ColPali, ColQwen</td></tr>
+          <tr><td>vLLM 任务</td><td>embed</td><td>classify</td><td>token_embed</td></tr>
+          <tr><td>典型延迟</td><td>5ms / 百万文档</td><td>50ms / 100 文档</td><td>20ms / 千文档</td></tr>
+        </tbody>
+      </table>
+
+      <div class="sub-section">
+        <h4>Score API 处理 score/rerank 请求的实现</h4>
+        <p>vLLM 的 <code>LLM.score(...)</code> API 根据模型的 Score Type 自动选择评分机制：</p>
+        <ul>
+          <li>对于 bi-encoder 模型：分别编码两个输入，计算余弦相似度。</li>
+          <li>对于 cross-encoder 模型：将两个输入拼接后输入模型，取分类输出。</li>
+          <li>对于 late-interaction 模型：分别编码后计算 MaxSim。</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="section-2.html" class="module-nav-prev">
+    <div class="module-nav-label">← 上一模块</div>
+    <div class="module-nav-title">vLLM 核心创新</div>
+  </a>
+    <a href="section-4.html" class="module-nav-next">
+    <div class="module-nav-label">下一模块 →</div>
+    <div class="module-nav-title">分布式推理与部署</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 3: vLLM API 模型类型 | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>

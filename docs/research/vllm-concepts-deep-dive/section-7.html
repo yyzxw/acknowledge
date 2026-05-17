@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块7: 高级 AI 相关概念（上） — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 7 / 8</span>
+  </div>
+</div>
+
+<section id="sec-7" data-section="module">
+  <div class="module-content">
+
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>模块概览</h3>
+        <span class="tag tag-blue">概览</span>
+      </div>
+      <ul>
+        <li><strong>概念总数</strong>: 50+ 个核心概念</li>
+        <li><strong>概念分类</strong>: 8 大子模块（训练范式、模型评估指标、GPU 架构基础、RAG、AI Agent 与工具使用、多模态、模型压缩与优化、生产部署）</li>
+        <li><strong>来源说明</strong>: 基于 Phase 2 中 5 个搜索 agent 的 219 个唯一来源，以及 vLLM 源代码和主流 AI 文献</li>
+        <li><strong>覆盖深度</strong>: 每个概念包含定义、工作原理（含公式/代码/配置）、应用场景、对比表格、与其他概念的关系</li>
+      </ul>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 7.1 训练范式 -->
+    <!-- ============================================================ -->
+
+    <h2>7.1 训练范式（Training Paradigms）</h2>
+
+    <!-- 7.1.1 Pretraining -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.1.1 Pretraining（预训练）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>预训练（Pretraining）是大语言模型生命周期的第一阶段，其目标是在海量无标注语料上通过自监督学习训练模型掌握语言的基本规律、知识和推理能力。预训练阶段产生的模型称为"基座模型"（Base Model），具备通用的文本理解和生成能力，但不具备特殊的指令遵循或任务执行能力。</p>
+
+      <div class="sub-section">
+        <h4>语言建模目标</h4>
+        <p>预训练的核心训练目标是<strong>语言建模（Language Modeling）</strong>，即最大化模型对训练文本的预测概率。根据模型架构的不同，有两种主要变体：</p>
+        <p><strong>因果语言建模（Causal Language Modeling, CLM）</strong>：用于自回归解码器模型（如 GPT、LLaMA、Qwen）。模型只能根据当前 token 之前的 token 来预测当前 token：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{CLM}} = -\sum_{t=1}^{T} \log P(x_t | x_{&lt;t}; \theta)</code></div>
+        <p>其中 <code>\theta</code> 是模型参数，<code>x_{&lt;t}</code> 是位置 <code>t</code> 之前的所有 token。这种单向建模是自回归生成的基础。</p>
+        <p><strong>掩码语言建模（Masked Language Modeling, MLM）</strong>：用于编码器模型（如 BERT、RoBERTa）。输入序列中随机遮盖 15% 的 token，模型需要根据上下文（包括左右两侧）预测被遮盖的 token：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{MLM}} = -\sum_{t \in \mathcal{M}} \log P(x_t | x_{\setminus \mathcal{M}}; \theta)</code></div>
+        <p>其中 <code>\mathcal{M}</code> 是被遮盖位置的集合，<code>x_{\setminus \mathcal{M}}</code> 是未遮盖的上下文 token。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>预训练数据</h4>
+        <p>预训练数据的规模和质量直接决定模型能力：</p>
+        <table>
+          <thead><tr><th>数据类别</th><th>占比</th><th>来源</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>Web 文本</td><td>60-80%</td><td>Common Crawl, RefinedWeb</td><td>规模最大但噪声多</td></tr>
+            <tr><td>高质量文章</td><td>10-20%</td><td>Wikipedia, Books</td><td>知识密度高</td></tr>
+            <tr><td>代码</td><td>5-15%</td><td>GitHub</td><td>提升推理和编程能力</td></tr>
+            <tr><td>多语言数据</td><td>5-10%</td><td>各语言维基百科、新闻</td><td>覆盖低资源语言</td></tr>
+          </tbody>
+        </table>
+        <p><strong>训练数据规模演进</strong>：GPT-1 (5GB) → GPT-3 (570GB) → LLaMA-2 (2TB) → DBRX (12TB) → DeepSeek-V3 (14.8T tokens)。每一代模型的数据量增长约 3-10 倍。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>计算成本</h4>
+        <p>预训练是计算成本最高的环节。以 DeepSeek-V3（671B 总参/37B 活跃参数）为例：</p>
+        <ul>
+          <li>训练数据：14.8T tokens</li>
+          <li>计算消耗：约 280 万 H800 GPU 小时</li>
+          <li>硬件成本：约 557 万美元（按租赁价格）</li>
+          <li>训练时间：约 2 个月（使用 2048 块 H800）</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与后续阶段的关系</h4>
+        <p>预训练是微调和对齐的基础。预训练向模型"注入"了世界知识和语言能力，而后续的微调和对齐则负责"塑造"模型的行为方式。没有充分的预训练，后续微调的效果将受到根本制约。</p>
+      </div>
+    </div>
+
+    <!-- 7.1.2 Fine-tuning -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.1.2 Fine-tuning（微调）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>微调（Fine-tuning）是在预训练基座模型的基础上，使用特定领域或特定任务的数据进行有监督训练的进阶过程。微调的核心思想是：预训练模型已经学习了通用的语言表示，微调只需在此基础上进行"定向调整"即可适应下游任务。</p>
+
+      <div class="sub-section">
+        <h4>全量微调（Full Fine-tuning）</h4>
+        <p>全量微调更新模型的所有参数。对于 70B 参数的模型，全量微调需要使用约 560GB 的 GPU 显存（FP16 精度），通常需要 8-16 张 A100-80G 或 H100-80G 显卡。</p>
+        <p><strong>数学形式</strong>：</p>
+        <div class="formula-box"><code>\theta^* = \arg\min_{\theta} \frac{1}{N}\sum_{i=1}^{N} \mathcal{L}(f(x_i; \theta), y_i)</code></div>
+        <p>其中 <code>\theta</code> 是模型的所有参数，<code>N</code> 是训练样本数，<code>\mathcal{L}</code> 是任务相关的损失函数（如交叉熵），<code>f(x_i; \theta)</code> 是模型输出，<code>y_i</code> 是目标标签。</p>
+        <p><strong>优点</strong>：理论上可达到最优适应效果。<br><strong>缺点</strong>：训练成本极高，每个下游任务需要训练并存储完整的模型副本，不便于多任务部署。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>参数高效微调（PEFT）</h4>
+        <p>PEFT（Parameter-Efficient Fine-Tuning）只更新一小部分额外参数，冻结预训练参数不变。典型方法包括：</p>
+        <p><strong>LoRA（Low-Rank Adaptation）</strong>：</p>
+        <div class="formula-box"><code>W = W_0 + BA, \quad \text{其中 } B \in \mathbb{R}^{d \times r}, A \in \mathbb{R}^{r \times k}, r \ll \min(d, k)</code></div>
+        <p><code>W_0</code> 是冻结的预训练权重，<code>BA</code> 是低秩分解的增量矩阵，秩 <code>r</code> 通常取 8、16 或 32。训练时只更新 <code>B</code> 和 <code>A</code>，<code>W_0</code> 保持不变。推理时可将 <code>BA</code> 合并入 <code>W_0</code> 中，不增加推理延迟。</p>
+        <p><strong>AdaLoRA</strong>：动态分配参数预算到不同层，重要层分配更多参数，不重要层分配更少。</p>
+        <p><strong>Prefix Tuning</strong>：在输入序列前添加可学习的连续向量（soft prompt），只更新这些向量。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>全量微调 vs PEFT 对比</h4>
+        <table>
+          <thead><tr><th>特性</th><th>全量微调</th><th>LoRA</th><th>AdaLoRA</th><th>Prefix Tuning</th></tr></thead>
+          <tbody>
+            <tr><td>可训练参数量</td><td>100%</td><td>0.1-1%</td><td>0.1-1%</td><td>&lt;0.1%</td></tr>
+            <tr><td>显存需求</td><td>100%（基线）</td><td>30-40%</td><td>30-40%</td><td>20-30%</td></tr>
+            <tr><td>模型存储</td><td>每个任务一个完整副本</td><td>共用基础模型 + 小权重</td><td>同 LoRA</td><td>共用基础模型</td></tr>
+            <tr><td>推理延迟</td><td>无增加</td><td>可合并为原始权重</td><td>同 LoRA</td><td>需拼接 prefix</td></tr>
+            <tr><td>任务适应能力</td><td>最强</td><td>接近全量微调</td><td>优于 LoRA</td><td>略弱于 LoRA</td></tr>
+            <tr><td>适用场景</td><td>重要任务、资源充足</td><td>多适配器部署</td><td>资源优化</td><td>快速实验</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>在 vLLM 中的微调部署支持</h4>
+        <p>vLLM 支持动态加载多个 LoRA 适配器，无需重启服务：</p>
+        <pre><code># 启动 vLLM 服务，支持 LoRA
+python -m vllm.entrypoints.openai.api_server \
+    --model meta-llama/Llama-2-7b-hf \
+    --enable-lora \
+    --max-loras 4 \
+    --max-lora-rank 64
+
+# 请求时指定 LoRA 适配器
+curl http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "meta-llama/Llama-2-7b-hf",
+        "messages": [{"role": "user", "content": "翻译成英文：今天天气很好"}],
+        "extra_body": {"lora": "path/to/translation-adapter"}
+    }'</code></pre>
+        <p>vLLM 的 LoRA 支持基于 <code>punica</code> kernel 实现批量 LoRA 计算，同一 batch 中的不同请求可以使用不同的 LoRA 适配器，互不干扰。</p>
+      </div>
+    </div>
+
+    <!-- 7.1.3 Instruction Tuning -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.1.3 Instruction Tuning（指令微调）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Instruction Tuning（指令微调）是一种特殊的微调方法，通过在大量"指令-回答"对（instruction-response pairs）上训练模型，使其具备理解和遵循人类指令的能力。这是从基座模型（Base Model）到对话模型（Chat Model / Assistant Model）的关键转变。</p>
+
+      <div class="sub-section">
+        <h4>对话格式训练</h4>
+        <p>指令微调的训练数据采用对话格式，通常包含多轮交互。最常用的格式是 <strong>ChatML（Chat Markup Language）</strong>：</p>
+        <pre><code>&lt;|im_start|&gt;system
+你是一个乐于助人的 AI 助手。
+&lt;|im_end|&gt;
+&lt;|im_start|&gt;user
+请解释量子计算的基本原理。
+&lt;|im_end|&gt;
+&lt;|im_start|&gt;assistant
+量子计算利用量子力学中的两个核心原理——叠加（superposition）和纠缠（entanglement）...
+&lt;|im_end|&gt;</code></pre>
+        <p>ChatML 格式的关键元素：</p>
+        <ul>
+          <li><strong><code>&lt;|im_start|&gt;</code></strong>：标记角色（system/user/assistant）的开始</li>
+          <li><strong><code>&lt;|im_end|&gt;</code></strong>：标记对话回合的结束</li>
+          <li><strong>特殊 token ID</strong>：这些控制 token 在词汇表中分配特定 ID，训练时它们的 logits 不计入损失函数</li>
+        </ul>
+        <p><strong>损失掩码（Loss Masking）</strong>：在指令微调的损失计算中，只对 assistant 回复部分的 token 计算损失，对 user 输入和 system prompt 部分进行掩码：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{inst}} = -\sum_{t \in \mathcal{A}} \log P(y_t | x, y_{&lt;t}; \theta)</code></div>
+        <p>其中 <code>\mathcal{A}</code> 是 assistant 回复部分的 token 位置集合。这种掩码防止模型在训练中"学习"复述用户的输入，确保模型只学习如何做出有用的回复。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>数据构成</h4>
+        <p>高质量的指令微调数据通常包含：</p>
+        <table>
+          <thead><tr><th>数据类型</th><th>示例</th><th>占比</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td>通用问答</td><td>知识性问题、解释</td><td>30-40%</td><td>知识检索与解释能力</td></tr>
+            <tr><td>创作任务</td><td>写作、翻译、改写</td><td>15-20%</td><td>文本生成能力</td></tr>
+            <tr><td>推理任务</td><td>数学推理、逻辑分析</td><td>10-15%</td><td>推理能力</td></tr>
+            <tr><td>编程任务</td><td>代码生成、调试</td><td>10-15%</td><td>代码能力</td></tr>
+            <tr><td>多轮对话</td><td>上下文连贯交互</td><td>10-15%</td><td>对话管理能力</td></tr>
+            <tr><td>安全对齐</td><td>拒绝不当请求</td><td>5-10%</td><td>安全与无害性</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>典型数据集</h4>
+        <ul>
+          <li><strong>OpenAssistant</strong>：~16K 人工标注对话</li>
+          <li><strong>ShareGPT</strong>：~90K 用户与 GPT 的真实对话</li>
+          <li><strong>Alpaca</strong>：52K GPT-4 生成的指令数据</li>
+          <li><strong>Dolly</strong>：15K 人工标注指令数据</li>
+          <li><strong>UltraChat</strong>：1.5M 多轮对话</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与 RLHF 的关系</h4>
+        <p><strong>Instruction Tuning 是 RLHF 的前置步骤</strong>。在完整的 RLHF 流程中，Stage 1 就是指令微调（SFT）。基座模型在指令微调后虽然能遵循指令，但输出的"风格"可能不正确——缺乏对齐、容易胡编乱造。RLHF 的后续阶段（Reward Modeling + RL Optimization）负责进一步将模型输出与人类偏好对齐。</p>
+      </div>
+    </div>
+
+    <!-- 7.1.4 RLHF -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.1.4 RLHF（Reinforcement Learning from Human Feedback）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>RLHF（基于人类反馈的强化学习）是当前最有效的 LLM 对齐技术之一。它将人类偏好信息通过奖励模型引入强化学习流程，使模型生成结果与人类期望（有用性、诚实性、无害性）保持一致。OpenAI 的 InstructGPT/ChatGPT、Anthropic 的 Claude 等最早采用了这一范式。</p>
+
+      <div class="sub-section">
+        <h4>四阶段流程</h4>
+        <p>RLHF 包含以下四个阶段：</p>
+        <pre><code>Phase 1: SFT（监督微调）
+  预训练模型 + 高质量指令数据 → 指令遵循模型
+
+Phase 2: 偏好数据收集
+  从 SFT 模型采样多个回复 → 人工标注偏好 (good/bad)
+
+Phase 3: Reward Model 训练
+  SFT 模型 + 偏好比较数据 → 奖励模型
+  数据格式: (prompt, completion_A, completion_B, preference)
+
+Phase 4: RL 优化（PPO）
+  SFT 模型 + 奖励模型 → 对齐人类偏好的最终模型
+  目标: 最大化奖励，同时保持与 SFT 模型的 KL 散度约束</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>Bradley-Terry 模型（奖励模型训练）</h4>
+        <p>奖励模型的训练目标是最大化人类偏好数据的似然。给定一个 prompt <code>x</code> 和两个输出 <code>y_w</code>（被偏好）、<code>y_l</code>（不被偏好），<strong>Bradley-Terry 模型</strong>假设人类偏好概率与奖励值的差异呈逻辑斯蒂分布：</p>
+        <div class="formula-box"><code>P(y_w \succ y_l | x) = \sigma(r_\phi(x, y_w) - r_\phi(x, y_l))</code></div>
+        <p>其中 <code>r_\phi(x, y)</code> 是奖励模型（通常基于 SFT 模型，去掉最后的 unembedding 层，加上一个线性层输出标量），<code>\sigma</code> 是 sigmoid 函数。</p>
+        <p><strong>训练损失</strong>：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{RM}} = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma(r_\phi(x, y_w) - r_\phi(x, y_l)) \right]</code></div>
+        <p>这个损失函数的直觉是：最大化偏好回复与不偏好回复之间的奖励差距。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>PPO 阶段</h4>
+        <p>PPO（Proximal Policy Optimization）是 RLHF 中使用的强化学习算法。其目标函数为：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{PPO}}(\theta) = \mathbb{E}_{t} \left[ \min\left( \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_\text{old}}(a_t|s_t)} A_t,\ \text{clip}\left( \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_\text{old}}(a_t|s_t)}, 1-\epsilon, 1+\epsilon \right) A_t \right) \right]</code></div>
+        <p>对于 LLM 的 RLHF 场景，PPO 损失进一步包含两个约束：</p>
+        <ol>
+          <li><strong>奖励信号</strong>：<code>R(x, y) = r_\phi(x, y) - \beta \cdot D_{\text{KL}}(\pi_\theta(y|x) \| \pi_{\text{ref}}(y|x))</code></li>
+          <li><strong>KL 散度惩罚</strong>：防止模型过度偏离 SFT 模型，避免奖励黑客（reward hacking）问题：<div class="formula-box"><code>D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}}) = \mathbb{E}_{y \sim \pi_\theta} \left[ \log \frac{\pi_\theta(y|x)}{\pi_{\text{ref}}(y|x)} \right]</code></div></li>
+        </ol>
+        <p><strong>完整 PPO 损失</strong>：</p>
+        <div class="formula-box"><code>\mathcal{L}(\theta) = \mathcal{L}_{\text{PPO}}(\theta) + \alpha \cdot \mathcal{L}_{\text{KL}}(\theta)</code></div>
+        <p>其中 <code>\beta</code> 控制 KL 惩罚的强度，<code>\alpha</code> 决定了两种损失之间的权衡。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>在 vLLM 中的奖励模型支持</h4>
+        <p>vLLM 原生支持奖励模型推理（用于 RLHF 训练中的奖励计算或评估）：</p>
+        <pre><code># 加载奖励模型
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-Math-RM-72B \
+    --task token_classify \
+    --pooler-config '{"pooling_type": "ALL", "step_tag_id": null}'
+
+# 使用 Score API 获得奖励分数
+curl http://localhost:8000/v1/score \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "Qwen/Qwen2.5-Math-RM-72B",
+        "text_1": "What is 2+2?",
+        "text_2": "The answer is 4."
+    }'
+# 返回: {"score": 2.34}  (越高表示回复越好)</code></pre>
+        <p>过程奖励模型（PRM）的 <code>StepPool</code> 实现：</p>
+        <pre><code>class StepPool(AllPool):
+    def forward(self, hidden_states, pooling_metadata):
+        # 1. 调用 AllPool 获得全 token 输出
+        pooled_data = super().forward(hidden_states, pooling_metadata)
+        # 2. 只提取 step_tag_id 位置的隐藏状态
+        step_mask = (input_ids == step_tag_id)
+        return pooled_data[step_mask]</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>RLHF 的挑战</h4>
+        <ol>
+          <li><strong>训练不稳定</strong>：PPO 对超参数敏感，KL 惩罚系数 <code>\beta</code> 的调节需要大量实验</li>
+          <li><strong>奖励黑客</strong>：模型学会通过"取巧"获得高奖励而非真正改善质量</li>
+          <li><strong>奖励泄露</strong>：奖励模型可能学到表面特征（如偏好更长回复）而非真正的质量信号</li>
+          <li><strong>计算开销大</strong>：需要同时运行策略模型、参考模型、奖励模型和价值模型，共 4 个模型</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 7.1.5 DPO -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.1.5 DPO（Direct Preference Optimization）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>DPO（直接偏好优化）由 Rafailov 等人于 2023 年提出，是一种无需独立奖励模型的偏好优化方法。DPO 的核心洞察是：RLHF 中的奖励函数可以表示为策略模型和参考模型的概率比，因此可以直接在偏好数据上优化策略模型，无需训练单独的奖励模型。</p>
+
+      <div class="sub-section">
+        <h4>数学推导</h4>
+        <p>DPO 的出发点是将 RLHF 的最优策略解表示为闭式形式。经典的 RLHF 目标是：</p>
+        <div class="formula-box"><code>\max_{\pi_\theta} \mathbb{E}_{x \sim \mathcal{D}, y \sim \pi_\theta(y|x)} \left[ r(x, y) \right] - \beta \cdot D_{\text{KL}}(\pi_\theta(y|x) \| \pi_{\text{ref}}(y|x))</code></div>
+        <p>这个优化问题有已知的闭式解：</p>
+        <div class="formula-box"><code>\pi^*(y|x) = \frac{1}{Z(x)} \pi_{\text{ref}}(y|x) \exp\left( \frac{1}{\beta} r(x, y) \right)</code></div>
+        <p>其中 <code>Z(x)</code> 是配分函数。反过来，奖励函数可以用策略比率表示：</p>
+        <div class="formula-box"><code>r(x, y) = \beta \log \frac{\pi^*(y|x)}{\pi_{\text{ref}}(y|x)} + \beta \log Z(x)</code></div>
+        <p>将奖励函数代入 Bradley-Terry 偏好模型：</p>
+        <div class="formula-box"><code>P(y_w \succ y_l | x) = \sigma\left( r(x, y_w) - r(x, y_l) \right)</code></div>
+        <p>配分函数 <code>Z(x)</code> 消掉了！得到：</p>
+        <div class="formula-box"><code>P(y_w \succ y_l | x) = \sigma\left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \right)</code></div>
+        <p><strong>最终 DPO 损失函数</strong>：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{DPO}}(\theta) = -\mathbb{E}_{(x, y_w, y_l) \sim \mathcal{D}} \left[ \log \sigma\left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \right) \right]</code></div>
+      </div>
+
+      <div class="sub-section">
+        <h4>DPO vs RLHF 对比</h4>
+        <table>
+          <thead><tr><th>特性</th><th>RLHF (PPO)</th><th>DPO</th></tr></thead>
+          <tbody>
+            <tr><td>需要独立奖励模型</td><td>是</td><td>否</td></tr>
+            <tr><td>训练计算成本</td><td>高（需同时运行 4 个模型）</td><td>低（只需策略模型 + 参考模型）</td></tr>
+            <tr><td>训练稳定性</td><td>超参数敏感，容易崩溃</td><td>相对稳定</td></tr>
+            <tr><td>数学基础</td><td>强化学习（策略梯度）</td><td>直接偏好优化（闭式解）</td></tr>
+            <tr><td>对数据质量要求</td><td>中等</td><td>高（偏好数据需要更精确）</td></tr>
+            <tr><td>性能天花板</td><td>理论上更高</td><td>可能受限于闭式解假设</td></tr>
+            <tr><td>代表模型</td><td>GPT-4, Claude-3</td><td>Llama-3, DBRX, Qwen-2</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>局限性</h4>
+        <p>DPO 的一个关键假设是存在一个在偏好数据上表现良好且无需进一步 KL 正则化的最优策略。当偏好数据存在噪声或不一致时，DPO 可能不如 PPO 稳健。此外，DPO 不支持在线采样——它只能从已有的偏好数据中学习，无法像 PPO 那样通过与环境的交互动态采样和优化。</p>
+      </div>
+    </div>
+
+    <!-- 7.1.6 GRPO -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.1.6 GRPO（Group Relative Policy Optimization）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>GRPO（Group Relative Policy Optimization）是 DeepSeek-R1 中使用的强化学习方法，是 PPO 的一种变体。它的核心创新是：在组/群组内对多个采样回复进行相对比较，替代了 PPO 中需要价值网络（critic/value model）来估计优势函数的方法。</p>
+
+      <div class="sub-section">
+        <h4>工作原理</h4>
+        <p>GRPO 的工作流程如下：</p>
+        <pre><code>1. 给定 prompt x，从当前策略 π_θ 采样 G 个回复 {y_1, y_2, ..., y_G}
+2. 为每个回复计算奖励 r(x, y_i)
+3. 在组内计算优势函数：
+   A_i = (r(x, y_i) - mean(r)) / std(r)
+4. 使用组内优势更新策略 π_θ
+5. 加入 KL 散度约束，防止偏离参考模型</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>核心优势函数</h4>
+        <p>GRPO 的优势函数基于组内统计量，而非价值网络的估计：</p>
+        <div class="formula-box"><code>A_i = \frac{r(x, y_i) - \mu_G}{\sigma_G}</code></div>
+        <p>其中 <code>\mu_G = \frac{1}{G}\sum_{j=1}^G r(x, y_j)</code>，<code>\sigma_G = \frac{1}{G}\sum_{j=1}^G (r(x, y_j) - \mu_G)^2</code> 是组内奖励的均值和标准差。</p>
+        <p><strong>关键洞察</strong>：通过组内标准化，GRPO 消除了对价值网络的需求。价值网络是 PPO 中最易崩溃的组件之一，因为它需要为每个 token 位置估计未来回报的期望值。GRPO 将这个复杂问题简化为组内比较，显著提高了训练稳定性。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>GRPO 目标函数</h4>
+        <div class="formula-box"><code>\mathcal{L}_{\text{GRPO}}(\theta) = -\frac{1}{G} \sum_{i=1}^{G} \left[ A_i \cdot \min\left( \frac{\pi_\theta(y_i|x)}{\pi_{\theta_\text{old}}(y_i|x)},\ \text{clip}\left( \frac{\pi_\theta(y_i|x)}{\pi_{\theta_\text{old}}(y_i|x)}, 1-\epsilon, 1+\epsilon \right) \right) - \beta \cdot D_{\text{KL}}(\pi_\theta \| \pi_{\text{ref}}) \right]</code></div>
+      </div>
+
+      <div class="sub-section">
+        <h4>为什么 DeepSeek-R1 选择 GRPO</h4>
+        <ol>
+          <li><strong>价值网络是 PPO 的薄弱环节</strong>：价值网络需要准确估计任意状态下的预期回报，这在 LLM 的庞大状态空间中极为困难。GRPO 完全消除了这一依赖。</li>
+          <li><strong>组内比较天然消除偏差</strong>：同一组内的回复共享相同的 prompt，它们的奖励差异直接反映了生成质量差异，不受跨 prompt 的奖励波动影响。</li>
+          <li><strong>计算效率更高</strong>：无需维护价值网络，节省了一半的 GPU 显存和计算量。</li>
+          <li><strong>扩展性好</strong>：增加组大小 G 可以降低优势估计的方差，提供简单的扩展路径。DeepSeek-R1 论文中使用了 G=64 的组大小。</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>GRPO vs PPO vs DPO 对比</h4>
+        <table>
+          <thead><tr><th>特性</th><th>PPO</th><th>DPO</th><th>GRPO</th></tr></thead>
+          <tbody>
+            <tr><td>需要价值网络</td><td>是</td><td>否</td><td>否</td></tr>
+            <tr><td>需要奖励模型</td><td>是</td><td>否</td><td>是</td></tr>
+            <tr><td>在线采样</td><td>是</td><td>否（离线）</td><td>是</td></tr>
+            <tr><td>组内比较</td><td>否</td><td>否</td><td>是</td></tr>
+            <tr><td>KL 正则形式</td><td>显式</td><td>隐式（通过参考模型对比）</td><td>显式</td></tr>
+            <tr><td>训练稳定性</td><td>低</td><td>中</td><td>高</td></tr>
+            <tr><td>代表实现</td><td>InstructGPT</td><td>Llama-3</td><td>DeepSeek-R1</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.1.7 训练范式对比总表 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.1.7 训练范式对比总表</h3>
+        <span class="tag tag-blue">对比总结</span>
+      </div>
+      <table>
+        <thead><tr><th>范式</th><th>训练目标</th><th>数据需求</th><th>计算成本</th><th>输出模型类型</th><th>典型应用</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Pretraining</strong></td><td>语言建模（最小化 PPL）</td><td>海量无标注文本（TB 级）</td><td>极高（百万 GPU 时）</td><td>基座模型</td><td>通用语言理解与生成</td></tr>
+          <tr><td><strong>Full Fine-tuning</strong></td><td>任务损失最小化</td><td>任务标注数据（万-百万级）</td><td>高（全参数更新）</td><td>任务专用模型</td><td>分类、NER、翻译</td></tr>
+          <tr><td><strong>LoRA / PEFT</strong></td><td>任务损失最小化</td><td>少量标注数据</td><td>低（约 30% 显存）</td><td>可插拔适配器</td><td>多任务部署、个性化</td></tr>
+          <tr><td><strong>Instruction Tuning</strong></td><td>对话损失最小化</td><td>指令-回答对（万-百万级）</td><td>中等</td><td>指令遵循模型</td><td>对话助手、客服</td></tr>
+          <tr><td><strong>RLHF (PPO)</strong></td><td>奖励最大化 + KL 约束</td><td>偏好数据 + 奖励模型</td><td>极高（4 个模型同时运行）</td><td>对齐模型</td><td>ChatGPT, Claude</td></tr>
+          <tr><td><strong>DPO</strong></td><td>隐式偏好优化</td><td>偏好数据（无需奖励模型）</td><td>中等</td><td>对齐模型</td><td>Llama-3</td></tr>
+          <tr><td><strong>GRPO</strong></td><td>组内偏好优化 + KL 约束</td><td>偏好数据 + 奖励模型</td><td>较高（在线采样）</td><td>对齐模型</td><td>DeepSeek-R1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 7.2 模型评估指标 -->
+    <!-- ============================================================ -->
+
+    <h2>7.2 模型评估指标（Evaluation Metrics）</h2>
+
+    <!-- 7.2.1 Perplexity -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.2.1 Perplexity（PPL）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Perplexity（困惑度）是语言模型最基础、最常用的内在评估指标。它衡量模型对测试文本的"惊讶程度"——perplexity 越低，模型对文本的预测越准确。</p>
+
+      <div class="sub-section">
+        <h4>定义公式</h4>
+        <p>对于包含 <code>T</code> 个 token 的测试序列 <code>x = (x_1, x_2, \ldots, x_T)</code>：</p>
+        <div class="formula-box"><code>\text{PPL}(x) = \exp\left( -\frac{1}{T} \sum_{t=1}^{T} \log P(x_t | x_{&lt;t}) \right)</code></div>
+        <p>等价地，perplexity 是平均交叉熵损失的指数：</p>
+        <div class="formula-box"><code>\text{PPL} = \exp(\mathcal{L}_{\text{CE}})</code></div>
+        <p>其中 <code>\mathcal{L}_{\text{CE}} = -\frac{1}{T} \sum_{t=1}^{T} \log P(x_t | x_{&lt;t})</code>。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>信息论解释</h4>
+        <p><strong>交叉熵与编码长度</strong>：交叉熵 <code>H(P_{\text{data}}, P_{\text{model}})</code> 表示使用模型 <code>P_{\text{model}}</code> 的编码方案来编码真实分布 <code>P_{\text{data}}</code> 中的数据所需的平均比特数。Perplexity 是将这个比特数转换为"有效选择数"的结果。</p>
+        <p><strong>Perplexity 作为分支因子</strong>：</p>
+        <ul>
+          <li>PPL = 100 意味着模型在预测下一个 token 时，面对的有效选择数相当于从 100 个等概率选项中挑选</li>
+          <li>PPL = 2 意味着模型几乎能确定下一个 token（类似二元选择）</li>
+        </ul>
+        <p><strong>与信息量的关系</strong>：</p>
+        <div class="formula-box"><code>\log_2(\text{PPL}) = \frac{1}{T} \sum_{t=1}^{T} (-\log_2 P(x_t | x_{&lt;t}))</code></div>
+        <p>这是每个 token 的平均信息量（以比特计），也称为模型的压缩率。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>典型模型的 Perplexity</h4>
+        <table>
+          <thead><tr><th>模型</th><th>参数量</th><th>数据集</th><th>Perplexity</th></tr></thead>
+          <tbody>
+            <tr><td>GPT-2</td><td>117M</td><td>WikiText-2</td><td>~29</td></tr>
+            <tr><td>GPT-3</td><td>175B</td><td>Various</td><td>~20</td></tr>
+            <tr><td>LLaMA-2 7B</td><td>7B</td><td>WikiText-2</td><td>~12</td></tr>
+            <tr><td>LLaMA-3 8B</td><td>8B</td><td>Various</td><td>~10</td></tr>
+            <tr><td>DeepSeek-V3</td><td>671B</td><td>Various</td><td>~8-9</td></tr>
+          </tbody>
+        </table>
+        <p>注意：perplexity 与词汇表大小和 tokenizer 密切相关，不同模型之间的 perplexity 比较必须在相同 tokenizer 和相同测试集上进行才有意义。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>局限性</h4>
+        <ul>
+          <li>只衡量概率建模能力，不衡量生成质量、事实准确性或有用性</li>
+          <li>对短序列敏感，少量 token 的预测错误会显著影响整体值</li>
+          <li>无法捕捉语义连贯性和逻辑一致性</li>
+          <li>低 perplexity 不一定意味着高生成质量（如模型可能只学会了"安全"但无用的预测）</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 7.2.2 BLEU / ROUGE -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.2.2 BLEU / ROUGE</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>BLEU（Bilingual Evaluation Understudy）</h4>
+        <p>BLEU 最初用于机器翻译评估，通过比较模型输出与参考翻译的 n-gram 重叠来衡量质量。</p>
+        <p><strong>修正精度（Modified Precision）</strong>：</p>
+        <div class="formula-box"><code>p_n = \frac{\sum_{\text{n-gram} \in \text{candidate}} \min(\text{count}_{\text{candidate}}, \text{count}_{\text{reference}})}{\sum_{\text{n-gram} \in \text{candidate}} \text{count}_{\text{candidate}}}</code></div>
+        <p><strong>简短惩罚（Brevity Penalty, BP）</strong>：</p>
+        <div class="formula-box"><code>\text{BP} = \begin{cases} 1 & \text{if } c > r \\ e^{1 - r/c} & \text{if } c \leq r \end{cases}</code></div>
+        <p><strong>最终 BLEU 分数</strong>：</p>
+        <div class="formula-box"><code>\text{BLEU} = \text{BP} \cdot \exp\left( \sum_{n=1}^{N} w_n \log p_n \right)</code></div>
+        <p>通常 <code>N=4</code>，<code>w_n = 1/N</code>（即 BLEU-4）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>ROUGE（Recall-Oriented Understudy for Gisting Evaluation）</h4>
+        <p>ROUGE 主要用于文本摘要评估，侧重于召回率而非精确率。</p>
+        <p><strong>ROUGE-N</strong>：</p>
+        <div class="formula-box"><code>\text{ROUGE-N} = \frac{\sum_{\text{n-gram} \in \text{reference}} \text{count}_{\text{match}}}{\sum_{\text{n-gram} \in \text{reference}} \text{count}_{\text{reference}}}</code></div>
+        <p><strong>ROUGE-L</strong>（基于最长公共子序列）：</p>
+        <div class="formula-box"><code>\text{ROUGE-L} = \frac{(1 + \beta^2) R_{\text{LCS}} P_{\text{LCS}}}{R_{\text{LCS}} + \beta^2 P_{\text{LCS}}}</code></div>
+      </div>
+
+      <div class="sub-section">
+        <h4>BLEU vs ROUGE</h4>
+        <table>
+          <thead><tr><th>特性</th><th>BLEU</th><th>ROUGE</th></tr></thead>
+          <tbody>
+            <tr><td>主要用途</td><td>机器翻译</td><td>文本摘要</td></tr>
+            <tr><td>侧重</td><td>精确率（Precision）</td><td>召回率（Recall）</td></tr>
+            <tr><td>N-gram 连续性</td><td>要求连续 n-gram</td><td>同 BLEU（ROUGE-N）或 LCS（ROUGE-L）</td></tr>
+            <tr><td>简短惩罚</td><td>有（BP）</td><td>通常无</td></tr>
+            <tr><td>多参考支持</td><td>是</td><td>是</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>局限性</h4>
+        <ul>
+          <li><strong>语义盲区</strong>：只关注表面 n-gram 重叠，"汽车"和"车辆"被视为完全不匹配</li>
+          <li><strong>同义词惩罚</strong>：语义等价但词汇不同的表达会被低分</li>
+          <li><strong>无法评估创造性</strong>：对于开放式生成任务（如创意写作、对话），n-gram 重叠几乎无意义</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 7.2.3 MMLU -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.2.3 MMLU（Massive Multitask Language Understanding）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>MMLU 由 Hendrycks 等人于 2021 年提出，覆盖 57 个学科约 15,908 道选择题（4 选 1），是评估 LLM 知识和推理能力的权威基准。</p>
+
+      <div class="sub-section">
+        <h4>学科覆盖</h4>
+        <ul>
+          <li>STEM：数学、物理、化学、生物、计算机科学</li>
+          <li>人文：历史、哲学、法律、政治学</li>
+          <li>社会科学：经济学、心理学、社会学</li>
+          <li>其他：医学、会计、地质学等</li>
+        </ul>
+        <p><strong>测试方式</strong>：格式化选择题 prompt → 模型选择 A/B/C/D → 计算正确率。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>分数解读</h4>
+        <table>
+          <thead><tr><th>分数区间</th><th>水平</th></tr></thead>
+          <tbody>
+            <tr><td>~25%</td><td>随机猜测（4 选 1）</td></tr>
+            <tr><td>40-50%</td><td>高中水平</td></tr>
+            <tr><td>60-70%</td><td>大学入门水平</td></tr>
+            <tr><td>80-90%</td><td>专家水平</td></tr>
+            <tr><td>&gt;90%</td><td>超越人类专家</td></tr>
+          </tbody>
+        </table>
+        <p><strong>代表性模型分数</strong>：</p>
+        <table>
+          <thead><tr><th>模型</th><th>MMLU (5-shot)</th></tr></thead>
+          <tbody>
+            <tr><td>GPT-3 (175B)</td><td>43.9%</td></tr>
+            <tr><td>LLaMA-2 70B</td><td>69.8%</td></tr>
+            <tr><td>GPT-4</td><td>86.4%</td></tr>
+            <tr><td>Gemini Ultra</td><td>90.0%</td></tr>
+            <tr><td>DeepSeek-V3</td><td>88.5%</td></tr>
+            <tr><td>GPT-4o</td><td>88.7%</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>批评</h4>
+        <ul>
+          <li>选择题格式限制了评估范围，不适用于开放式推理</li>
+          <li>部分题目可能泄漏到训练数据中（数据污染）</li>
+          <li>不同模型的 prompt 工程差异可能导致不公平比较</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 7.2.4 HumanEval / MBPP -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.2.4 HumanEval / MBPP（代码生成评估）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>HumanEval</h4>
+        <p>HumanEval 由 OpenAI 于 2021 年提出，包含 164 个手写 Python 编程问题，每个问题包含函数签名、docstring 和测试用例。</p>
+        <p><strong>评估方式</strong>：Pass@k 指标——生成 k 个候选代码，至少有一个通过所有测试用例即算成功：</p>
+        <div class="formula-box"><code>\text{Pass@k} = \mathbb{E}_{\text{Problems}} \left[ 1 - \frac{\binom{n-c}{k}}{\binom{n}{k}} \right]</code></div>
+        <p>其中 <code>n</code> 是生成样本数，<code>c</code> 是通过测试的样本数。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>MBPP（Mostly Basic Python Programming）</h4>
+        <p>MBPP 包含约 974 个 Python 编程问题，相比 HumanEval 更基础（涉及字符串操作、列表处理等）。</p>
+        <p><strong>MBPP vs HumanEval</strong>：</p>
+        <table>
+          <thead><tr><th>特性</th><th>HumanEval</th><th>MBPP</th></tr></thead>
+          <tbody>
+            <tr><td>题目数</td><td>164</td><td>974</td></tr>
+            <tr><td>难度</td><td>中等偏难</td><td>中低</td></tr>
+            <tr><td>函数类型</td><td>算法题为主</td><td>编程基本功</td></tr>
+            <tr><td>测试用例</td><td>每个问题 7-10 个</td><td>每个问题 3 个</td></tr>
+            <tr><td>数据污染风险</td><td>低（手写）</td><td>中</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>局限</h4>
+        <ul>
+          <li>只有 Python，不涵盖其他语言</li>
+          <li>HumanEval 题目数量少（164 道），统计方差大</li>
+          <li>后续出现了更大规模的评估集：MultiPL-E（多语言）、SWE-bench（真实仓库级）、Codeforces（竞赛级）</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 7.2.5 GPQA / MATH -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.2.5 GPQA / MATH（推理能力评估）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>GPQA（Graduate-Level Google-Proof Q&A）</h4>
+        <p>GPQA 由纽约大学等机构于 2023 年发布，包含 448 道研究生级别的多项选择题。题目由领域专家撰写，覆盖物理、化学、生物学等。</p>
+        <p><strong>特点</strong>：</p>
+        <ul>
+          <li>问题难度极高（人类专家准确率约 65%）</li>
+          <li>题目不能被 Google 搜索直接解答（"Google-proof"）</li>
+          <li>需要真正的领域知识而非信息检索</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>MATH</h4>
+        <p>MATH 包含 12,500 道数学竞赛题目，覆盖代数、几何、微积分等 7 个类别。</p>
+        <p><strong>评估方式</strong>：5 levels of difficulty。每个问题需要模型生成带最终答案的完整解题过程。评估时提取最终答案与标准答案精确匹配。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>GSM8K</h4>
+        <p>GSM8K 包含约 8,500 道小学数学应用题，每道题需要 2-8 步推理。使用 CoT（Chain-of-Thought）可显著提升分数：</p>
+        <table>
+          <thead><tr><th>模型</th><th>GSM8K (CoT)</th></tr></thead>
+          <tbody>
+            <tr><td>GPT-3.5</td><td>~57%</td></tr>
+            <tr><td>GPT-4</td><td>~92%</td></tr>
+            <tr><td>DeepSeek-V3</td><td>~90%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.2.6 MT-Bench / Chatbot Arena -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.2.6 MT-Bench / Chatbot Arena（对话质量评估）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>MT-Bench</h4>
+        <p>MT-Bench 由 LMSYS 组织于 2023 年提出，包含 80 个高质量的多轮对话问题，覆盖 8 个类别（写作、推理、数学、编程、提取、STEM、人文、角色扮演）。</p>
+        <p><strong>评估方式</strong>：使用 LLM-as-a-Judge（通常是 GPT-4）对模型回复进行 1-10 分的打分。每个问题包含两轮对话，更考验模型的对话连贯性。</p>
+        <p><strong>局限性</strong>：</p>
+        <ul>
+          <li>LLM Judge 本身可能带有偏见（偏好特定风格或长度）</li>
+          <li>评价标准不完全透明</li>
+          <li>不同 LLM-as-Judge 模型可能给出不同结果</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>Chatbot Arena</h4>
+        <p>Chatbot Arena（又称 LMSYS Chatbot Arena）是一个众包的 LLM 评估平台，采用<strong>匿名 A/B 测试 + ELO Rating</strong> 的方式进行模型排名。</p>
+        <p><strong>ELO Rating 系统</strong>：</p>
+        <ol>
+          <li>用户匿名比较两个模型的输出，选择更好的一方</li>
+          <li>基于比赛结果更新双方 ELO 分数：<div class="formula-box"><code>E_A = \frac{1}{1 + 10^{(R_B - R_A) / 400}}</code><br><code>R_A' = R_A + K \cdot (S_A - E_A)</code></div>其中 <code>R_A</code>、<code>R_B</code> 是当前评分，<code>E_A</code> 是 A 获胜的期望概率，<code>S_A</code> 是实际结果（1 表示胜，0 表示负，0.5 表示平），<code>K</code> 是 K 因子（控制评分更新幅度）。</li>
+          <li>经过大量配对比较后，ELO 评分收敛到反映模型相对质量的水平</li>
+        </ol>
+        <p><strong>特点</strong>：</p>
+        <ul>
+          <li>亚马逊 Mechanical Turk + 网站用户参与，数据量大</li>
+          <li>与实际使用场景高度一致</li>
+          <li>不受单一评估者偏见影响</li>
+          <li>但是评估者的偏好可能不代表目标用户群体</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 7.2.7 评估基准对比总表 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.2.7 各评估基准对比总表</h3>
+        <span class="tag tag-blue">对比总结</span>
+      </div>
+      <table>
+        <thead><tr><th>基准</th><th>测试内容</th><th>评估方式</th><th>题目数</th><th>局限性</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Perplexity</strong></td><td>语言概率建模</td><td>交叉熵指数</td><td>任意文本</td><td>不反映生成质量</td></tr>
+          <tr><td><strong>BLEU</strong></td><td>翻译准确性</td><td>n-gram 精确率</td><td>翻译测试集</td><td>语义盲区，低相关性</td></tr>
+          <tr><td><strong>ROUGE</strong></td><td>摘要内容覆盖</td><td>n-gram 召回率</td><td>摘要测试集</td><td>同 BLEU</td></tr>
+          <tr><td><strong>MMLU</strong></td><td>多学科知识</td><td>选择题正确率</td><td>15,908 道</td><td>选择题限制，数据污染</td></tr>
+          <tr><td><strong>HumanEval</strong></td><td>Python 代码</td><td>Pass@k</td><td>164 道</td><td>单一语言，样本少</td></tr>
+          <tr><td><strong>MBPP</strong></td><td>Python 基础编程</td><td>Pass@k</td><td>974 道</td><td>难度较低</td></tr>
+          <tr><td><strong>GPQA</strong></td><td>研究生级推理</td><td>选择题正确率</td><td>448 道</td><td>样本少</td></tr>
+          <tr><td><strong>MATH</strong></td><td>数学竞赛推理</td><td>答案精确匹配</td><td>12,500 道</td><td>仅数学</td></tr>
+          <tr><td><strong>GSM8K</strong></td><td>数学应用推理</td><td>答案精确匹配</td><td>8,500 道</td><td>小学难度</td></tr>
+          <tr><td><strong>MT-Bench</strong></td><td>多轮对话质量</td><td>LLM 评分 1-10</td><td>80 道</td><td>LLM Judge 偏差</td></tr>
+          <tr><td><strong>Chatbot Arena</strong></td><td>综合对话质量</td><td>众包 A/B + ELO</td><td>持续收集</td><td>众包质量参差</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 7.3 GPU 架构基础 -->
+    <!-- ============================================================ -->
+
+    <h2>7.3 GPU 架构基础</h2>
+
+    <!-- 7.3.1 CUDA Core vs Tensor Core -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.3.1 CUDA Core vs Tensor Core</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>CUDA Core</h4>
+        <p>CUDA Core 是 NVIDIA GPU 中的通用标量计算单元。每个 CUDA Core 可以执行一个浮点或整数运算（如加法、乘法、逻辑运算）。它们基于 SIMT（Single Instruction, Multiple Threads）架构，32 个线程组成一个 warp，以 warp 为单位执行相同的指令。</p>
+        <p><strong>典型规格</strong>：A100 有 6,912 个 CUDA Core，H100 有 16,896 个 CUDA Core。CUDA Core 的算力通常以 <strong>TFLOPS（FP32）</strong>衡量：A100 约 19.5 TFLOPS，H100 约 67 TFLOPS。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Tensor Core</h4>
+        <p>Tensor Core 是 NVIDIA 从 Volta 架构（V100，2017 年）引入的专用矩阵计算单元，专门加速矩阵乘加运算（<code>D = A \times B + C</code>）。Tensor Core 可以在一个时钟周期内完成 4x4 矩阵的乘加操作，在 AI 训练和推理中发挥关键作用。</p>
+        <p><strong>精度支持演进</strong>：</p>
+        <table>
+          <thead><tr><th>架构</th><th>Tensor Core 代际</th><th>支持精度</th></tr></thead>
+          <tbody>
+            <tr><td>Volta (V100)</td><td>第 1 代</td><td>FP16</td></tr>
+            <tr><td>Turing (T4)</td><td>第 2 代</td><td>FP16, INT8, INT4</td></tr>
+            <tr><td>Ampere (A100)</td><td>第 3 代</td><td>FP16, BF16, TF32, INT8, INT4</td></tr>
+            <tr><td>Hopper (H100)</td><td>第 4 代</td><td>新增 FP8 (E4M3/E5M2)</td></tr>
+            <tr><td>Blackwell (B200)</td><td>第 5 代</td><td>新增 FP4, FP6</td></tr>
+          </tbody>
+        </table>
+        <p><strong>Tensor Core 关键算力</strong>（以 FP16 FMA 计算，TFLOPS）：</p>
+        <table>
+          <thead><tr><th>GPU</th><th>FP32 (CUDA Core)</th><th>FP16 (Tensor Core)</th><th>FP8 (Tensor Core)</th><th>INT8 (Tensor Core)</th></tr></thead>
+          <tbody>
+            <tr><td>A100 (SXM)</td><td>19.5</td><td>312</td><td>N/A</td><td>624</td></tr>
+            <tr><td>H100 (SXM)</td><td>67</td><td>989</td><td>1,979</td><td>1,979</td></tr>
+            <tr><td>B200</td><td>90</td><td>2,250</td><td>4,500</td><td>4,500</td></tr>
+          </tbody>
+        </table>
+        <p><strong>关键差异</strong>：Tensor Core 的 FP16 算力是 CUDA Core FP32 的 15-30 倍。这意味着当运算可以被量化为低精度矩阵乘法时（如 Attention 的 QK^T 和 PV 计算），性能可以提升 1-2 个数量级。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>在 LLM 推理中的实际影响</h4>
+        <p>在 vLLM 中，KV Cache 量化（FP8）和模型权重量化（FP8/INT4）依赖于 Tensor Core 的高效低精度计算：</p>
+        <pre><code># vLLM 中的 FP8 量化推理
+# 使用 torch._scaled_mm（底层调用 Tensor Core 的 FP8 MMA）
+import torch
+
+# 假设 weight 和 input 都被量化为 FP8
+weight_fp8 = weight.to(torch.float8_e4m3fn)
+input_fp8 = input.to(torch.float8_e4m3fn)
+
+# Tensor Core 的 FP8 矩阵乘法
+# Hopper GPU 上比 FP16 快 2x
+output = torch._scaled_mm(input_fp8, weight_fp8.t())</code></pre>
+        <p>vLLM 的 <code>float8_e4m3fn</code> 支持需要 Hopper GPU（H100/H200）的 Tensor Core。在 Ampere GPU（A100）上只支持 INT8 Tensor Core 加速。</p>
+      </div>
+    </div>
+
+    <!-- 7.3.2 HBM -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.3.2 HBM（High Bandwidth Memory）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>HBM（高带宽显存）是 GPU 使用的主要内存技术，与传统的 GDDR（Graphics DDR）显存相比，HBM 通过 3D 堆叠技术和更宽的内存总线实现远超 GDDR 的带宽。</p>
+
+      <div class="sub-section">
+        <h4>技术原理</h4>
+        <p>HBM 通过硅通孔（Through-Silicon Via, TSV）技术将多个 DRAM 芯片垂直堆叠，并通过中间层（interposer）连接到 GPU 核心。这种 3D 堆叠架构实现了：</p>
+        <ol>
+          <li><strong>超宽总线</strong>：HBM2e 有 1024-bit 的内存总线（GDDR6 为 32-bit），但运行频率较低</li>
+          <li><strong>高带宽</strong>：通过宽总线弥补低频的不足</li>
+          <li><strong>小体积</strong>：堆叠设计节省 PCB 空间</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>各代 HBM 规格对比</h4>
+        <table>
+          <thead><tr><th>规格</th><th>HBM2e</th><th>HBM3</th><th>HBM3e</th></tr></thead>
+          <tbody>
+            <tr><td>带宽/堆叠</td><td>~460 GB/s</td><td>~819 GB/s</td><td>~1.2 TB/s</td></tr>
+            <tr><td>最大容量/堆叠</td><td>24 GB</td><td>24-64 GB</td><td>24-144 GB</td></tr>
+            <tr><td>运行频率</td><td>2.0-2.4 Gbps</td><td>6.4 Gbps</td><td>9.8 Gbps</td></tr>
+            <tr><td>总线宽度/堆叠</td><td>1024-bit</td><td>1024-bit</td><td>1024-bit</td></tr>
+            <tr><td>使用 GPU</td><td>A100</td><td>H100</td><td>H200, B200</td></tr>
+          </tbody>
+        </table>
+        <p><strong>实际 GPU 中的 HBM 配置</strong>：</p>
+        <table>
+          <thead><tr><th>GPU</th><th>HBM 版本</th><th>显存容量</th><th>HBM 带宽</th><th>带宽提升</th></tr></thead>
+          <tbody>
+            <tr><td>A100 (SXM)</td><td>HBM2e</td><td>80 GB</td><td>2.0 TB/s</td><td>基线</td></tr>
+            <tr><td>H100 (SXM)</td><td>HBM3</td><td>80 GB</td><td>3.35 TB/s</td><td>+67%</td></tr>
+            <tr><td>H200 (SXM)</td><td>HBM3e</td><td>141 GB</td><td>4.8 TB/s</td><td>+140%</td></tr>
+            <tr><td>B200</td><td>HBM3e</td><td>192 GB</td><td>8.0 TB/s</td><td>+300%</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>HBM 与 LLM 推理的关系</h4>
+        <p><strong>HBM 带宽是 LLM 推理最重要的硬件瓶颈</strong>。Decode 阶段是典型的内存带宽密集型操作：每次前向传播需要读取完整的模型参数（如 70B 模型约 140GB FP16 权重），而计算量却很小。在 A100（2 TB/s）上，理论最小 TPOT 约为 70ms/token（70B 模型，无 batching 时）。</p>
+        <p>这就是为什么 H200（4.8 TB/s）相比 H100（3.35 TB/s）在 LLM 推理中可获得 30-50% 的 token 生成速度提升——更高的 HBM 带宽直接缩短了每次读取权重的时间。</p>
+      </div>
+    </div>
+
+    <!-- 7.3.3 SRAM vs HBM vs DRAM -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.3.3 SRAM vs HBM vs DRAM：GPU 内存层次结构</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>三级存储层次</h4>
+        <p>GPU 的内存层次从上到下依次为：</p>
+        <pre><code>寄存器 (Register)
+  ↓  延迟: &lt;1ns, 带宽: ~50 TB/s
+SRAM (共享内存 / L1 缓存)
+  ↓  延迟: ~5-10ns, 带宽: ~10-20 TB/s
+HBM (高带宽显存)
+  ↓  延迟: ~200-300ns, 带宽: 2-8 TB/s
+DRAM (系统主内存, CPU 端)
+  ↓  延迟: ~100-200ns（通过 PCIe/NVLink）, 带宽: 50-200 GB/s
+SSD (磁盘存储)
+  ↓  延迟: ~10-100μs, 带宽: 2-14 GB/s</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>各层级关键参数</h4>
+        <table>
+          <thead><tr><th>层级</th><th>典型大小</th><th>延迟</th><th>带宽</th><th>位置</th></tr></thead>
+          <tbody>
+            <tr><td>寄存器</td><td>256 KB / SM</td><td>&lt;1 ns</td><td>&gt;50 TB/s</td><td>芯片内</td></tr>
+            <tr><td>SRAM (L1/Shared)</td><td>128-256 KB / SM</td><td>~5-10 ns</td><td>10-20 TB/s</td><td>芯片内</td></tr>
+            <tr><td>L2 Cache</td><td>40-60 MB (GPU 全局)</td><td>~50-100 ns</td><td>5-10 TB/s</td><td>芯片内</td></tr>
+            <tr><td>HBM</td><td>80-192 GB</td><td>~200-300 ns</td><td>2-8 TB/s</td><td>芯片封装内</td></tr>
+            <tr><td>DRAM (CPU)</td><td>256-2048 GB</td><td>~100-200 ns</td><td>50-200 GB/s</td><td>主板</td></tr>
+            <tr><td>SSD</td><td>1-30 TB</td><td>~10-100 μs</td><td>2-14 GB/s</td><td>磁盘</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>FlashAttention 如何利用内存层次</h4>
+        <p>FlashAttention 是 HBM-SRAM 层次利用的典范。传统 Attention 的计算模式是"从 HBM 读取 → 计算 → 写回 HBM"，而 FlashAttention 通过 <strong>Tiling（分块）</strong>技术将计算限制在 SRAM 中：</p>
+        <pre><code># 伪代码：FlashAttention 的 Tiling 策略
+def flash_attention(Q, K, V, block_size):
+    # 将 Q, K, V 切分为 B_m 和 B_n 大小的块
+    for i in range(0, n, B_m):   # Q 块
+        for j in range(0, n, B_n): # K, V 块
+            # 将 Q_i, K_j, V_j 从 HBM 加载到 SRAM
+            qi = load_to_sram(Q[i:i+B_m])
+            kj = load_to_sram(K[j:j+B_n])
+            vj = load_to_sram(V[j:j+B_n])
+
+            # 在 SRAM 中进行矩阵乘法和 softmax
+            s_ij = qi @ kj.T          # SRAM 运算
+            p_ij = softmax(s_ij)      # SRAM 运算
+            o_i += p_ij @ vj          # SRAM 累积
+
+            # 最终结果写回 HBM
+            save_to_hbm(o_i)</code></pre>
+        <p><strong>IO 复杂度对比</strong>：</p>
+        <ul>
+          <li>标准 Attention：<code>O(n^2 \cdot d)</code> HBM 访问</li>
+          <li>FlashAttention：<code>O(n^2 \cdot d / M)</code> HBM 访问，其中 <code>M</code> 是 SRAM 大小</li>
+        </ul>
+        <p>实际中通常获得 2-4 倍的 attention 计算加速。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Memory Wall（内存墙）</h4>
+        <p><strong>Memory Wall（内存墙）</strong> 是指计算速度增长远快于内存带宽增长导致的性能瓶颈。在 LLM 推理中，Memory Wall 意味着：<strong>GPU 的计算能力远远超过其从 HBM 读取数据的能力</strong>，因此大部分推理时间花在数据搬运上，而非计算上。</p>
+        <p><strong>定量分析</strong>（以 H100 + LLaMA-70B 为例）：</p>
+        <ul>
+          <li>模型参数：140 GB（FP16）</li>
+          <li>HBM 带宽：3.35 TB/s</li>
+          <li>读取所有参数的理论时间：140 GB / 3.35 TB/s ≈ 42 ms</li>
+          <li>而 H100 的计算能力：989 TFLOPS（FP16 Tensor Core）</li>
+        </ul>
+        <p>一次 forward pass 的计算量约为 <code>2 \times (L \times n \times d \times 4) \approx 2 \times 80 \times 4096 \times 8192 \times 4 \approx 21.5</code> TFLOPs</p>
+        <p>计算时间：21.5 TFLOPS / 989 TFLOPS ≈ 22 ms</p>
+        <p><strong>实际时间 = max(42ms, 22ms) ≈ 42ms</strong> → 受限于内存带宽！</p>
+        <p>这就是为什么增加 HBM 带宽（如 H100→H200，带宽从 3.35→4.8 TB/s）比增加计算能力（H100→B200）对 LLM 推理的收益更直接。</p>
+      </div>
+    </div>
+
+    <!-- 7.3.4 GPU 规格对比 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.3.4 典型 GPU 规格对比总表</h3>
+        <span class="tag tag-blue">对比总结</span>
+      </div>
+      <table>
+        <thead><tr><th>规格</th><th>A100 (SXM)</th><th>H100 (SXM)</th><th>H200 (SXM)</th><th>B200</th></tr></thead>
+        <tbody>
+          <tr><td><strong>架构</strong></td><td>Ampere (GA100)</td><td>Hopper (GH100)</td><td>Hopper (GH100)</td><td>Blackwell (GB200)</td></tr>
+          <tr><td><strong>CUDA Core</strong></td><td>6,912</td><td>16,896</td><td>16,896</td><td>~20,000+</td></tr>
+          <tr><td><strong>Tensor Core</strong></td><td>432 (第 3 代)</td><td>528 (第 4 代)</td><td>528 (第 4 代)</td><td>第 5 代</td></tr>
+          <tr><td><strong>FP32 (CUDA)</strong></td><td>19.5 TFLOPS</td><td>67 TFLOPS</td><td>67 TFLOPS</td><td>90 TFLOPS</td></tr>
+          <tr><td><strong>FP16 (Tensor)</strong></td><td>312 TFLOPS</td><td>989 TFLOPS</td><td>989 TFLOPS</td><td>2,250 TFLOPS</td></tr>
+          <tr><td><strong>FP8 (Tensor)</strong></td><td>N/A</td><td>1,979 TFLOPS</td><td>1,979 TFLOPS</td><td>4,500 TFLOPS</td></tr>
+          <tr><td><strong>显存容量</strong></td><td>80 GB HBM2e</td><td>80 GB HBM3</td><td>141 GB HBM3e</td><td>192 GB HBM3e</td></tr>
+          <tr><td><strong>显存带宽</strong></td><td>2.0 TB/s</td><td>3.35 TB/s</td><td>4.8 TB/s</td><td>8.0 TB/s</td></tr>
+          <tr><td><strong>NVLink 带宽</strong></td><td>600 GB/s</td><td>900 GB/s</td><td>900 GB/s</td><td>1,800 GB/s</td></tr>
+          <tr><td><strong>互联方式</strong></td><td>NVLink 3</td><td>NVLink 4</td><td>NVLink 4</td><td>NVLink 5</td></tr>
+          <tr><td><strong>TDP</strong></td><td>400W</td><td>700W</td><td>700W</td><td>1,000W</td></tr>
+          <tr><td><strong>支持 FP8</strong></td><td>否</td><td>是</td><td>是</td><td>是</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 7.3.5 Compute Capability -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.3.5 Compute Capability（计算能力）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Compute Capability（计算能力）是 NVIDIA 用来标识 GPU 硬件特性版本的编号系统，格式为 <code>X.Y</code>，其中 X 是主要架构代际，Y 是同一代内的特性变体。它决定了 GPU 支持哪些 CUDA 特性（如硬件功能、精度格式、指令集等）。</p>
+
+      <div class="sub-section">
+        <h4>主要版本对照</h4>
+        <table>
+          <thead><tr><th>Compute Capability</th><th>架构</th><th>代表 GPU</th><th>关键特性</th></tr></thead>
+          <tbody>
+            <tr><td>7.0</td><td>Volta</td><td>V100</td><td>第 1 代 Tensor Core</td></tr>
+            <tr><td>7.5</td><td>Turing</td><td>T4, RTX 2080</td><td>INT8/INT4 Tensor Core</td></tr>
+            <tr><td>8.0</td><td>Ampere</td><td>A100</td><td>BF16, TF32, 第 3 代 Tensor Core</td></tr>
+            <tr><td>8.6</td><td>Ampere</td><td>RTX 3090</td><td>消费级 Ampere</td></tr>
+            <tr><td>8.9</td><td>Ada Lovelace</td><td>RTX 4090</td><td>FP8 转换支持</td></tr>
+            <tr><td>9.0</td><td>Hopper</td><td>H100</td><td>FP8 Tensor Core, Dynamic Programming</td></tr>
+            <tr><td>10.0</td><td>Blackwell</td><td>B200</td><td>FP4/FP6, 第 5 代 Tensor Core</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>在 vLLM 中的影响</h4>
+        <p>vLLM 在编译和运行时检查 Compute Capability 来决定启用哪些优化：</p>
+        <pre><code># vLLM 中的 Compute Capability 检查（简化）
+import torch
+
+capability = torch.cuda.get_device_capability()  # e.g., (8, 0) for A100
+
+if capability >= (9, 0):  # Hopper
+    # 启用 FP8 量化
+    use_fp8 = True
+elif capability >= (8, 0):  # Ampere
+    # 使用 BF16 和 TF32
+    use_bf16 = True
+    allow_tf32 = True
+
+if capability >= (8, 0):
+    # 启用 FlashAttention（需要 Ampere 以上架构）
+    use_flash_attn = True</code></pre>
+      </div>
+    </div>
+
+    <!-- 7.3.6 RoCE / InfiniBand -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.3.6 RoCE / InfiniBand：分布式训练的网络互联</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>在分布式训练中，GPU 服务器之间需要高速网络传输梯度和模型参数。两种主流的高速互联方案是 InfiniBand 和 RoCE（RDMA over Converged Ethernet）。</p>
+
+      <div class="sub-section">
+        <h4>InfiniBand</h4>
+        <p>InfiniBand 是为高性能计算（HPC）设计的专用网络技术，提供极低延迟和高带宽：</p>
+        <table>
+          <thead><tr><th>代际</th><th>单链路速率</th><th>典型配置</th><th>有效带宽</th></tr></thead>
+          <tbody>
+            <tr><td>InfiniBand EDR</td><td>25 Gbps</td><td>4x EDR</td><td>100 Gbps</td></tr>
+            <tr><td>InfiniBand HDR</td><td>50 Gbps</td><td>4x HDR</td><td>200 Gbps</td></tr>
+            <tr><td>InfiniBand NDR</td><td>100 Gbps</td><td>4x NDR</td><td>400 Gbps</td></tr>
+            <tr><td>InfiniBand XDR</td><td>200 Gbps</td><td>4x XDR</td><td>800 Gbps</td></tr>
+          </tbody>
+        </table>
+        <p><strong>特点</strong>：</p>
+        <ul>
+          <li><strong>RDMA（Remote Direct Memory Access）</strong>：无需 CPU 干预，GPU 之间直接读写</li>
+          <li><strong>低延迟</strong>：亚微秒级（~0.5-1μs）点对点延迟</li>
+          <li><strong>无损网络</strong>：内置流量控制和拥塞管理，零丢包</li>
+          <li><strong>成本高</strong>：专用交换机、网卡和线缆</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>RoCE（RDMA over Converged Ethernet）</h4>
+        <p>RoCE 是在标准以太网上实现 RDMA 的协议。RoCEv2 将 RDMA 数据包封装在 UDP 中，运行在标准以太网上。</p>
+        <table>
+          <thead><tr><th>版本</th><th>封装</th><th>延迟</th><th>部署复杂度</th><th>成本</th></tr></thead>
+          <tbody>
+            <tr><td>RoCEv1</td><td>链路层</td><td>低</td><td>低</td><td>低</td></tr>
+            <tr><td>RoCEv2</td><td>UDP/IP</td><td>中等</td><td>中等</td><td>中等</td></tr>
+          </tbody>
+        </table>
+        <p><strong>特点</strong>：</p>
+        <ul>
+          <li><strong>共享基础设施</strong>：与普通以太网共享交换机和线缆</li>
+          <li><strong>需要 PFC（Priority Flow Control）</strong>：RoCE 依赖以太网的流量控制来保证无损传输</li>
+          <li><strong>成本低</strong>：相比 InfiniBand，无特殊硬件需求</li>
+          <li><strong>延迟略高</strong>：约 1-3μs 点对点延迟</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>在分布式训练中的对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>InfiniBand</th><th>RoCE</th></tr></thead>
+          <tbody>
+            <tr><td>延迟</td><td>~0.5μs</td><td>~1-3μs</td></tr>
+            <tr><td>带宽</td><td>400-800 Gbps</td><td>100-400 Gbps</td></tr>
+            <tr><td>成本</td><td>高（2-3x）</td><td>中</td></tr>
+            <tr><td>部署复杂度</td><td>低（专用网络）</td><td>高（需要 PFC 配置）</td></tr>
+            <tr><td>可用性</td><td>需要专用硬件</td><td>标准以太网交换机</td></tr>
+            <tr><td>生态支持</td><td>NVIDIA NCCL 原生支持</td><td>NCCL 支持（需配置）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>在 vLLM 分布式推理中的影响</h4>
+        <p>vLLM 使用 NCCL（NVIDIA Collective Communications Library）进行 GPU 间通信。NCCL 自动选择最快的通信路径：</p>
+        <pre><code>NVLink (同节点 GPU 间) &gt; InfiniBand (跨节点) &gt; RoCE (跨节点) &gt; TCP/IP (兜底)</code></pre>
+        <p>在多节点场景下（节点间通过 InfiniBand/RoCE），带宽大幅下降（典型 100-400 Gbps = 12.5-50 GB/s），TP 的通信开销会显著增加，因此通常限制 TP size 不超过单节点 GPU 数量。跨节点的分布式策略通常使用 PP（流水线并行）或 DP（数据并行），而非 TP（张量并行）。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 7.4 RAG -->
+    <!-- ============================================================ -->
+
+    <h2>7.4 RAG（检索增强生成）</h2>
+
+    <!-- 7.4.1 RAG 架构 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.4.1 RAG 架构</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>RAG（Retrieval-Augmented Generation，检索增强生成）是一种将信息检索与文本生成相结合的架构。它在 LLM 生成过程中引入外部知识库的检索结果，使模型能够基于检索到的相关信息进行回答，而不是仅依赖其训练时学到的参数化知识。</p>
+
+      <div class="sub-section">
+        <h4>三阶段流程</h4>
+        <p>RAG 的核心流程为 <strong>Retrieve → Augment → Generate</strong>：</p>
+        <pre><code>输入查询
+    │
+    ▼
+[检索阶段] → Query Encoding → Vector Search / BM25 Search → 获取 Top-K 文档
+    │
+    ▼
+[增强阶段] → 将检索文档与原始查询拼接为增强 prompt
+    │
+    ▼
+[生成阶段] → LLM 基于增强 prompt 生成回复</code></pre>
+        <p><strong>详细步骤</strong>：</p>
+        <p><strong>Step 1: Retrieve（检索）</strong></p>
+        <pre><code>Query: "什么是 LoRA 微调？"
+  → Embedding Model 编码查询向量
+  → 向量数据库近似最近邻搜索 (ANN)
+  → 返回 Top-3 最相关文档:
+    doc_1: "LoRA（Low-Rank Adaptation）..."
+    doc_2: "Parameter-Efficient Fine-Tuning..."
+    doc_3: "QLoRA: 4-bit 量化的 LoRA..."</code></pre>
+        <p><strong>Step 2: Augment（增强）</strong></p>
+        <pre><code>{{context}}
+根据以下资料回答问题：
+{doc_1}
+{doc_2}
+{doc_3}
+
+问题：什么是 LoRA 微调？</code></pre>
+        <p><strong>Step 3: Generate（生成）</strong></p>
+        <pre><code>LLM 基于增强 prompt 生成：
+"LoRA 微调是一种参数高效微调方法..."</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>RAG 的核心优势</h4>
+        <table>
+          <thead><tr><th>优势</th><th>说明</th><th>与纯 LLM 对比</th></tr></thead>
+          <tbody>
+            <tr><td>知识更新</td><td>修改知识库即可，无需重新训练</td><td>纯 LLM 需重新训练或微调</td></tr>
+            <tr><td>幻觉缓解</td><td>提供具体引用来源，减少胡编乱造</td><td>纯 LLM 完全依赖参数化记忆</td></tr>
+            <tr><td>事实准确性</td><td>可验证每个声称的来源</td><td>纯 LLM 无法追溯信息来源</td></tr>
+            <tr><td>长尾知识</td><td>可检索不常见或领域特有知识</td><td>纯 LLM 在大训练数据之外表现差</td></tr>
+            <tr><td>隐私合规</td><td>可控制知识库访问权限</td><td>纯 LLM 可能记忆并泄露训练数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.4.2 Chunking 策略 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.4.2 Chunking 策略</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Chunking（文本分块）是将知识库文档切分为适合检索和嵌入处理的文本片段。分块策略直接影响检索效果：分块太大会增加噪声和计算成本，且可能超过 LLM 的上下文窗口；分块太小会导致语义不完整，检索时缺乏上下文信息。</p>
+
+      <div class="sub-section">
+        <h4>主要策略对比</h4>
+        <table>
+          <thead><tr><th>策略</th><th>方法</th><th>优点</th><th>缺点</th><th>适用场景</th></tr></thead>
+          <tbody>
+            <tr><td><strong>固定大小</strong></td><td>按字符/token 数切分，可重叠</td><td>实现简单、性能稳定</td><td>可能切断语义边界</td><td>结构简单的文档</td></tr>
+            <tr><td><strong>语义分块</strong></td><td>基于 embedding 相似度分割</td><td>保持语义完整性</td><td>计算成本高</td><td>需要高质量检索的场景</td></tr>
+            <tr><td><strong>递归分块</strong></td><td>按段落→句子→短语层次切分</td><td>自动适应文档结构</td><td>依赖分割规则质量</td><td>结构清晰的文档</td></tr>
+            <tr><td><strong>基于文档结构</strong></td><td>按 Markdown 标题/HTML 标签</td><td>保持自然逻辑单元</td><td>依赖输入格式</td><td>结构化文档</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>固定大小分块</h4>
+        <p>最简单的方法，按固定的 token 数（如 256、512 或 1024）切割文档：</p>
+        <pre><code># 固定大小分块（带重叠）
+def chunk_fixed(text, chunk_size=512, overlap=50):
+    tokens = tokenizer.encode(text)
+    chunks = []
+    for i in range(0, len(tokens), chunk_size - overlap):
+        chunk = tokens[i:i + chunk_size]
+        chunks.append(tokenizer.decode(chunk))
+    return chunks</code></pre>
+        <p><strong>重叠（overlap）</strong> 参数（通常为 chunk_size 的 10-20%）用于缓解切割点处语义断裂的问题。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>基于文档结构的分块</h4>
+        <p>利用文档的标题层级（Markdown <code>#</code>、HTML <code>&lt;h1&gt;</code> 等）作为自然的分块边界：</p>
+        <pre><code># 递归字符文本分割器（LangChain 实现）
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=512,
+    chunk_overlap=50,
+    separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""],
+)
+chunks = text_splitter.split_text(document)</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>语义分块</h4>
+        <p>基于语义相似度检测"主题边界"的分块策略：</p>
+        <pre><code># 语义分块（简化版）
+def semantic_chunk(text, sentence_model, threshold=0.8):
+    sentences = split_into_sentences(text)
+    chunks = []
+    current_chunk = [sentences[0]]
+
+    for i in range(1, len(sentences)):
+        # 计算当前句与 chunk 平均 embedding 的相似度
+        sim = cosine_similarity(
+            sentence_model.encode(sentences[i]),
+            sentence_model.encode(" ".join(current_chunk))
+        )
+        if sim &gt; threshold:
+            current_chunk.append(sentences[i])
+        else:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [sentences[i]]
+
+    return chunks</code></pre>
+        <p><strong>Chunking 质量评估指标</strong>：</p>
+        <ul>
+          <li><strong>检索命中率</strong>：与查询相关的文档是否被正确分割</li>
+          <li><strong>语义完整性</strong>：chunk 内部是否具有一致的语义主题</li>
+          <li><strong>信息密度</strong>：chunk 中有用信息的比例</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 7.4.3 Embedding 模型选型 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.4.3 Embedding 模型选型</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Embedding 模型（嵌入模型）将文本映射到连续向量空间 <code>\mathbb{R}^d</code>，在 RAG 中用于 query 和 document 的编码，是向量检索的基石。在 vLLM 中，嵌入模型通过 Pooling Model 的 <code>embed</code> 任务提供服务。</p>
+
+      <div class="sub-section">
+        <h4>主流 Embedding 模型</h4>
+        <table>
+          <thead><tr><th>模型</th><th>维度</th><th>最大长度</th><th>架构</th><th>特点</th></tr></thead>
+          <tbody>
+            <tr><td><strong>bge-large-en-v1.5</strong></td><td>1024</td><td>512</td><td>BERT-large</td><td>中文友好，BAAI 出品</td></tr>
+            <tr><td><strong>e5-mistral-7b-instruct</strong></td><td>4096</td><td>4096</td><td>Mistral-7B</td><td>长文本支持，高质量</td></tr>
+            <tr><td><strong>instructor-xl</strong></td><td>768</td><td>512</td><td>INSTRUCTOR</td><td>任务感知嵌入</td></tr>
+            <tr><td><strong>jina-embeddings-v3</strong></td><td>1024</td><td>8192</td><td>Jina BERT</td><td>多语言，超长上下文</td></tr>
+            <tr><td><strong>gte-large-en-v1.5</strong></td><td>1024</td><td>8192</td><td>GTE</td><td>业界领先的双编码器</td></tr>
+          </tbody>
+        </table>
+        <p><strong>vLLM 支持的嵌入模型</strong>：</p>
+        <pre><code>_EMBEDDING_MODELS = {
+    "BertModel": ("bert", "BertEmbeddingModel"),
+    "RobertaModel": ("roberta", "RobertaEmbeddingModel"),
+    "RobertaForMaskedLM": ("roberta", "RobertaEmbeddingModel"),
+    "JinaEmbeddingsV5Model": ("jina", "JinaEmbeddingsV5Model"),
+}</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>选型考虑因素</h4>
+        <ol>
+          <li><strong>嵌入维度</strong>：高维度（1024-4096）提高检索精度但增加存储和计算成本。可使用 Matryoshka 嵌入（如 <code>intfloat/e5-mistral-7b-instruct</code>）进行降维（如 1024→256），同时保持好的检索效果。</li>
+          <li><strong>上下文长度</strong>：chunk 大小受限于嵌入模型的最大输入长度。bge/insstructor 的 512 token 限制对长文档分块构成约束，而 jina-embeddings-v3 和 gte 支持更长的上下文。</li>
+          <li><strong>对比学习训练</strong>：e5 和 bge 使用对比学习（Contrastive Learning）训练，能更好地区分语义相关的正样本和无关的负样本。</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 7.4.4 向量数据库 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.4.4 向量数据库</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>向量数据库（Vector Database）专门用于存储和检索高维向量数据，通过近似最近邻搜索（ANN）算法实现高效的相似性搜索。</p>
+
+      <div class="sub-section">
+        <h4>主流方案对比</h4>
+        <table>
+          <thead><tr><th>特性</th><th>Milvus</th><th>Pinecone</th><th>Weaviate</th><th>Qdrant</th></tr></thead>
+          <tbody>
+            <tr><td><strong>部署方式</strong></td><td>自托管 / 云</td><td>云托管</td><td>自托管 / 云</td><td>自托管 / 云</td></tr>
+            <tr><td><strong>索引算法</strong></td><td>IVF, HNSW, DiskANN</td><td>HNSW</td><td>HNSW</td><td>HNSW</td></tr>
+            <tr><td><strong>过滤能力</strong></td><td>标量过滤 + 向量搜索</td><td>元数据过滤</td><td>GraphQL 过滤</td><td>Payload 过滤</td></tr>
+            <tr><td><strong>多模态</strong></td><td>否</td><td>否</td><td>否</td><td>否</td></tr>
+            <tr><td><strong>分布式</strong></td><td>原生支持</td><td>托管</td><td>Kubernetes</td><td>集群模式</td></tr>
+            <tr><td><strong>持久化</strong></td><td>MinIO/S3</td><td>自动</td><td>文件系统/S3</td><td>文件系统/S3</td></tr>
+            <tr><td><strong>中文社区</strong></td><td>活跃（中文文档）</td><td>一般</td><td>一般</td><td>一般</td></tr>
+            <tr><td><strong>适合场景</strong></td><td>大规模生产</td><td>快速原型</td><td>知识图谱 + RAG</td><td>高性能搜索</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>向量搜索算法</h4>
+        <p><strong>HNSW（Hierarchical Navigable Small World）</strong>：当前向量数据库的主流 ANN 算法，构建多层图结构，高层图提供快速导航，低层图提供精确搜索。</p>
+        <pre><code># HNSW 搜索示意图
+# 第 3 层（最高）: 🟢 → 🟢 → 🟢  (稀疏连接，长距离跳跃)
+# 第 2 层:       🟢 → 🟢 → 🟢 → 🟢
+# 第 1 层:       🟢 → 🟢 → 🟢 → 🟢 → 🟢 → 🟢
+# 第 0 层（最密集）: 全连接图</code></pre>
+        <p>HNSW 的搜索过程：从最顶层开始，贪婪地走向最近邻，然后下降到下一层重复，直到到达最底层。</p>
+        <p><strong>IVF（Inverted File Index）</strong>：将向量空间划分为 <code>N</code> 个 Voronoi 单元，搜索时只搜索查询向量所在的单元和邻近单元。需要训练一个 K-means 聚类器来定义单元中心。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 中的 RAG 集成</h4>
+        <p>vLLM 本身不做检索（不包含向量数据库），而是作为生成引擎。典型的 vLLM + RAG 架构为：</p>
+        <pre><code>RAG 系统
+├── 检索层: Milvus/Pinecone 等向量数据库
+│   ├── Chunking: 文档切分为检索单元
+│   ├── Embedding: 调用 vLLM 的 embed 接口编码
+│   └── Indexing: 向量索引构建 (HNSW/IVF)
+├── 精排层: vLLM 的 Rerank Model (cross-encoder)
+│   └── Score API 的 classify 任务
+└── 生成层: vLLM 的 LLM 推理
+    └── Chat Completions API + 检索上下文</code></pre>
+        <p><strong>两阶段检索策略</strong>（在 vLLM 中的 Score API 支持）：</p>
+        <pre><code># 阶段 1: Bi-encoder 粗排（余弦相似度）
+query_embedding = embed_model.embed([user_query])
+doc_embeddings = embed_model.embed(doc_chunks)
+scores = cosine_similarity(query_embedding, doc_embeddings)
+top_k_indices = argsort(scores)[-50:]  # 粗排保留 Top-50
+
+# 阶段 2: Cross-encoder 精排（vLLM Score API classify 任务）
+pairs = [(user_query, doc_chunks[i]) for i in top_k_indices]
+rerank_scores = rerank_model.score(pairs)  # cross-encoder 精排
+final_indices = argsort(rerank_scores)[-5:]  # 精排保留 Top-5</code></pre>
+      </div>
+    </div>
+
+    <!-- 7.4.5 Hybrid Search -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.4.5 Hybrid Search（混合检索）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Hybrid Search 结合了<strong>密集检索（Dense Retrieval）</strong>和<strong>稀疏检索（Sparse Retrieval，BM25）</strong>的优点，在语义理解和精确关键词匹配之间取得平衡。</p>
+
+      <div class="sub-section">
+        <h4>密集检索（Dense Retrieval）</h4>
+        <p>使用神经网络嵌入模型（如 bge、e5）将文本编码为稠密向量，通过向量相似度搜索：</p>
+        <ul>
+          <li><strong>优点</strong>：理解语义，同义词匹配（如"汽车"和"车辆"）</li>
+          <li><strong>缺点</strong>：需要大量训练数据；对罕见词和精确匹配效果差</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>稀疏检索（BM25）</h4>
+        <p>基于词频-逆文档频率（TF-IDF）的改进算法：</p>
+        <div class="formula-box"><code>\text{BM25}(q, d) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{\text{TF}(t, d) \cdot (k_1 + 1)}{\text{TF}(t, d) + k_1 \cdot (1 - b + b \cdot \frac{|d|}{\text{avgdl}})}</code></div>
+        <ul>
+          <li><strong>优点</strong>：精确关键词匹配，无需训练，可解释性强</li>
+          <li><strong>缺点</strong>：无法处理同义词和语义相似</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>融合策略</h4>
+        <p>Hybrid Search 通常使用加权融合或重排序融合：</p>
+        <pre><code># 加权融合
+def hybrid_search(query, alpha=0.5):
+    dense_scores = dense_search(query)   # 向量相似度
+    sparse_scores = bm25_search(query)   # BM25 分数
+
+    # 先对两种分数进行归一化
+    dense_scores = min_max_normalize(dense_scores)
+    sparse_scores = min_max_normalize(sparse_scores)
+
+    # 加权融合
+    final_scores = alpha * dense_scores + (1 - alpha) * sparse_scores
+    return argsort(final_scores)</code></pre>
+        <p><strong>代表性重排序模型</strong>：RRF（Reciprocal Rank Fusion）：</p>
+        <div class="formula-box"><code>\text{RRF}(d) = \sum_{m \in \text{methods}} \frac{1}{k + \text{rank}_m(d)}</code></div>
+        <p>其中 <code>\text{rank}_m(d)</code> 是文档 <code>d</code> 在方法 <code>m</code> 中的排名，<code>k</code> 是常数（通常 60）。RRF 不需要分数归一化，对分数分布不敏感。</p>
+      </div>
+    </div>
+
+    <!-- 7.4.6 RAG 评估 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.4.6 RAG 评估</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>核心评估指标</h4>
+        <table>
+          <thead><tr><th>指标</th><th>全称</th><th>含义</th><th>计算方式</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Hit Rate</strong></td><td>命中率</td><td>检索结果是否包含至少一个相关文档</td><td><code>\frac{\text{有相关文档的查询数}}{\text{总查询数}}</code></td></tr>
+            <tr><td><strong>MRR</strong></td><td>Mean Reciprocal Rank</td><td>第一个相关文档在结果中的位置</td><td><code>\frac{1}{N}\sum_{i=1}^{N}\frac{1}{\text{rank}_i}</code></td></tr>
+            <tr><td><strong>NDCG</strong></td><td>Normalized Discounted Cumulative Gain</td><td>考虑多级相关性和位置的加权指标</td><td><code>\frac{\text{DCG}}{\text{IDCG}}</code></td></tr>
+            <tr><td><strong>Recall@k</strong></td><td>Top-k 召回率</td><td>前 k 个结果中相关文档的比例</td><td>—</td></tr>
+            <tr><td><strong>Precision@k</strong></td><td>Top-k 精确率</td><td>前 k 个结果中相关文档的占比</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>示例对比</h4>
+        <p>假设有 3 个查询，每个查询的检索结果中相关文档的位置如下：</p>
+        <table>
+          <thead><tr><th>查询</th><th>相关文档位置</th><th>Hit Rate</th><th>MRR</th></tr></thead>
+          <tbody>
+            <tr><td>Q1</td><td>第 1 位</td><td>1</td><td>1/1 = 1.0</td></tr>
+            <tr><td>Q2</td><td>第 3 位</td><td>1</td><td>1/3 ≈ 0.33</td></tr>
+            <tr><td>Q3</td><td>未找到</td><td>0</td><td>0</td></tr>
+          </tbody>
+        </table>
+        <p><strong>整体</strong>：Hit Rate = 2/3 ≈ 66.7%, MRR = (1.0 + 0.33 + 0) / 3 ≈ 0.44</p>
+        <p><strong>NDCG 的额外价值</strong>：NDCG 考虑多个相关文档的位置，而非只关注第一个。例如如果 Q1 在位置 1 和 5 有相关文档，NDCG 会同时奖励两个位置（按折扣累加），而 MRR 只考虑位置 1。</p>
+      </div>
+    </div>
+
+    <!-- 7.4.7 Advanced RAG -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.4.7 Advanced RAG：Self-RAG, CRAG, RAPTOR, HyDE</h3>
+        <span class="tag tag-blue">高级概念</span>
+      </div>
+
+      <table>
+        <thead><tr><th>方法</th><th>核心思想</th><th>解决的问题</th><th>原理</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Self-RAG</strong></td>
+            <td>模型自我判断是否需要检索</td>
+            <td>统一了"检索"和"不检索"的决策</td>
+            <td>训练模型输出反思 token（如 <code>[Retrieve]</code>、<code>[No Retrieve]</code>、<code>[Relevant]</code>、<code>[Not Relevant]</code>），让模型自主决定何时检索和如何使用检索结果</td>
+          </tr>
+          <tr>
+            <td><strong>CRAG</strong></td>
+            <td>检索后纠错和校正</td>
+            <td>检索结果质量不高时的兜底策略</td>
+            <td>对检索结果进行评估，如果检索结果差则触发大规模 web 搜索作为补充；如果检索结果好则保留和使用</td>
+          </tr>
+          <tr>
+            <td><strong>RAPTOR</strong></td>
+            <td>构建文档的层次摘要树</td>
+            <td>同时支持具体细节和宏观理解的检索</td>
+            <td>将文档递归摘要为层次结构（叶子=原文段落，内部节点=摘要），检索时同时搜索所有层级</td>
+          </tr>
+          <tr>
+            <td><strong>HyDE</strong></td>
+            <td>用假设文档编码查询</td>
+            <td>弥合查询和文档之间的语义鸿沟</td>
+            <td>先用 LLM 生成一个"假设文档"（hypothetical document），然后用其嵌入进行检索，而非直接用查询嵌入</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="sub-section">
+        <h4>HyDE 的直觉</h4>
+        <pre><code>Query: "What is the capital of France?"
+  → LLM generates hypothetical document: "France's capital is Paris..."
+  → Embed hypothetical document (not the query)
+  → Search with this embedding
+  → Better than query embedding because the embedding space alignment improves</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>各方法在 vLLM 生态中的定位</h4>
+        <ul>
+          <li><strong>Self-RAG</strong>：需要训练支持反射 token 的模型，不属于 vLLM 的推理优化范畴</li>
+          <li><strong>CRAG</strong>：对外部搜索的依赖超出了 vLLM 的能力边界</li>
+          <li><strong>RAPTOR</strong>：主要是一个分块和索引策略，可以与 vLLM 的嵌入服务和 Prefix Caching 结合使用</li>
+          <li><strong>HyDE</strong>：需要一个 LLM 来生成假设文档，可以直接使用 vLLM 的 Chat API 实现</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="section-6.html" class="module-nav-prev">
+    <div class="module-nav-label">← 上一模块</div>
+    <div class="module-nav-title">AI 通用概念</div>
+  </a>
+    <a href="section-8.html" class="module-nav-next">
+    <div class="module-nav-label">下一模块 →</div>
+    <div class="module-nav-title">高级 AI（下）</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 7: 高级 AI 相关概念（上） | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>

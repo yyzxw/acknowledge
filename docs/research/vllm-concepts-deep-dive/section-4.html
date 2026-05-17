@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块4: 分布式推理与部署 — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 4 / 8</span>
+  </div>
+</div>
+
+<section id="sec-4" data-section="module">
+  <div class="module-content">
+
+    <!-- ============================================================ -->
+    <!-- 4.1 模型并行策略（Model Parallelism） -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>4.1 模型并行策略（Model Parallelism）</h3>
+        <span class="tag tag-blue">分布式</span>
+      </div>
+
+      <p>模型并行（Model Parallelism）是指将一个大语言模型拆分到多个 GPU 上协同推理的技术集合。随着模型规模从 7B 增长到 405B 甚至 671B（如 DeepSeek-V3），单 GPU 显存（即使 H100 的 80GB）远不足以容纳完整模型参数 + KV Cache + 中间激活值。模型并行通过将模型的不同部分分布到多个 GPU，突破了单卡显存墙，同时通过并行计算降低推理延迟。</p>
+
+      <p>模型并行主要分为四种基本策略：</p>
+      <ul>
+        <li><strong>Tensor Parallelism（TP，张量并行）</strong>：在层内切分权重矩阵</li>
+        <li><strong>Pipeline Parallelism（PP，流水线并行）</strong>：在层间切分</li>
+        <li><strong>Data Parallelism（DP，数据并行）</strong>：在请求级别并行</li>
+        <li><strong>Expert Parallelism（EP，专家并行）</strong>：专为 MoE 模型的 expert 分布设计</li>
+      </ul>
+
+      <p>在实际部署中，这些策略通常组合使用以最大化硬件利用率。</p>
+
+      <!-- TP -->
+      <div class="sub-section">
+        <h4>Tensor Parallelism（TP）</h4>
+        <p>TP 是 Megatron-LM 提出的层内切分策略，将每个 Transformer 层的权重矩阵沿特定维度切分到多个 GPU。在 Transformer 中，TP 主要应用于 MLP 层（<code>gate_up_proj</code>, <code>down_proj</code>）和 Attention 层（<code>qkv_proj</code>, <code>o_proj</code>）。</p>
+
+        <p><strong>列切分（Column Parallel）：</strong>对于线性层 <code>Y = X * W</code>，其中 <code>W</code> 形状为 <code>[in_features, out_features]</code>，列切分将 <code>W</code> 沿输出维度切分为 <code>W = [W_1, W_2, ..., W_k]</code>，每个 GPU 保存 <code>W_i</code> 形状为 <code>[in_features, out_features/k]</code>：</p>
+
+        <div class="formula-box"><code>Y_i = X * W_i       # 每个 GPU 独立计算<br>Y = [Y_1, ..., Y_k] # 输出维度拼接</code></div>
+
+        <p><strong>行切分（Row Parallel）：</strong>将 <code>W</code> 沿输入维度切分为 <code>W = [W_1; W_2; ...; W_k]</code>（纵向堆叠），上一层的列切分输出直接作为本层输入：</p>
+
+        <div class="formula-box"><code>Y_i = X_i * W_i      # X_i 是上层的列切分输出<br>Y = Y_1 + ... + Y_k  # All-reduce 求和</code></div>
+
+        <p><strong>通信量分析：</strong>行切分层需要 All-reduce 通信，通信数据量为 <code>batch_size * seq_len * out_features * dtype_size</code>。All-reduce 的通信复杂度为 <code>2(k-1)/k * data_size</code>（k 为 TP size）。在单机 NVLink 环境下（A100: 600 GB/s，H100: 900 GB/s），此开销很小。例如 LLaMA-70B decode 阶段单次 All-reduce 约 32 KB，传输时间约 0.05 &mu;s。但在跨节点场景下（InfiniBand 12.5-50 GB/s），TP 通信开销显著增加，因此 TP 通常限制在单节点内。</p>
+
+        <p>vLLM 的 TP 实现继承自 Megatron-LM 的 <code>parallel_state.py</code>，通过 <code>initialize_model_parallel</code> 函数构建 TP 组。vLLM 扩展了多种 All-reduce 后端：Custom AllReduce（NVLink 优化）、FlashInfer AllReduce、PyNcclCommunicator（NCCL）、SymmMemCommunicator（PyTorch symmetric memory）。</p>
+      </div>
+
+      <!-- PP -->
+      <div class="sub-section">
+        <h4>Pipeline Parallelism（PP）</h4>
+        <p>PP 将模型的不同层分配到不同 GPU。例如 80 层的模型，PP size = 4，则每个 GPU 负责 20 层。</p>
+
+        <p>PP 的核心问题是<strong>流水线气泡（Pipeline Bubble）</strong>。在 1F1B（One-Forward-One-Backward）调度下，气泡比例公式为：</p>
+
+        <div class="formula-box"><code>Bubble ratio = (p - 1) / (m + p - 1)</code></div>
+
+        <p>其中 <code>p</code> = PP size，<code>m</code> = micro-batch 数量。在推理场景中没有反向传播，气泡问题显著简化，可以通过 interleaved scheduling 和 continuous batching 缓解。PP 的通信模式为 P2P（Point-to-Point），通过 <code>send_tensor_dict</code> / <code>recv_tensor_dict</code> 实现。</p>
+
+        <p>vLLM 中 PP 组的构建位于 <code>parallel_state.py</code>（第 1635-1651 行），通过 <code>transpose(2, 4)</code> 交换 PP 和 TP 维度，保证 PP 组跨 TP 组正交：</p>
+
+        <pre><code>group_ranks = (
+    all_ranks.transpose(2, 4).reshape(-1, pipeline_model_parallel_size).unbind(0)
+)</code></pre>
+
+        <p>例如 8 GPU, TP=2, PP=4：</p>
+        <ul>
+          <li>TP 组：<code>[0,1], [2,3], [4,5], [6,7]</code></li>
+          <li>PP 组：<code>[0,2,4,6], [1,3,5,7]</code></li>
+        </ul>
+      </div>
+
+      <!-- DP -->
+      <div class="sub-section">
+        <h4>Data Parallelism（DP）</h4>
+        <p>DP 将完整的模型副本部署到多组 GPU，每组独立处理不同请求。推理时 DP 没有梯度同步需求，几乎可以线性扩展吞吐量：</p>
+
+        <table>
+          <thead><tr><th>维度</th><th>训练时 DP</th><th>推理时 DP</th></tr></thead>
+          <tbody>
+            <tr><td>同步需求</td><td>每步 All-reduce 梯度</td><td>无需同步</td></tr>
+            <tr><td>负载均衡</td><td>数据分片固定</td><td>需要请求路由</td></tr>
+            <tr><td>通信量</td><td>大（梯度大小 &asymp; 模型大小）</td><td>极小</td></tr>
+            <tr><td>扩展性</td><td>受梯度同步限制</td><td>近乎线性扩展（0.85-0.95 * d）</td></tr>
+          </tbody>
+        </table>
+
+        <p>DP 的挑战在于前缀缓存的局部性——每个副本有独立 KV Cache。解决方案包括粘性路由（同一前缀路由到同一副本）和全局 KV 缓存（LMCache 跨副本共享）。</p>
+      </div>
+
+      <!-- EP -->
+      <div class="sub-section">
+        <h4>Expert Parallelism（EP）</h4>
+        <p>EP 专为 MoE 模型设计，将不同 expert 分配到不同 GPU。MoE 层的计算流程为 Router -&gt; All-to-all Dispatch -&gt; Expert Compute -&gt; All-to-all Combine。通信模式为 All-to-all，通信量约为 <code>B * S * H * top_k * 2</code>（dispatch + combine）。</p>
+
+        <p>vLLM 支持多种 All-to-all 后端：</p>
+        <ul>
+          <li><strong>DeepEP</strong>：DeepSeek 开源的高效 all-to-all 库</li>
+          <li><strong>FlashInfer</strong>：NVLink 优化的 two-sided/one-sided 通信</li>
+          <li><strong>NIXL</strong>：基于 UCX 的统一通信层</li>
+        </ul>
+      </div>
+
+      <!-- 组合策略 -->
+      <div class="sub-section">
+        <h4>组合策略：3D Parallelism</h4>
+        <p>3D Parallelism = Data Parallelism * Tensor Parallelism * Pipeline Parallelism</p>
+
+        <p>典型部署配置（LLaMA3-405B）：</p>
+        <ul>
+          <li>TP = 8（单节点内，利用 NVLink）</li>
+          <li>PP = 8（跨 8 个节点）</li>
+          <li>DP = 多副本（请求级并行）</li>
+          <li>总 GPU = 64+</li>
+        </ul>
+
+        <table>
+          <thead><tr><th>策略</th><th>切分维度</th><th>通信模式</th><th>通信量</th><th>最佳适用场景</th></tr></thead>
+          <tbody>
+            <tr><td>TP</td><td>层内权重</td><td>All-reduce</td><td>高（需 NVLink）</td><td>单节点多卡，大模型单层放不下</td></tr>
+            <tr><td>PP</td><td>层间</td><td>P2P</td><td>中等（激活值）</td><td>跨节点，减少单卡层数</td></tr>
+            <tr><td>DP</td><td>请求级</td><td>几乎无</td><td>无/极小</td><td>高吞吐在线服务</td></tr>
+            <tr><td>EP</td><td>MoE expert</td><td>All-to-all</td><td>中高（token dispatch）</td><td>MoE 模型（DeepSeek-V3 等）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>应用场景</h4>
+        <ul>
+          <li><strong>TP</strong>：所有超过单卡显存的模型都必须使用。70B 模型至少 TP=2（FP16 约 140GB），405B 至少 TP=8。TP 是 vLLM 中最常使用的并行策略。</li>
+          <li><strong>PP</strong>：当 TP 受限时（如 TP size 不能超过单节点 GPU 数），PP 用于进一步降低单卡负载。DeepSeek-V3 的 671B 模型部署中使用了 PP 跨节点切分。</li>
+          <li><strong>DP</strong>：在线 API 服务中提升吞吐量的首选手段，结合负载均衡器实现水平扩展。</li>
+          <li><strong>EP</strong>：MoE 模型必选策略。DeepSeek-V3 在 96 H100 上 EP=24, DP=4。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与其他概念的关系</h4>
+        <p>模型并行策略直接决定 KV Cache 的分布方式。TP 下 KV Cache 被切分到同组各卡；PP 下每卡持有不同层的 KV Cache；DP 下每副本有独立 KV Cache。Disaggregated Serving（分离式推理）进一步将 TP/PP 的分布式环境扩展到跨节点的 Prefill-Decode 分离。Quantization 可以降低单卡内存压力，从而减少所需的并行度。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 4.2 Disaggregated Serving（分离式推理） -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>4.2 Disaggregated Serving（分离式推理）</h3>
+        <span class="tag tag-purple">架构</span>
+      </div>
+
+      <p>Disaggregated Serving（分离式推理）将 LLM 推理的 Prefill 和 Decode 两个阶段分配到不同的 GPU 集群上独立执行。Prefill Cluster（P 集群）负责处理 prompt 计算和 KV Cache 生成，Decode Cluster（D 集群）负责自回归 token 生成。两阶段之间通过高速网络传输 KV Cache。</p>
+
+      <div class="sub-section">
+        <h4>为什么需要分离</h4>
+        <p>LLM 推理的两个阶段存在根本性的资源需求矛盾：</p>
+        <ul>
+          <li><strong>Prefill 阶段（Compute-bound）</strong>：一次性处理整个 prompt 的所有 token，需要大量矩阵乘法，GPU 计算单元利用率高。瓶颈是 GPU 算力。</li>
+          <li><strong>Decode 阶段（Memory-bound）</strong>：每次只处理一个 token，主要开销在于从 HBM 读取 KV Cache。瓶颈是内存带宽。</li>
+        </ul>
+        <p>当两者混合在同一 GPU 上时，Prefill 会抢占 Decode 的计算资源，导致 decode token 的 ITL（Inter-Token Latency）剧烈波动；同时 Decode 的 KV Cache 占用大量显存，限制了 Prefill 可以处理的 batch size。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>架构设计</h4>
+        <p>分离式推理架构包含三个核心组件：</p>
+        <ol>
+          <li><strong>Prefill Pool</strong>：一组 GPU 专用于 prompt 处理和 KV Cache 计算。P 集群采用大 batch、高算力策略，最大化 TTFT（Time To First Token）的吞吐量。</li>
+          <li><strong>Decode Pool</strong>：一组 GPU 专用于自回归生成。D 集群采用小 batch、低延迟策略，保证 ITL 稳定。</li>
+          <li><strong>KV Cache 传输通道</strong>：P 集群计算完成后，将 KV Cache 通过高速网络传输到 D 集群。这是一个关键瓶颈。</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>KV Cache 传输挑战</h4>
+        <p>KV Cache 体积极为庞大。对于 LLaMA3-70B（80 层，8 KV head，head_dim=128），每 token 的 KV Cache 大小约为 <code>2 * 80 * 8 * 128 * 2 (FP16) = 327,680 bytes &approx; 320 KB</code>。4K context 约 1.28 GB，128K context 约 40 GB。即使 400 Gbps InfiniBand，传输 1GB 也需要约 20ms。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>传输协议实现</h4>
+        <p>vLLM 在 <code>vllm/distributed/kv_transfer/kv_connector/</code> 中实现了多种 KV 传输连接器：</p>
+        <ul>
+          <li><strong>MooncakeConnector</strong>：基于 Mooncake Transfer Engine，使用 RDMA（InfiniBand/RoCE）或 TCP。支持 P-push 模式（Prefill 主动推送）和异步发送。支持 P 和 D 使用不同 TP size。</li>
+          <li><strong>NIXLConnector</strong>：基于 NVIDIA 的统一通信库 NIXL（基于 UCX）。支持零拷贝传输（KV cache block 注册为 NIXL descriptors），UCX 自动选择最优传输路径（NVLink &gt; InfiniBand &gt; PCIe &gt; TCP），支持异构布局（不同 block size、layout、TP size）。</li>
+          <li><strong>LMCacheConnectorV1</strong>：基于 LMCache 项目，提供跨引擎 KV cache 共享和多级 offloading（GPU HBM -&gt; 主机内存 -&gt; SSD -&gt; 远程缓存）。支持事件驱动的缓存发现和 Layer-wise 异步传输。</li>
+        </ul>
+
+        <pre><code># Mooncake Worker 初始化
+class MooncakeConnectorWorker:
+    def __init__(self, vllm_config, engine_id, kv_cache_config):
+        self.engine = TransferEngine()  # Mooncake C++ 引擎
+        self.engine.initialize(self.hostname, "P2PHANDSHAKE", protocol, "")
+        # protocol: "rdma" 或 "tcp"</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>延迟节省分析</h4>
+
+        <table>
+          <thead><tr><th>指标</th><th>混合部署</th><th>分离部署</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>TTFT</td><td>中等</td><td>更低</td><td>P-cluster 专精大 batch prefill，算力利用率高</td></tr>
+            <tr><td>ITL</td><td>高（波动大）</td><td>更低（稳定）</td><td>D-cluster 不受 prefill 抢占</td></tr>
+            <tr><td>吞吐量</td><td>受限于混合调度</td><td>更高</td><td>P 和 D 分别优化各自 batching</td></tr>
+            <tr><td>KV 传输开销</td><td>无</td><td>增加</td><td>需要额外的网络传输时间</td></tr>
+          </tbody>
+        </table>
+
+        <p>关键权衡：短上下文（&lt; 4K）时 KV 传输开销可能超过分离收益；长上下文（&gt; 4K）时分离收益显著。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>相关论文</h4>
+        <ul>
+          <li><strong>Splitwise</strong>（USENIX ATC 2024）：将 prefill 和 decode 分离到不同机器，提出 chunked prefill 平滑负载和 KV cache 复用策略，多个 decode worker 可共享同一 prefill worker 的 KV cache。</li>
+          <li><strong>DistServe</strong>（OSDI 2024）：将 goodput（满足 SLO 的请求比例）作为优化目标。发现混合部署时 prefill 对 decode 干扰导致大量请求违反延迟 SLO，分离后 goodput 提升 1.5-2.5x。P 和 D 使用独立 batching 策略。</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>应用场景</h4>
+        <ul>
+          <li>长上下文推理服务（8K+ 上下文），如文档分析、代码库理解</li>
+          <li>对 ITL 稳定性要求高的实时对话系统（chatbot API）</li>
+          <li>高吞吐的 Prefill 批处理场景（RAG 系统批量处理大量 prompt）</li>
+          <li>需要差异化硬件配置的场景（P 集群用 H100，D 集群用 A100 降低成本）</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与其他概念的关系</h4>
+        <p>Disaggregated Serving 是模型并行策略（TP/PP/DP）的上层扩展——它不是在单次推理中并行，而是在系统架构层面分离计算阶段。它依赖于 KV Cache 管理（PagedAttention、Prefix Caching）来处理跨节点的缓存传输。LMCache 是 Disaggregated Serving 的关键基础设施，提供多级 KV Cache 存储和共享。Quantization 通过减少每 token KV Cache 大小，可以降低 KV 传输的带宽压力。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 4.3 量化（Quantization） -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>4.3 量化（Quantization）</h3>
+        <span class="tag tag-emerald">优化</span>
+      </div>
+
+      <p>量化（Quantization）是将浮点数模型参数、激活值或 KV Cache 以低位宽整数或低精度浮点数表示的技术。核心思想是将连续的值域映射到离散的整数格点上，从而大幅降低模型的内存占用、带宽需求和计算能耗。在 LLM 推理中，量化直接决定了单 GPU 能否容纳更大的模型，以及推理吞吐量的上限。</p>
+
+      <div class="sub-section">
+        <h4>量化的数学基础</h4>
+        <p>最基础的对称线性量化将浮点张量 <code>x</code> 映射到整数 <code>q</code>：</p>
+        <div class="formula-box"><code>scale = max(|x|) / (2^(b-1) - 1)    # b = 位宽<br>q = round(x / scale)<br>x_approx = q * scale                 # 反量化</code></div>
+
+        <p>其中 <code>scale</code> 是缩放因子，<code>(2^(b-1) - 1)</code> 是量化范围的最大值（如 INT8 为 127）。<strong>非对称量化</strong>增加 <code>zero_point</code> 偏移量来处理非对称分布：</p>
+        <div class="formula-box"><code>scale = (max - min) / (2^b - 1)<br>zero_point = round(-min / scale)<br>q = round(x / scale + zero_point)</code></div>
+      </div>
+
+      <div class="sub-section">
+        <h4>FP8（E4M3 / E5M2）</h4>
+        <p>NVIDIA Hopper 架构引入了两种 8-bit 浮点格式：</p>
+        <ul>
+          <li><strong>E4M3</strong>：1 符号位 + 4 指数位 + 3 尾数位，范围约 0.00195 到 448，主要用于 weights 和 activations</li>
+          <li><strong>E5M2</strong>：1 符号位 + 5 指数位 + 2 尾数位，范围约 0.000061 到 57344，主要用于 gradients</li>
+        </ul>
+        <p>FP8 计算需要 Hopper GPU（H100/H200）的 Tensor Core 支持。vLLM 中通过 <code>torch._scaled_mm</code> 和 <code>float8_e4m3fn</code> dtype 实现。FP8 相比 FP16 将存储减半（每 token 的 KV Cache 从 2 字节降至 1 字节），同时 Hopper 的 FP8 Tensor Core 提供 2 倍于 FP16 的峰值算力。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>INT8 / INT4</h4>
+        <p><strong>INT8</strong>：对称量化 <code>scale = max(|x|) / 127, q = round(x / scale)</code>。INT8 矩阵乘法利用 NVIDIA INT8 Tensor Core，峰值算力是 FP16 的 2 倍。量化粒度分为：</p>
+        <ul>
+          <li><strong>Per-tensor</strong>：整个张量共享一个 scale，最简单但精度损失最大</li>
+          <li><strong>Per-channel</strong>：每个输出通道独立 scale，常见于权重量化</li>
+          <li><strong>Per-group</strong>：每 32/64/128 个元素一组共享 scale，精度最好但存储 overhead 增加</li>
+        </ul>
+        <p><strong>INT4</strong>：将每 16 个 FP16 weights 压缩到 4 bits，加上 group-wise scale/zero_point。存储压缩比 4:1，但计算时需要反量化到 FP16/INT8。主要用于权重存储压缩。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>AWQ（Activation-aware Weight Quantization）</h4>
+        <p>AWQ 的核心洞察：<strong>不是所有权重通道都同等重要</strong>。通过观察 activations，可以发现某些通道对输出影响更大（salient channels）。AWQ 通过 <strong>per-channel scaling</strong> 保护这些重要通道：</p>
+        <div class="formula-box"><code>min_s  E[ || X * (W - quant(W * s) / s) ||^2 ]</code></div>
+        <p>其中 <code>s</code> 是逐通道缩放因子，通过少量校准数据优化得到。对于 salient channels（激活值幅值大的通道），使用较大的 <code>s</code> 值减小其相对量化误差。AWQ 通常支持 INT4/INT3/INT8，精度在同等比特率下通常优于 GPTQ。vLLM 通过 <code>vllm/model_executor/layers/quantization/awq.py</code> 支持 AWQ 模型加载。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>GPTQ（Gradient-based Post-training Quantization）</h4>
+        <p>GPTQ 是一种逐层的后训练量化方法，利用 <strong>Hessian 矩阵</strong> 信息补偿量化误差。源自 OBQ（Optimal Brain Quantization）：</p>
+        <div class="formula-box"><code>对于某层权重 W，量化引入误差 &Delta;W = W - W_q<br>对损失函数的二阶影响: &Delta;L &approx; &Delta;W^T * H * &Delta;W，其中 H = E[X^T X]</code></div>
+        <p>GPTQ 使用 Cholesky 分解稳定 Hessian 逆的计算、采用任意顺序量化配合批处理更新加速、支持 group-wise quantization（默认 128 个权重一组共享 scale）。校准数据通常需要 128-256 条。</p>
+
+        <pre><code># GPTQ 逐层量化流程（示意）
+for each layer:
+    H = X^T @ X              # 计算 Hessian
+    H_inv = cholesky_inverse(H)  # Cholesky 分解求逆
+    for each weight group:
+        w_q = round(W[group] / scale)
+        error = W[group] - w_q * scale
+        # 用 Hessian 信息补偿剩余权重
+        W[remaining] -= error * H_inv[remaining, group] / H_inv[group, group]</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>GGUF（GPT-Generated Unified Format）</h4>
+        <p>GGUF 是 llama.cpp 项目定义的量化模型格式。自包含（单文件含架构、分词器、量化参数），支持多种量化方案（Q4_0, Q5_K_M, Q8_0 等），K-quants 使用混合精度（重要层更高精度）。GGUF 对 CPU 友好（利用 AVX/NEON 等 SIMD 指令），但 GPU 上的量化精度通常不如 AWQ/GPTQ。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>KV Cache 量化</h4>
+        <p>长上下文下 KV Cache 内存占用成为瓶颈。vLLM 的 FlashAttention 后端支持 FP8 KV Cache（<code>torch.float8_e4m3fn</code>，需 FlashAttention 3）：</p>
+
+        <table>
+          <thead><tr><th>KV Cache 精度</th><th>Perplexity（LLaMA2-7B, WikiText-2）</th><th>相对 FP16 变化</th></tr></thead>
+          <tbody>
+            <tr><td>FP16 (baseline)</td><td>12.35</td><td>-</td></tr>
+            <tr><td>INT8 (per-token)</td><td>12.38</td><td>+0.03</td></tr>
+            <tr><td>INT4 (per-token)</td><td>12.52</td><td>+0.17</td></tr>
+            <tr><td>INT4 (group=128)</td><td>12.41</td><td>+0.06</td></tr>
+          </tbody>
+        </table>
+
+        <p>INT8 KV Cache 量化几乎无损，INT4 需要 group-wise scaling 才能保持精度。</p>
+      </div>
+
+      <h4>各量化方法对比</h4>
+
+      <table>
+        <thead><tr><th>方法</th><th>位宽</th><th>量化对象</th><th>压缩比（vs FP16）</th><th>精度损失</th><th>特殊要求</th></tr></thead>
+        <tbody>
+          <tr><td>FP8 (E4M3)</td><td>8</td><td>权重/激活/KV</td><td>50%</td><td>极小</td><td>H100+ Tensor Core</td></tr>
+          <tr><td>INT8</td><td>8</td><td>权重/激活</td><td>50%</td><td>小（需 SmoothQuant）</td><td>INT8 Tensor Core</td></tr>
+          <tr><td>AWQ (INT4)</td><td>4</td><td>权重</td><td>75%</td><td>小-中</td><td>特殊 kernel</td></tr>
+          <tr><td>GPTQ (INT4)</td><td>4</td><td>权重</td><td>75%</td><td>小-中</td><td>广泛支持 (Marlin)</td></tr>
+          <tr><td>GGUF Q4_K_M</td><td>4.5</td><td>权重</td><td>72%</td><td>中等</td><td>CPU 友好</td></tr>
+          <tr><td>FP8 KV Cache</td><td>8</td><td>KV Cache</td><td>50%</td><td>极小</td><td>FA3 支持</td></tr>
+          <tr><td>INT8 KV Cache</td><td>8</td><td>KV Cache</td><td>50%</td><td>极小</td><td>per-token</td></tr>
+        </tbody>
+      </table>
+
+      <div class="sub-section">
+        <h4>应用场景</h4>
+        <ul>
+          <li><strong>FP8</strong>：生产环境中精度-效率最佳平衡点，H100 部署的标准选择</li>
+          <li><strong>AWQ/GPTQ INT4</strong>：将 70B 模型从约 140GB 压缩到约 35GB，可在 2-4 张 GPU 上运行</li>
+          <li><strong>GGUF</strong>：CPU 推理、边缘设备、本地隐私推理（llama.cpp 生态）</li>
+          <li><strong>KV Cache 量化</strong>：长上下文服务（32K+），将 KV Cache 内存减半或更多，可显著提升支持的并发请求数</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与其他概念的关系</h4>
+        <p>量化直接降低模型参数和 KV Cache 的内存占用，从而减少推理所需的 GPU 数量和并行度（TP 可以更小）。量化后的模型与 Attention 后端紧密相关——FP8 KV Cache 需要 FlashAttention 3 支持，INT4 权重需要 Marlin 等特殊 kernel。AWQ/GPTQ 等量化方法也影响模型加载方式，vLLM 通过 <code>quantization_config</code> 区分不同格式。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 4.4 Attention 优化后端 -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>4.4 Attention 优化后端</h3>
+        <span class="tag tag-cyan">计算优化</span>
+      </div>
+
+      <p>Attention 优化后端是 LLM 推理中负责执行 Attention 计算的底层 kernel 实现。标准 Attention 的计算复杂度为 O(n<sup>2</sup>)（n = 序列长度），且内存访问模式差——需要多次读写 HBM（高带宽显存）。各种 Attention 后端通过 tiling、online softmax、算子融合等技术，在保持数学等价性的前提下大幅提升计算效率。</p>
+
+      <div class="sub-section">
+        <h4>FlashAttention 1（2022）</h4>
+        <p>核心创新是 <strong>Tiling + Online Softmax + Recomputation</strong>：</p>
+        <ul>
+          <li><strong>Tiling</strong>：将 Q/K/V 切分为小块（tile），在 SRAM 中完成局部计算，避免频繁读写 HBM。对于 Q tile <code>Q_i</code>（大小 <code>B_r * d</code>）和 K/V tiles <code>K_j, V_j</code>：</li>
+        </ul>
+
+        <div class="formula-box"><code>S_ij = Q_i @ K_j^T   # 在 SRAM 中计算<br>m_ij = rowmax(S_ij)<br>P_ij = exp(S_ij - m_ij)<br>O_ij = P_ij @ V_j</code></div>
+
+        <ul>
+          <li><strong>Online Softmax</strong>：遍历 tiles 时增量更新全局统计量：</li>
+        </ul>
+
+        <div class="formula-box"><code>m_new = max(m_old, m_ij)<br>l_new = l_old * exp(m_old - m_new) + l_ij * exp(m_ij - m_new)<br>O_new = O_old * exp(m_old - m_new) + O_ij * exp(m_ij - m_new)</code></div>
+
+        <ul>
+          <li><strong>Recomputation</strong>：反向传播时不保存 <code>S</code> 矩阵（大小 n*n），而是反向时重新计算，将内存从 O(n<sup>2</sup>) 降到 O(n)。</li>
+        </ul>
+
+        <p>IO 复杂度从 O(n<sup>2</sup>) 降低到 O(n<sup>2</sup> / M)（M = SRAM 大小），实际获得 2-4 倍加速。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>FlashAttention 2（2023）</h4>
+        <p>主要改进：减少非矩阵乘法操作（online softmax 缩放与 GEMM 融合）、更好的 Warp 级并行（序列长度维度分配到不同 warps）、改进的 tile 划分策略。Forward 比 FA1 快约 2 倍，backward 快约 2-3 倍。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>FlashAttention 3（2024，Hopper 专用）</h4>
+        <p>利用 Hopper 架构硬件特性：</p>
+        <ol>
+          <li><strong>TMA（Tensor Memory Accelerator）</strong>：使用 <code>cp.async.bulk</code> 指令异步加载 tiles 到 shared memory</li>
+          <li><strong>Warp Group Cluster</strong>：将 4 个 warps（128 threads）组成 cluster 协作处理更大的 tile</li>
+          <li><strong>FP8 Tensor Core</strong>：原生支持 FP8 精度计算</li>
+          <li><strong>GEMM 和 Softmax 重叠</strong>：利用 Hopper 独立执行单元，当前 tile 计算与下个 tile 的 softmax 准备重叠</li>
+        </ol>
+        <p>FA3 相比标准 attention 在 H100 上可达 4-6 倍加速（FP16）或 6-8 倍加速（FP8）。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>FlashInfer</h4>
+        <p>FlashInfer 是专门为 LLM <strong>推理服务</strong>设计的 attention 引擎，vLLM V1 的默认 Attention 后端。核心优势：</p>
+        <ul>
+          <li><strong>Batch Decode Kernel</strong>：针对 decode 阶段（query_len=1）高度优化</li>
+          <li><strong>Cascade Attention</strong>：对共享前缀的 batch 进行合并计算</li>
+          <li><strong>Page Table 管理</strong>：原生支持非连续的 block table（PagedAttention）</li>
+          <li>支持 FP8 KV Cache 和 MLA（Multi-head Latent Attention）</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>XFormers</h4>
+        <p>XFormers 是 Facebook Research 开发的通用 Transformer 优化库，提供 memory-efficient attention。支持训练和推理，但 Paged KV 支持有限，Decode 阶段优化不如 FlashInfer，不支持 FP8 KV Cache。</p>
+      </div>
+
+      <h4>各后端对比</h4>
+
+      <table>
+        <thead><tr><th>特性</th><th>FlashAttention</th><th>FlashInfer</th><th>XFormers</th></tr></thead>
+        <tbody>
+          <tr><td>主要场景</td><td>训练 + 推理</td><td>推理（分页 KV cache）</td><td>训练 + 推理</td></tr>
+          <tr><td>Paged KV 支持</td><td>支持（v2+）</td><td>原生支持</td><td>有限支持</td></tr>
+          <tr><td>CUDA Graph</td><td>支持</td><td>支持</td><td>支持</td></tr>
+          <tr><td>Decode 优化</td><td>一般</td><td>极强（Cascade/Append）</td><td>一般</td></tr>
+          <tr><td>MLA 支持</td><td>部分</td><td>支持</td><td>无</td></tr>
+          <tr><td>FP8 KV cache</td><td>FA3 支持</td><td>支持</td><td>不支持</td></tr>
+        </tbody>
+      </table>
+
+      <div class="sub-section">
+        <h4>vLLM V1 Attention Backend 架构</h4>
+        <p>vLLM V1 对 attention backend 做了彻底重构，核心文件：</p>
+
+        <pre><code>vllm/v1/attention/backend.py          # 抽象基类
+vllm/v1/attention/backends/flash_attn.py   # FlashAttention 后端
+vllm/v1/attention/backends/flashinfer.py   # FlashInfer 后端
+vllm/v1/attention/backends/triton_attn.py  # Triton 后端
+vllm/v1/attention/backends/mla/          # MLA 后端</code></pre>
+
+        <p><code>AttentionBackend</code> 定义抽象接口，<code>AttentionMetadataBuilder</code> 将 scheduler 输出的通用元数据（<code>CommonAttentionMetadata</code>）转换为后端特定格式（如 <code>FlashAttentionMetadata</code>）。Page size（block size）是关键超参数——小（如 16）减少内存碎片但 kernel 效率降低，大（如 128）计算效率高但内存浪费增加。vLLM 默认 block size = 16。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>应用场景</h4>
+        <ul>
+          <li><strong>FlashAttention</strong>：训练场景和不需要专门 decode 优化的推理场景</li>
+          <li><strong>FlashInfer</strong>：vLLM V1 默认后端，适用于各种推理负载，尤其 decode-heavy 场景</li>
+          <li><strong>XFormers</strong>：需要 memory-efficient attention 训练的通用场景，FlashAttention 不可用时的后备</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与其他概念的关系</h4>
+        <p>Attention 后端直接实现 PagedAttention 所需的非连续 KV Cache 访问（通过 block table 和 slot mapping）。FP8 KV Cache 量化依赖 FA3 或 FlashInfer 的 FP8 支持。MLA（Multi-head Latent Attention，DeepSeek-V2/V3 使用）需要专门的 MLA Attention 后端。不同的 Attention 后端影响 KV Cache 的物理布局（NHD vs HND）和 block size 限制。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 4.5 采样策略（Sampling Strategies） -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>4.5 采样策略（Sampling Strategies）</h3>
+        <span class="tag tag-amber">输出控制</span>
+      </div>
+
+      <p>采样策略决定了 LLM 在每次生成时如何从 logits 概率分布中选择下一个 token。不同的采样策略在输出确定性、多样性、创造性和可控性之间做不同的权衡。vLLM 通过 <code>SamplingParams</code> 类统一管理所有采样参数，在 <code>vllm/v1/sampler/</code> 中实现采样逻辑。</p>
+
+      <div class="sub-section">
+        <h4>Greedy Decoding（贪心解码）</h4>
+        <p>每一步选择概率最高的 token：</p>
+        <div class="formula-box"><code>next_token = argmax(logits)</code></div>
+        <p>这是确定性策略，适合代码生成、数学推导等需要精确输出的任务。vLLM 中当 <code>temperature &lt; 1e-5</code> 时自动切换到 greedy。输出的多样性和创造力最差。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Temperature Sampling（温度采样）</h4>
+        <p>通过对 logits 除以温度系数 <code>T</code> 来控制分布的"尖锐程度"：</p>
+        <div class="formula-box"><code>P(x_i) = exp(logit_i / T) / &Sigma;_j exp(logit_j / T)</code></div>
+        <ul>
+          <li><code>T -&gt; 0</code>：分布趋于尖锐，退化为 greedy</li>
+          <li><code>T = 1</code>：保持原始分布</li>
+          <li><code>T &gt; 1</code>：分布趋于平缓，低概率 token 有更多机会被选中</li>
+        </ul>
+        <p>vLLM 将 <code>0 &lt; temperature &lt; 0.01</code> 的值钳位到 0.01，避免数值溢出。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Top-p (Nucleus) Sampling</h4>
+        <p>按累积概率截断候选集合：</p>
+        <div class="formula-box"><code>V^(p) = {v_1, ..., v_k}  其中  &Sigma;_{i=1}^{k-1} P(v_i) &lt; p &lt;= &Sigma;_{i=1}^k P(v_i)</code></div>
+        <p>按概率从高到低排序 token，选择累积概率 &gt;= <code>p</code> 的最小集合，在集合内重新归一化采样。Top-p 的优点是<strong>动态调整候选集大小</strong>——概率分布尖锐时候选集小，平坦时候选集大。vLLM 约束：<code>0.0 &lt; top_p &lt;= 1.0</code>。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Top-k Sampling</h4>
+        <p>只保留概率最高的 k 个 token，重新归一化后采样。vLLM 中 <code>top_k = 0</code> 或 <code>-1</code> 表示禁用（考虑所有 tokens）。常与 Top-p 组合使用：先 Top-k 截断，再 Top-p 截断。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Beam Search（束搜索）</h4>
+        <p>维护 <code>beam_width</code> 个候选序列，每步扩展所有候选并保留得分最高的 <code>beam_width</code> 个：</p>
+
+        <pre><code>class BeamSearchParams(msgspec.Struct):
+    beam_width: int
+    max_tokens: int
+    ignore_eos: bool = False
+    temperature: float = 0.0
+    length_penalty: float = 1.0      # &gt; 1 偏好短序列, &lt; 1 偏好长序列</code></pre>
+
+        <p>Beam Search 适合翻译、摘要等需要全局最优的任务，但计算开销随 beam_width 线性增长，且容易产生重复。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Repetition Penalty（重复惩罚）</h4>
+        <p>三种惩罚机制解决 LLM 的重复生成问题：</p>
+        <ul>
+          <li><strong>Repetition Penalty</strong>：对已出现 token 的 logits 直接缩放：</li>
+        </ul>
+        <div class="formula-box"><code>if token in generated_so_far:<br>    logits[token] /= repetition_penalty    # &gt; 1 抑制重复</code></div>
+
+        <ul>
+          <li><strong>Frequency Penalty（频率惩罚）</strong>：按出现次数线性惩罚：</li>
+        </ul>
+        <div class="formula-box"><code>logits[token] -= frequency_penalty * count[token]</code></div>
+
+        <ul>
+          <li><strong>Presence Penalty（存在惩罚）</strong>：只要出现过就固定惩罚（二元）：</li>
+        </ul>
+        <div class="formula-box"><code>if token in generated_so_far:<br>    logits[token] -= presence_penalty</code></div>
+
+        <p>两者区别：Frequency Penalty 随出现次数线性增长（出现越多惩罚越大），Presence Penalty 只要出现过一次就恒定制裁。vLLM 约束范围为 <code>[-2.0, 2.0]</code>。</p>
+        <p>vLLM 还新增了 N-gram 重复检测机制：当检测到某 N-gram 模式重复 <code>min_count</code> 次时，提前终止生成。</p>
+      </div>
+
+      <h4>各策略适用场景对比</h4>
+
+      <table>
+        <thead><tr><th>策略</th><th>确定性</th><th>多样性</th><th>可控性</th><th>计算开销</th><th>适用场景</th></tr></thead>
+        <tbody>
+          <tr><td>Greedy</td><td>最高</td><td>最低</td><td>最高</td><td>最低</td><td>代码生成、数学推导</td></tr>
+          <tr><td>Temperature</td><td>中</td><td>高</td><td>中</td><td>低</td><td>创意写作、对话</td></tr>
+          <tr><td>Top-p</td><td>中</td><td>高（自适应）</td><td>中</td><td>低</td><td>通用（最常用）</td></tr>
+          <tr><td>Top-k</td><td>中</td><td>中</td><td>低</td><td>低</td><td>需控制候选数</td></tr>
+          <tr><td>Top-k + Top-p</td><td>中</td><td>高</td><td>高</td><td>低</td><td>推荐组合</td></tr>
+          <tr><td>Beam Search</td><td>高</td><td>低</td><td>高</td><td>高</td><td>翻译、摘要</td></tr>
+          <tr><td>Repetition Penalty</td><td>-</td><td>-</td><td>辅助</td><td>极低</td><td>与任何策略组合</td></tr>
+        </tbody>
+      </table>
+
+      <div class="sub-section">
+        <h4>应用场景</h4>
+        <ul>
+          <li><strong>Greedy</strong>：准确性优先的生产环境（代码补全、SQL 生成），如 GitHub Copilot 的某些场景</li>
+          <li><strong>Temperature + Top-p</strong>：创意写作、对话系统、故事生成，是最常用的组合（典型 T=0.7, top_p=0.9）</li>
+          <li><strong>Beam Search</strong>：机器翻译、文本摘要、语音识别（需要全局最优序列）</li>
+          <li><strong>Repetition Penalty</strong>：与任何采样策略搭配，解决长文本生成中的重复问题</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与其他概念的关系</h4>
+        <p>采样策略是 LLM 推理的最终输出环节，与 Attention 计算通过 <code>logits</code> 张量连接。Speculative Decoding 需要特殊的 modified rejection sampling 以保证采样一致性（与直接采样大模型分布一致），当前 vLLM 的 speculative decoding 不支持 <code>min_p</code> 和 <code>logit_bias</code>。采样参数通过 <code>SamplingParams</code> 类传递，与 Chunked Prefill、Continuous Batching 等调度机制协同工作。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 4.6 推理引擎对比 -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>4.6 推理引擎对比</h3>
+        <span class="tag tag-rose">系统集成</span>
+      </div>
+
+      <p>LLM 推理引擎是将模型加载、内存管理、计算调度、采样输出等环节集成在一起的生产级服务系统。不同引擎在核心创新、优化方向、硬件支持和生态集成方面存在显著差异。当前主流引擎包括 vLLM、TGI（Text Generation Inference）、TensorRT-LLM、SGLang 和 llama.cpp。</p>
+
+      <!-- vLLM -->
+      <div class="sub-section">
+        <h4>vLLM</h4>
+        <p>vLLM 的核心创新是 <strong>PagedAttention</strong>，借鉴操作系统虚拟内存的分页思想解决 KV Cache 内存管理问题。支持 Continuous Batching、Chunked Prefill、Prefix Caching、Speculative Decoding、多种量化格式（FP8/AWQ/GPTQ/GGUF）、Tensor/Pipeline/Data/Expert 并行、Disaggregated Serving（Mooncake/NIXL/LMCache）。vLLM V1 架构重构了 Attention Backend，默认使用 FlashInfer。支持 NVIDIA/AMD/Intel/XPU 多平台。</p>
+      </div>
+
+      <!-- TGI -->
+      <div class="sub-section">
+        <h4>TGI（Text Generation Inference）</h4>
+        <p>HuggingFace 开发的 LLM 推理服务器，强调与 HuggingFace 生态的紧密集成。核心特性：Safetensors 格式加载（更快更安全）、内置 FlashAttention、Continuous Batching、Tensor Parallelism、量化支持（GPTQ/AWQ/BitsAndBytes）、原生 SSE 流式输出。TGI 的易用性最高（与 HuggingFace Hub 无缝集成），但在高吞吐场景下性能通常低于 vLLM（缺少 PagedAttention 的内存管理优势）。</p>
+      </div>
+
+      <!-- TensorRT-LLM -->
+      <div class="sub-section">
+        <h4>TensorRT-LLM</h4>
+        <p>NVIDIA 推出的 LLM 推理优化框架，基于 TensorRT 深度学习编译器，专注于在 NVIDIA GPU 上榨取最大性能。核心优化技术：</p>
+        <ul>
+          <li><strong>Kernel Fusion</strong>：将多个小算子合成为单个 CUDA kernel，减少 launch 开销</li>
+          <li><strong>Plugin 系统</strong>：预优化 custom kernel（FMHA, GptAttentionPlugin）</li>
+          <li><strong>Inflight Batching</strong>：NVIDIA 版本的 continuous batching</li>
+          <li><strong>量化</strong>：FP8/INT8/INT4, SmoothQuant, FP8 Transformer Engine</li>
+        </ul>
+        <p>优势是极致性能（通常最高吞吐量），但平台锁定（仅 NVIDIA GPU）、编译时间长（数分钟到数小时）、灵活性低（支持新模型需写 plugin）。</p>
+      </div>
+
+      <!-- SGLang -->
+      <div class="sub-section">
+        <h4>SGLang</h4>
+        <p>由伯克利大学（与 vLLM 同一团队）开发的推理框架，核心创新：</p>
+        <ul>
+          <li><strong>RadixAttention</strong>：使用 Radix Tree（基数树）管理 KV Cache，自动检测和复用共享前缀，比 vLLM 的块级哈希更灵活</li>
+          <li><strong>Structured Generation</strong>：使用正则表达式或 CFG 约束模型生成（JSON/SQL 等）</li>
+          <li>提供领域特定语言（DSL）用于结构化控制生成过程</li>
+        </ul>
+        <p>SGLang 在多轮对话、结构化输出场景有独特优势，前缀复用场景下 TTFT 比 vLLM 快 2-6 倍。SGLang 部署规模已达 400,000+ GPU。</p>
+      </div>
+
+      <!-- llama.cpp -->
+      <div class="sub-section">
+        <h4>llama.cpp</h4>
+        <p>完全使用 C/C++ 编写，不依赖 PyTorch 或 CUDA，目标是让 LLM 推理在消费级硬件上运行。核心特点：</p>
+        <ul>
+          <li><strong>GGUF 格式</strong>：自包含模型文件，支持多种量化（Q4_0/Q5_K_M/Q8_0 等）</li>
+          <li><strong>CPU 优化</strong>：AVX/AVX-512/NEON SIMD 指令加速，高效多线程</li>
+          <li><strong>混合精度</strong>：CPU 上 INT8/INT4 量化推理</li>
+          <li><strong>多后端</strong>：除 CPU 外支持 Apple Silicon GPU（Metal）、Vulkan 兼容 GPU</li>
+        </ul>
+        <p>性能在 GPU 上远低于前四个引擎，但在 CPU 和边缘设备上是唯一可行选择。</p>
+      </div>
+
+      <h4>综合对比</h4>
+
+      <table>
+        <thead><tr><th>引擎</th><th>最佳场景</th><th>吞吐量</th><th>延迟</th><th>易用性</th><th>硬件支持</th></tr></thead>
+        <tbody>
+          <tr><td>vLLM</td><td>高吞吐生产服务、多租户</td><td>极高</td><td>低</td><td>中</td><td>NVIDIA/AMD/Intel/XPU</td></tr>
+          <tr><td>TGI</td><td>HuggingFace 生态集成、快速部署</td><td>高</td><td>低</td><td>高</td><td>NVIDIA/Intel</td></tr>
+          <tr><td>TensorRT-LLM</td><td>NVIDIA GPU 极致性能、企业级</td><td>最高</td><td>最低</td><td>低</td><td>NVIDIA only</td></tr>
+          <tr><td>SGLang</td><td>多轮对话、结构化生成、Agent</td><td>高</td><td>低</td><td>中</td><td>NVIDIA/AMD</td></tr>
+          <tr><td>llama.cpp</td><td>本地/边缘推理、CPU 部署、隐私</td><td>低</td><td>高</td><td>高</td><td>CPU/GPU/Metal</td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>性能数据参考</strong>（LLaMA-2 70B, 8xA100）：</p>
+
+      <table>
+        <thead><tr><th>引擎</th><th>吞吐量 (tokens/s)</th><th>TTFT</th><th>批处理能力</th></tr></thead>
+        <tbody>
+          <tr><td>vLLM</td><td>2000-4000</td><td>~100ms</td><td>优秀</td></tr>
+          <tr><td>TensorRT-LLM</td><td>3000-5000</td><td>~80ms</td><td>优秀</td></tr>
+          <tr><td>TGI</td><td>1500-3000</td><td>~120ms</td><td>良好</td></tr>
+          <tr><td>SGLang</td><td>2000-3500</td><td>~100ms</td><td>良好</td></tr>
+          <tr><td>llama.cpp (Q4)</td><td>50-100 (CPU)</td><td>~数秒</td><td>有限</td></tr>
+        </tbody>
+      </table>
+
+      <div class="sub-section">
+        <h4>架构差异总结</h4>
+        <ul>
+          <li><strong>内存管理</strong>：vLLM 的 PagedAttention 通过分页消除碎片（&lt;5% 浪费），TGI 使用传统连续分配（60-80% 浪费），SGLang 的 RadixAttention 通过树结构实现更灵活的前缀共享</li>
+          <li><strong>并行策略</strong>：vLLM 支持最全面的并行组合（TP+PP+DP+EP+DCP+PCP），TensorRT-LLM 聚焦 TP 和 PP，TGI 主要支持 TP</li>
+          <li><strong>量化生态</strong>：TensorRT-LLM 对 NVIDIA 量化格式支持最深（FP8、INT4 权重、SmoothQuant），vLLM 覆盖最广（FP8/AWQ/GPTQ/GGUF），llama.cpp 以 GGUF K-quants 著称</li>
+          <li><strong>部署运维</strong>：TGI 最易部署（一行命令），TensorRT-LLM 需编译+Triton Server，vLLM 和 SGLang 作为 Python 库灵活但需自行编排</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>应用场景</h4>
+        <ul>
+          <li><strong>生产高吞吐</strong>：vLLM 或 TensorRT-LLM。vLLM 更灵活（多平台、多量化），TensorRT-LLM 在纯 NVIDIA 环境中延迟最优</li>
+          <li><strong>快速原型/HF 生态</strong>：TGI，一行命令启动推理</li>
+          <li><strong>多轮对话/Agent 系统</strong>：SGLang，RadixAttention 和 Structured Outputs 原生优势</li>
+          <li><strong>本地隐私推理</strong>：llama.cpp，数据不出机器，支持 CPU 运行</li>
+          <li><strong>边缘/移动</strong>：llama.cpp（Metal/NEON 加速）</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>与其他概念的关系</h4>
+        <p>推理引擎是 vLLM 概念体系的上层集成者——它将 PagedAttention、Continuous Batching、Chunked Prefill、Prefix Caching、模型并行、量化、Attention 后端等所有概念整合为统一服务。引擎对比揭示了不同设计取舍：vLLM 以内存管理创新驱动通用高性能，TensorRT-LLM 以编译优化驱动极限性能，SGLang 以编程范式创新驱动特殊场景优化。</p>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 概念依赖关系总结 -->
+    <!-- ============================================================ -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>模块四概念依赖关系总结</h3>
+        <span class="tag tag-purple">体系</span>
+      </div>
+
+      <ul>
+        <li><strong>模型并行策略（4.1）</strong> 是分布式推理的<strong>基础架构层</strong>，决定了 GPU 资源的组织方式</li>
+        <li><strong>Disaggregated Serving（4.2）</strong> 在并行策略之上<strong>按计算阶段分离</strong>资源，需要 KV Cache 跨节点传输</li>
+        <li><strong>量化（4.3）</strong> 是<strong>内存压缩技术</strong>，降低对并行度（TP size）的要求</li>
+        <li><strong>Attention 后端（4.4）</strong> 是<strong>计算优化层</strong>，直接实现 PagedAttention 的底层 kernel</li>
+        <li><strong>采样策略（4.5）</strong> 是<strong>输出控制层</strong>，位于推理流水线的末梢</li>
+        <li><strong>推理引擎对比（4.6）</strong> 是<strong>系统集成层</strong>，展示各组件如何在不同引擎中以不同方式组合</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="section-3.html" class="module-nav-prev">
+    <div class="module-nav-label">← 上一模块</div>
+    <div class="module-nav-title">vLLM API 模型类型</div>
+  </a>
+    <a href="section-5.html" class="module-nav-next">
+    <div class="module-nav-label">下一模块 →</div>
+    <div class="module-nav-title">生态项目</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 4: 分布式推理与部署 | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>

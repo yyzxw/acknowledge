@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模块8: 高级 AI 相关概念（下） — vLLM & AI 推理核心概念全景解析</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { primaryColor: '#3b82f6', secondaryColor: '#1e293b', tertiaryColor: '#0f172a', mainBkg: '#1e293b', nodeBorder: '#334155', clusterBkg: '#0f172a', clusterBorder: '#334155', lineColor: '#60a5fa', textColor: '#f1f5f9', titleColor: '#f1f5f9' } });</script>
+</head>
+<body>
+
+<div class="module-header">
+  <div class="module-header-inner">
+    <a href="index.html">← 返回目录</a>
+    <span style="flex:1"></span>
+    <span style="color:var(--text-muted);font-size:0.85rem">模块 8 / 8</span>
+  </div>
+</div>
+
+<section id="sec-8" data-section="module">
+  <div class="module-content">
+
+    <!-- ============================================================ -->
+    <!-- 7.5 AI Agent 与工具使用 -->
+    <!-- ============================================================ -->
+
+    <h2>7.5 AI Agent 与工具使用</h2>
+
+    <!-- 7.5.1 Agent 架构 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.5.1 Agent 架构</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>AI Agent（智能体）是以大语言模型为核心大脑（Brain），结合工具使用（Tool Use）、规划（Planning）和记忆（Memory）等模块，能够自主感知环境、做出决策并执行行动的智能系统。Agent 的能力边界远超纯对话模型——它不仅能"说"，还能"做"。</p>
+
+      <div class="sub-section">
+        <h4>核心四模块</h4>
+        <div class="mermaid-wrapper">
+          <pre class="mermaid">
+graph TD
+    subgraph AI_Agent ["AI Agent"]
+        Brain["Brain (推理+决策)"]
+        LLM["LLM (核心模型)"]
+        Tools["Tools (工具集)"]
+        Planning["Planning (规划策略)"]
+        Memory["Memory (记忆系统)"]
+        ST["短期/长期记忆存储"]
+    end
+    Brain --> LLM
+    Brain --> Tools
+    Brain --> Planning
+    Brain --> Memory
+    Memory --> ST</pre>
+        </div>
+        <ol>
+          <li><strong>Brain（LLM）</strong>：负责理解用户意图、做出决策、生成行动计划。核心能力包括推理、上下文理解和指令遵循。</li>
+          <li><strong>Tool Use（工具使用）</strong>：Agent 调用外部 API 和工具的能力，使 LLM 突破纯文本生成的限制，与真实世界交互。</li>
+          <li><strong>Planning（规划）</strong>：将复杂任务分解为可执行的子步骤，支持动态调整和错误恢复。</li>
+          <li><strong>Memory（记忆）</strong>：管理 Agent 的上下文信息，包括短期记忆（对话历史中的关键信息）和长期记忆（持久化存储的知识和经验）。</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 7.5.2 Function Calling -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.5.2 Function Calling / Tool Use</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>OpenAI Tool Calling 协议</h4>
+        <p>OpenAI 定义了标准的 function calling 格式，已成为业界事实标准：</p>
+        <pre><code># Agent 定义可用工具
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "获取指定城市的当前天气",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "城市名称"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                },
+                "required": ["city"]
+            }
+        }
+    }
+]
+
+# LLM 判断是否需要调用工具
+response = client.chat.completions.create(
+    model="qwen2.5-72b",
+    messages=[{"role": "user", "content": "北京今天冷吗？"}],
+    tools=tools,
+    tool_choice="auto"  # auto: 模型自主决定; required: 必须调用工具
+)
+
+# 模型输出 tool call
+# response: {
+#   "tool_calls": [{
+#       "id": "call_xxx",
+#       "function": {"name": "get_weather", "arguments": '{"city": "北京", "unit": "celsius"}'}
+#   }]
+# }
+
+# Agent 执行工具并将结果返回给 LLM
+tool_result = get_weather(city="北京", unit="celsius")
+# 将结果作为新 message 追加到对话
+messages.append(response.choices[0].message)
+messages.append({
+    "role": "tool",
+    "content": str(tool_result),
+    "tool_call_id": "call_xxx"
+})
+
+# LLM 根据工具结果生成最终回复
+final_response = client.chat.completions.create(
+    model="qwen2.5-72b",
+    messages=messages,
+    tools=tools
+)</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 的 Tool Calling 支持</h4>
+        <p>vLLM 通过 OpenAI 兼容 API 原生支持 function calling：</p>
+        <pre><code># vLLM 服务端支持的 function calling（通过 OpenAI 兼容 API）
+# 使用 vLLM 的 chat/tool 端点
+curl http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "meta-llama/Llama-3.1-70B-Instruct",
+        "messages": [
+            {"role": "user", "content": "搜索一下最近的 AI 新闻"}
+        ],
+        "tools": [{
+            "type": "function",
+            "function": {
+                "name": "search_web",
+                "description": "在互联网上搜索信息",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"}
+                    },
+                    "required": ["query"]
+                }
+            }
+        }]
+    }'</code></pre>
+        <p><strong>底层机制</strong>：</p>
+        <ul>
+          <li>vLLM 将 tools 定义序列化为 system prompt 格式化的工具描述</li>
+          <li>模型在生成过程中输出 <code>tool_calls</code> 结构化输出</li>
+          <li>支持 JSON mode 和 grammar-constrained generation 来确保工具调用格式正确</li>
+        </ul>
+        <p><strong>支持的模型</strong>：需要经过指令微调且支持 function calling 的模型（如 Llama-3.1-Instruct、Qwen-2.5-Instruct、DeepSeek-V2-Chat 等）。</p>
+      </div>
+    </div>
+
+    <!-- 7.5.3 Planning 策略 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.5.3 Planning 策略</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>ReAct（Reasoning + Acting）</h4>
+        <p>ReAct 是当前最广泛使用的 Agent 规划框架，将推理（Reasoning）和行动（Acting）交替进行：</p>
+        <pre><code>Thought: 用户想知道北京今天是否冷。我需要先查询天气。
+Action: get_weather({"city": "北京", "unit": "celsius"})
+Observation: {"temperature": 5, "condition": "晴"}
+Thought: 北京今天温度 5°C，属于较冷的天气。我应该建议用户多穿衣服。
+Final Answer: 北京今天气温 5°C，比较冷，建议穿厚外套。</code></pre>
+        <p><strong>ReAct 循环</strong>：Thought → Action → Observation → Thought → Action → ... → Final Answer</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Chain-of-Thought（CoT）</h4>
+        <p>CoT 是让模型在给出最终答案前显式展示推理过程的提示技术：</p>
+        <pre><code>Q: 小明有 10 个苹果，给了小红 3 个，又从超市买了 5 个。他总共有多少个？
+A:
+一开始有 10 个苹果。
+给了小红 3 个，剩下 10 - 3 = 7 个。
+买了 5 个，现在有 7 + 5 = 12 个。
+所以小明总共有 12 个苹果。</code></pre>
+        <p><strong>CoT vs ReAct</strong>：CoT 只有"思考"没有"行动"；ReAct 在思考之外还会调用工具获取新信息，适合需要与外部环境交互的场景。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Tree-of-Thought（ToT）</h4>
+        <p>ToT 扩展了 CoT 的线性推理，维护一个"推理树"并同时探索多个分支：</p>
+        <pre><code>思考分支 1: ... ❌ (推理错误)
+              ↓
+初始问题 → → 思考分支 2: ... → 思考 2a: ... ✓ (找到答案)
+              ↓
+思考分支 3: ... → 思考 3a: ... → 思考 3b: ... (仍在进行中)</code></pre>
+        <p>ToT 在每个推理步骤生成多个候选思路，使用评估函数（如 LLM 自身或启发式方法）评估每个分支的可行性，并剪枝掉低质量分支。计算成本是 CoT 的 N 倍（<code>N</code> = 分支数 × 深度），但适合需要多步探索的复杂问题。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>三种策略对比</h4>
+        <table>
+          <thead><tr><th>策略</th><th>推理结构</th><th>工具交互</th><th>计算成本</th><th>错误恢复</th><th>适用场景</th></tr></thead>
+          <tbody>
+            <tr><td><strong>CoT</strong></td><td>线性链</td><td>无</td><td>低</td><td>无</td><td>数学、逻辑、常识推理</td></tr>
+            <tr><td><strong>ReAct</strong></td><td>推理-行动交替循环</td><td>是</td><td>中</td><td>通过新 Tool 输出纠正</td><td>信息获取、问答、搜索</td></tr>
+            <tr><td><strong>ToT</strong></td><td>树形搜索</td><td>可选</td><td>高</td><td>探索多个分支</td><td>复杂问题求解、设计</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.5.4 Memory 系统 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.5.4 Memory 系统</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>三级记忆模型</h4>
+        <p>受认知科学启发，Agent 的记忆系统通常分为三级：</p>
+        <pre><code>短期记忆 (Working Memory)
+├── 当前对话上下文（Context Window 内）
+├── 当前任务的中间状态和变量
+└── 生命周期: 当前回合结束即清除
+
+工作记忆 (Episodic Buffer)
+├── 当前对话轮次的关键信息
+├── 最近完成的操作和结果
+└── 生命周期: 会话存活期
+
+长期记忆 (Long-term Memory)
+├── 用户偏好和历史行为模式
+├── 领域知识和经验积累
+└── 生命周期: 跨会话持久化</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>实现方式</h4>
+        <p><strong>短期记忆</strong>：直接利用 LLM 的 context window，将历史对话和中间状态拼接到当前的 prompt 中。</p>
+        <p><strong>长期记忆</strong>：</p>
+        <ul>
+          <li><strong>向量数据库存储</strong>：将过去交互的关键信息编码为 embedding，需要时通过语义检索获取</li>
+          <li><strong>知识图谱存储</strong>：提取实体和关系，构建结构化的知识网络</li>
+          <li><strong>文件系统存储</strong>：将记忆序列化为 JSON/Markdown 文件，按时间或主题组织</li>
+        </ul>
+        <pre><code># Agent 记忆的向量检索实现（简化）
+class AgentMemory:
+    def __init__(self, vector_db, llm_client):
+        self.vector_db = vector_db
+        self.llm = llm_client
+
+    def add_memory(self, text, metadata=None):
+        # 将重要信息编码为向量并存储
+        embedding = self.llm.embeddings.create(input=text).data[0].embedding
+        self.vector_db.insert(embedding, text, metadata)
+
+    def recall(self, query, k=5):
+        # 基于当前上下文检索相关的历史记忆
+        query_embedding = self.llm.embeddings.create(input=query).data[0].embedding
+        results = self.vector_db.search(query_embedding, top_k=k)
+        return [r.text for r in results]</code></pre>
+      </div>
+    </div>
+
+    <!-- 7.5.5 Multi-agent 系统 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.5.5 Multi-agent 系统</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Multi-agent 系统由多个 Agent 协作完成复杂任务。每个 Agent 负责一个专门的子任务或领域，通过消息传递和任务协调实现 1+1&gt;2 的效果。</p>
+
+      <div class="sub-section">
+        <h4>主流框架对比</h4>
+        <table>
+          <thead><tr><th>框架</th><th>核心思想</th><th>通信机制</th><th>编排方式</th><th>适用场景</th></tr></thead>
+          <tbody>
+            <tr><td><strong>AutoGen</strong></td><td>多 Agent 对话式协作</td><td>自然语言消息</td><td>可编程对话图</td><td>研究、原型开发</td></tr>
+            <tr><td><strong>CrewAI</strong></td><td>角色扮演式协作</td><td>任务分配 + 工具共享</td><td>YAML 配置</td><td>自动化工作流</td></tr>
+            <tr><td><strong>LangGraph</strong></td><td>有状态图计算</td><td>边传递状态</td><td>状态机</td><td>生产级复杂流程</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>AutoGen 示例</h4>
+        <pre><code># AutoGen 的多 Agent 协作
+from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
+
+# 定义三个专用 Agent
+planner = AssistantAgent(
+    name="Planner",
+    system_message="你是一个计划制定者，负责分解任务为子步骤。",
+    llm_config={"config_list": [{"model": "gpt-4", "api_key": "..."}]}
+)
+
+coder = AssistantAgent(
+    name="Coder",
+    system_message="你是一个 Python 程序员，负责编写代码。",
+    llm_config={"config_list": [{"model": "gpt-4", "api_key": "..."}]}
+)
+
+critic = AssistantAgent(
+    name="Critic",
+    system_message="你是一个代码评审员，负责检查代码质量。",
+    llm_config={"config_list": [{"model": "gpt-4", "api_key": "..."}]}
+)
+
+# 创建群组对话
+group_chat = GroupChat(
+    agents=[planner, coder, critic],
+    messages=[],
+    max_round=10
+)
+manager = GroupChatManager(groupchat=group_chat, llm_config={...})
+
+# 启动协作
+user_proxy = UserProxyAgent(name="User", ...)
+user_proxy.initiate_chat(
+    manager,
+    message="帮我写一个计算斐波那契数列的 Python 脚本"
+)</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>Multi-agent 架构设计原则</h4>
+        <ol>
+          <li><strong>单一职责</strong>：每个 Agent 负责一个明确定义的子领域，避免职责重叠</li>
+          <li><strong>明确通信协议</strong>：Agent 之间的消息格式需要结构化（而非纯自然语言），减少歧义</li>
+          <li><strong>冲突解决机制</strong>：当多个 Agent 的输出不一致时，需要有仲裁策略（如投票、超级 Agent 裁决）</li>
+          <li><strong>状态共享</strong>：关键全局状态（如任务进度、已确认的事实）需要在 Agent 间同步</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 7.5.6 MCP -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.5.6 MCP（Model Context Protocol）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>MCP（Model Context Protocol）是 Anthropic 在 2024 年底提出的开放标准协议，旨在解决 AI 模型与外部工具和数据源之间的标准化连接问题。它相当于"AI 应用的 USB-C 接口"——为模型提供一个统一的方式来发现、调用和管理外部工具和数据。</p>
+
+      <div class="sub-section">
+        <h4>架构</h4>
+        <div class="mermaid-wrapper">
+          <pre class="mermaid">
+graph LR
+    LLM["LLM (Host)"]
+    Client["MCP Client (应用层)"]
+    Server["MCP Server (工具/数据)"]
+    Tools["Tools"]
+    Resources["Resources"]
+
+    LLM <--> Client
+    Client <--> Server
+    Server --> Tools
+    Server --> Resources</pre>
+        </div>
+        <p><strong>核心组件</strong>：</p>
+        <ol>
+          <li><strong>MCP Host</strong>：宿主应用（如 Claude Desktop 或 VS Code 的 Claude 插件），负责与模型交互</li>
+          <li><strong>MCP Client</strong>：通用客户端抽象，管理 MCP Server 的连接和通信</li>
+          <li><strong>MCP Server</strong>：工具和数据源的标准化适配器，提供：
+            <ul>
+              <li><strong>Tools</strong>（工具）：模型可调用的功能（如搜索、数据库查询、文件操作）</li>
+              <li><strong>Resources</strong>（资源）：模型可读取的数据（如文档、配置、代码）</li>
+              <li><strong>Prompts</strong>（提示）：预定义的交互模板</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>关键特性</h4>
+        <table>
+          <thead><tr><th>特性</th><th>MCP</th><th>OpenAI Function Calling</th><th>传统 API 集成</th></tr></thead>
+          <tbody>
+            <tr><td><strong>标准化</strong></td><td>开放标准，厂商中立</td><td>OpenAI 专有</td><td>无标准</td></tr>
+            <tr><td><strong>工具发现</strong></td><td>自动（server 声明）</td><td>手动（应用定义）</td><td>手动</td></tr>
+            <tr><td><strong>安全性</strong></td><td>隔离的 server 进程</td><td>应用内执行</td><td>无隔离</td></tr>
+            <tr><td><strong>多工具组合</strong></td><td>天然支持</td><td>需手动编排</td><td>需手动编排</td></tr>
+            <tr><td><strong>资源暴露</strong></td><td>结构化资源暴露</td><td>仅支持工具调用</td><td>无</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>MCP 与 vLLM 的关系</h4>
+        <ul>
+          <li><strong>MCP 解决的是工具接入标准问题，vLLM 解决的是模型推理效率问题</strong></li>
+          <li>vLLM 可以作为 MCP Host 中的推理引擎</li>
+          <li>vLLM 的 API Server 本身可作为 OpenAI-compatible endpoint 被 MCP Client 使用</li>
+          <li>两者互补而非竞争：vLLM 提供高效的推理，MCP 提供标准化的工具接口</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 7.6 多模态 -->
+    <!-- ============================================================ -->
+
+    <h2>7.6 多模态（Multimodal）</h2>
+
+    <!-- 7.6.1 VLM -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.6.1 Vision-Language Models（VLM）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>视觉-语言模型（Vision-Language Model, VLM）是一种能够同时处理图像和文本输入的多模态模型。典型架构为：图像编码器提取视觉特征 → 连接器对齐模态 → 语言模型生成输出。</p>
+
+      <div class="sub-section">
+        <h4>主流 VLM 架构</h4>
+        <pre><code>标准 VLM 架构:
+
+Image → Vision Encoder (ViT/CLIP) → Vision Tokens
+                                              │
+                                              ▼
+                                    Connector/Projector
+                                              │
+                                              ▼
+                              Text Embeddings + Vision Embeddings
+                                              │
+                                              ▼
+                                    Language Model (LLM)
+                                              │
+                                              ▼
+                                     Generated Text</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>代表模型</h4>
+        <table>
+          <thead><tr><th>模型</th><th>视觉编码器</th><th>连接器</th><th>语言模型</th><th>特色</th></tr></thead>
+          <tbody>
+            <tr><td><strong>LLaVA</strong></td><td>CLIP ViT-L/14</td><td>简单线性投影</td><td>LLaMA/Vicuna</td><td>简洁高效，开创性工作</td></tr>
+            <tr><td><strong>LLaVA-NeXT</strong></td><td>CLIP ViT-L/14</td><td>多层 MLP</td><td>LLaMA-3/Phi-3</td><td>支持高分辨率输入</td></tr>
+            <tr><td><strong>Qwen2-VL</strong></td><td>SigLIP ViT</td><td>QwenVLBlock (Cross-Attention)</td><td>Qwen2</td><td>动态分辨率，视频理解</td></tr>
+            <tr><td><strong>InternVL 2</strong></td><td>InternViT</td><td>MLP + Perceiver</td><td>InternLM2</td><td>超大视觉编码器(6B)</td></tr>
+            <tr><td><strong>CLIP</strong></td><td>ViT 或 ResNet</td><td>对比学习 Head</td><td>无（仅对齐训练）</td><td>对比预训练，非生成式</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.6.2 图像编码器 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.6.2 图像编码器</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>Vision Transformer（ViT）</h4>
+        <p>ViT（Vision Transformer）将图像切分为固定大小的 patches（如 16×16），并将每个 patch linear projection 为 embedding，然后通过标准 Transformer 编码器处理。</p>
+        <pre><code>Input Image (224x224x3)
+    │
+    ▼
+Patch Embedding: 14×14=196 patches, each 16×16×3 → 196×768
+    │
+    ▼
+Position Embedding + [CLS] Token
+    │
+    ▼
+Transformer Encoder × L layers
+    │
+    ▼
+Output: 196+1 tokens × hidden_dim</code></pre>
+        <p><strong>ViT vs CNN</strong>：</p>
+        <table>
+          <thead><tr><th>特性</th><th>ViT</th><th>CNN (ResNet)</th></tr></thead>
+          <tbody>
+            <tr><td>感受野</td><td>全局（self-attention）</td><td>局部（卷积核）</td></tr>
+            <tr><td>归纳偏置</td><td>少（需要更多数据）</td><td>多（平移不变性）</td></tr>
+            <tr><td>参数效率</td><td>高（共享较少）</td><td>中</td></tr>
+            <tr><td>大模型扩展</td><td>好</td><td>有平台期</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>CLIP 视觉编码器</h4>
+        <p>CLIP（Contrastive Language-Image Pre-training）的视觉编码器可以是 ViT 或 ResNet。它通过对比学习将图像和文本对齐到同一个联合嵌入空间。</p>
+        <p><strong>训练目标</strong>（InfoNCE 损失）：</p>
+        <p>对于 batch 中的 <code>N</code> 个(image, text)对：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{CLIP}} = -\frac{1}{2N} \left[ \sum_{i=1}^{N} \log \frac{\exp(I_i \cdot T_i / \tau)}{\sum_{j=1}^{N} \exp(I_i \cdot T_j / \tau)} + \sum_{i=1}^{N} \log \frac{\exp(T_i \cdot I_i / \tau)}{\sum_{j=1}^{N} \exp(T_i \cdot I_j / \tau)} \right]</code></div>
+        <p>其中 <code>I_i</code> 是图像嵌入，<code>T_i</code> 是文本嵌入，<code>\tau</code> 是温度参数。</p>
+        <p><strong>CLIP 向量空间的语义属性</strong>（通过对比学习获得）：</p>
+        <ul>
+          <li>"狗的图片"的嵌入 ≈ "狗"的文本嵌入</li>
+          <li>跨模态检索：用文本搜索图像或用图像搜索文本</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>SigLIP</h4>
+        <p>SigLIP（Sigmoid Loss for Language Image Pre-training）是 CLIP 的改进变体。使用 sigmoid 损失替代 CLIP 的对比损失，训练更高效：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{SigLIP}} = -\frac{1}{N} \sum_{i=1}^{N} \sum_{j=1}^{N} \log \frac{1}{1 + e^{-z_{ij} \cdot (I_i \cdot T_j - b)}}</code></div>
+        <p>其中 <code>z_{ij} = 1</code> 当 <code>i=j</code>（正样本），<code>z_{ij} = -1</code> 当 <code>i\neq j</code>（负样本）。SigLIP 不需要全局归一化（softmax over batch），批大小 <code>N</code> 可以更小，训练效率更高。</p>
+      </div>
+    </div>
+
+    <!-- 7.6.3 多模态对齐 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.6.3 多模态对齐</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>投影层（Projection Layer）</h4>
+        <p>最简单的连接器。将视觉编码器的输出映射到语言模型的输入嵌入空间：</p>
+        <div class="formula-box"><code>H_{\text{proj}} = W_{\text{proj}} \cdot H_{\text{vision}} + b_{\text{proj}}</code></div>
+        <p>其中 <code>H_{\text{vision}} \in \mathbb{R}^{N \times d_{\text{vision}}}</code>，<code>W_{\text{proj}} \in \mathbb{R}^{d_{\text{vision}} \times d_{\text{lm}}}</code>。</p>
+        <p>这是 LLaVA 的核心设计理念——仅用一个可学习的线性投影层实现视觉和文本的对齐。简单但有效，因为 LLM 有足够的容量"学习"理解视觉 token。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Q-Former</h4>
+        <p>Q-Former（Querying Transformer）是 BLIP-2 中提出的更复杂的连接器。它使用一组可学习的 query 向量，通过交叉注意力从视觉特征中"查询"相关信息：</p>
+        <pre><code>Visual Features (from frozen vision encoder)
+          │
+          ▼
+    ┌─────────────────┐
+    │  Q-Former       │
+    │  ┌───────────┐  │
+    │  │ Queries   │  │  ← 可学习的查询向量
+    │  │ (32-64个)  │  │
+    │  │           │  │
+    │  │ Cross-    │  │
+    │  │ Attention │  │  ← queries 与 visual features 交互
+    │  └───────────┘  │
+    └────────┬────────┘
+             │
+             ▼
+    Fixed number of visual tokens → Language Model</code></pre>
+        <p><strong>Q-Former 的优势</strong>：</p>
+        <ul>
+          <li>输出的视觉 token 数固定（如 32 或 64 个），与输入图像分辨率无关</li>
+          <li>通过交叉注意力提取与任务最相关的视觉信息</li>
+          <li>更适合处理高分辨率或变分辨率图像</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 7.6.4 vLLM 的多模态支持 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.6.4 vLLM 的多模态支持</h3>
+        <span class="tag tag-blue">vLLM 特性</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 的多模态架构</h4>
+        <p>vLLM 通过 <code>SupportsMultiModal</code> 接口和 <code>multimodal</code> 模块支持 VLM 推理：</p>
+        <pre><code># vLLM 的多模态模型注册
+_MULTIMODAL_MODELS = {
+    "LlavaForConditionalGeneration": ("llava", "LlavaForConditionalGeneration"),
+    "LlavaNextForConditionalGeneration": ("llava_next", "LlavaNextForConditionalGeneration"),
+    "Qwen2VLForConditionalGeneration": ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
+    "InternVLChatModel": ("internvl", "InternVLChatModel"),
+    "CLIPModel": ("clip", "CLIPEmbeddingModel"),
+    "SiglipModel": ("siglip", "SiglipEmbeddingModel"),
+}</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>pixel_values 处理流程</h4>
+        <p>vLLM 的多模态输入处理遵循严格的流水线：</p>
+        <pre><code>Image Input
+    │
+    ▼
+Image Processor (HuggingFace transformers)
+    │  预处理: resize, normalize, tensor conversion
+    ▼
+pixel_values: torch.Tensor [batch, 3, 336, 336]
+    │
+    ▼
+Vision Encoder (ViT/CLIP/SigLIP)
+    │  编码为视觉 token
+    ▼
+image_embeds: torch.Tensor [num_vision_tokens, hidden_dim]
+    │
+    ▼
+_merge_multimodal_embeddings
+    │  按 multimodal mask 插入视觉 token
+    ▼
+inputs_embeds (text + vision)
+    │
+    ▼
+Language Model</code></pre>
+        <p><strong>代码实现</strong>：</p>
+        <pre><code>class LlavaForConditionalGeneration(nn.Module):
+    def forward(self, input_ids, positions, pixel_values=None, ...):
+        # 1. 文本 embedding
+        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+
+        # 2. 如果有图像输入，处理视觉 token
+        if pixel_values is not None:
+            image_inputs = self._parse_and_validate_inputs(
+                pixel_values=pixel_values,
+                ...
+            )
+            # 通过 CLIP vision tower 编码
+            image_embeds = self.vision_tower(image_inputs["pixel_values"])
+            # 通过投影层映射到语言模型嵌入空间
+            image_embeds = self.multi_modal_projector(image_embeds)
+
+            # 3. 合并文本和视觉嵌入
+            inputs_embeds = _merge_multimodal_embeddings(
+                inputs_embeds, image_embeds, is_multimodal
+            )
+
+        # 4. 标准语言模型前向传播
+        return self.language_model(inputs_embeds=inputs_embeds, ...)</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 多模态 API</h4>
+        <pre><code># 通过 OpenAI 兼容 API 使用视觉模型
+curl http://localhost:8000/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "llava-hf/llava-v1.6-mistral-7b-hf",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "https://example.com/cat.jpg"}},
+                    {"type": "text", "text": "请描述这张图片"}
+                ]
+            }
+        ]
+    }'</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM 多模态支持的功能限制</h4>
+        <table>
+          <thead><tr><th>功能</th><th>纯文本模型</th><th>多模态模型</th></tr></thead>
+          <tbody>
+            <tr><td>PagedAttention</td><td>完整支持</td><td>支持（视觉 token 也被 block 管理）</td></tr>
+            <tr><td>Continuous Batching</td><td>完整支持</td><td>支持</td></tr>
+            <tr><td>Chunked Prefill</td><td>支持</td><td>部分支持（视觉 token 处理限制）</td></tr>
+            <tr><td>Prefix Caching</td><td>完整支持</td><td>不支持（视觉输入导致不同的 block hash）</td></tr>
+            <tr><td>Speculative Decoding</td><td>支持</td><td>不支持</td></tr>
+            <tr><td>LoRA</td><td>支持</td><td>部分模型支持</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.6.5 常见多模态模型 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.6.5 常见多模态模型</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>LLaVA-NeXT</h4>
+        <p>LLaVA（Large Language and Vision Assistant）系列是最广泛使用的开源 VLM 之一。</p>
+        <p><strong>LLaVA-NeXT 的关键改进</strong>：</p>
+        <ul>
+          <li>高分辨率输入支持（336×336 → 最大 672×672 或 4×336 拼接）</li>
+          <li>使用 AnyRes 策略将高分辨率图像分割为多个子图</li>
+          <li>使用 Llama-3 或 Phi-3 作为语言模型</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>InternVL 2</h4>
+        <p>InternVL 2 是目前性能最强的开源 VLM 之一，视觉编码器达到 6B 参数：</p>
+        <ul>
+          <li>视觉编码器：InternViT (6B 参数，300×300 patch)</li>
+          <li>连接器：MLP + Perceiver Resampler</li>
+          <li>语言模型：InternLM2 (1.8B ~ 20B)</li>
+        </ul>
+        <p>在 MMMU、MathVista 等基准上超过 GPT-4V。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Qwen2-VL</h4>
+        <p>Qwen2-VL 是阿里通义千问的多模态版本：</p>
+        <ul>
+          <li>视觉编码器：SigLIP ViT (动态分辨率)</li>
+          <li>连接器：QwenVLBlock（交叉注意力 + 多层感知器）</li>
+          <li>支持动态分辨率（将图像缩放到不同尺寸，提取多尺度特征）</li>
+          <li>支持视频输入（帧采样 + 时间位置编码）</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 7.7 模型压缩与优化 -->
+    <!-- ============================================================ -->
+
+    <h2>7.7 模型压缩与优化</h2>
+
+    <!-- 7.7.1 Pruning -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.7.1 Pruning（剪枝）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>剪枝（Pruning）通过移除模型中不重要的权重来减小模型大小和计算成本。根据粒度的不同，分为结构化剪枝和非结构化剪枝。</p>
+
+      <div class="sub-section">
+        <h4>非结构化剪枝</h4>
+        <p>逐权重剪枝，将低于阈值的权重置零：</p>
+        <div class="formula-box"><code>W_{\text{pruned}} = W \odot M, \quad M_{ij} = \begin{cases} 1 & \text{if } |W_{ij}| > \tau \\ 0 & \text{otherwise} \end{cases}</code></div>
+        <p>其中 <code>\tau</code> 是剪枝阈值（如权重绝对值分布的 top-90% 分位数），<code>M</code> 是掩码矩阵。</p>
+        <p><strong>特点</strong>：</p>
+        <ul>
+          <li>压缩比高（可达到 90% 以上的稀疏度）</li>
+          <li>权重矩阵变为稀疏格式，需要专用硬件或稀疏库加速</li>
+          <li>通用 GPU 上加速不明显（非结构化稀疏利用率低）</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>结构化剪枝</h4>
+        <p>按通道、行或注意力头移除权重：</p>
+        <div class="formula-box"><code>W_{\text{structured}} = W[I_{\text{keep}}, :]</code></div>
+        <p>其中 <code>I_{\text{keep}}</code> 是根据重要性评分（如权重的 L1/L2 范数、梯度幅度、激活值统计）选出的保留通道索引。</p>
+        <p><strong>常见结构化剪枝粒度</strong>：</p>
+        <table>
+          <thead><tr><th>剪枝粒度</th><th>单位</th><th>移除方式</th><th>加速效果</th><th>精度影响</th></tr></thead>
+          <tbody>
+            <tr><td>注意力头</td><td>Head</td><td>移除完整的注意力头</td><td>中等</td><td>通常可控</td></tr>
+            <tr><td>隐藏维度</td><td>Feature</td><td>移除完整的隐藏维度</td><td>高</td><td>较大</td></tr>
+            <tr><td>FFN 中间维度</td><td>Neuron</td><td>移除 MLP 中间层的神经元</td><td>高</td><td>较大</td></tr>
+            <tr><td>层</td><td>Layer</td><td>移除完整 Transformer 层</td><td>极高</td><td>很大</td></tr>
+          </tbody>
+        </table>
+        <p><strong>特点</strong>：</p>
+        <ul>
+          <li>压缩比相对较低（通常 20-50%）</li>
+          <li>权重矩阵保持稠密格式，无需特殊硬件</li>
+          <li>在通用 GPU 上即可获得实质性加速</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>剪枝后的微调恢复</h4>
+        <p>直接剪枝后模型精度会下降，需要通过微调恢复：</p>
+        <pre><code># 剪枝 + 微调的三步流程
+# Step 1: 计算权重重要性
+importance = compute_weight_importance(model, calibration_data)
+
+# Step 2: 应用剪枝掩码
+for name, param in model.named_parameters():
+    if name in prunable_layers:
+        threshold = get_threshold(importance[name], sparsity_target)
+        mask[name] = (importance[name] > threshold).float()
+        param.data *= mask[name]
+
+# Step 3: 微调恢复精度
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+for batch in training_data:
+    loss = criterion(model(batch))
+    loss.backward()
+    # 确保剪枝的权重在梯度更新后仍保持为零
+    for name, param in model.named_parameters():
+        if name in mask:
+            param.grad *= mask[name]
+    optimizer.step()</code></pre>
+      </div>
+    </div>
+
+    <!-- 7.7.2 Distillation -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.7.2 Distillation（蒸馏）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>知识蒸馏（Knowledge Distillation）是使用一个更大的"教师模型"（Teacher Model）来指导一个小型"学生模型"（Student Model）的训练。学生模型通过学习教师模型的输出分布，获得比单独训练更好的性能。</p>
+
+      <div class="sub-section">
+        <h4>Logit-based Distillation</h4>
+        <p>学生模型不仅学习真实标签，还学习教师模型的 softmax 输出分布（logits）。核心损失函数是 Hinton 等人提出的蒸馏损失：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{KD}} = \alpha \cdot \mathcal{L}_{\text{CE}}(y, \sigma(z_s)) + (1 - \alpha) \cdot \tau^2 \cdot \mathcal{L}_{\text{KL}}\left( \sigma\left(\frac{z_t}{\tau}\right), \sigma\left(\frac{z_s}{\tau}\right) \right)</code></div>
+        <p>其中：</p>
+        <ul>
+          <li><code>z_t</code>、<code>z_s</code>：教师和学生模型的 logits</li>
+          <li><code>\tau</code>：温度参数（控制 softmax 的"软硬"程度，<code>\tau > 1</code> 使分布更平滑）</li>
+          <li><code>\sigma</code>：softmax 函数</li>
+          <li><code>\alpha</code>：两项损失的权重平衡</li>
+          <li><code>\mathcal{L}_{\text{CE}}</code>：交叉熵损失（真实标签）</li>
+          <li><code>\mathcal{L}_{\text{KL}}</code>：KL 散度（教师 vs 学生分布）</li>
+        </ul>
+        <p><strong>高温度的作用</strong>：当 <code>\tau</code> 较大时，softmax 输出的概率分布更加平滑，包含了更多的"暗知识"（dark knowledge），如教师模型认为哪些错误类别与正确类别更相似。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>Feature-based Distillation</h4>
+        <p>不仅匹配输出分布，还匹配中间层的特征表示：</p>
+        <div class="formula-box"><code>\mathcal{L}_{\text{feature}} = \sum_{l \in \mathcal{L}_{\text{align}}} \| f_l^s - W_l f_l^t \|_2^2</code></div>
+        <p>其中 <code>f_l^s</code> 和 <code>f_l^t</code> 是学生和教师模型在第 <code>l</code> 层的隐藏状态，<code>W_l</code> 是适配维度差异的线性投影。</p>
+      </div>
+
+      <div class="sub-section">
+        <h4>蒸馏 vs 剪枝 vs 量化对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>蒸馏</th><th>剪枝</th><th>量化</th></tr></thead>
+          <tbody>
+            <tr><td><strong>原理</strong></td><td>学习教师输出分布</td><td>移除不重要权重</td><td>降低数值精度</td></tr>
+            <tr><td><strong>压缩方式</strong></td><td>可使用更小的学生架构</td><td>移除权重通道/元素</td><td>使用更少 bit 表示</td></tr>
+            <tr><td><strong>是否需重新训练</strong></td><td>是</td><td>需微调恢复</td><td>不一定（PTQ 无需）</td></tr>
+            <tr><td><strong>常见压缩比</strong></td><td>2-10x</td><td>2-4x</td><td>2-4x</td></tr>
+            <tr><td><strong>精度损失</strong></td><td>通常最小（教师指导）</td><td>中高（高稀疏度时）</td><td>低（FP8/INT8）</td></tr>
+            <tr><td><strong>与硬件关系</strong></td><td>无关</td><td>需稀疏硬件/N:M</td><td>需 Tensor Core 支持</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.7.3 QAT -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.7.3 量化感知训练（QAT）</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>量化感知训练（Quantization-Aware Training, QAT）是在训练过程中模拟低精度推理的计算误差，让模型参数适应量化噪声。与训练后量化（PTQ）不同，QAT 将量化视为训练的一部分，通常可以获得更好的精度-效率权衡。</p>
+
+      <div class="sub-section">
+        <h4>Fake Quantization 训练流程</h4>
+        <p>QAT 使用"fake quantization"在训练的前向传播中模拟量化效果，但反向传播仍然使用全精度梯度：</p>
+        <pre><code>前向传播:
+W_fp32 → FakeQuant(W_fp32, scale, zero_point) → W_int8/dequant → W_fp32 (近似)
+                                                                      │
+                                                                      ▼
+                                                            x @ W_fp32 (量化后的值)
+                                                                      │
+                                                                      ▼
+                                                                  损失计算
+
+反向传播:
+损失 ← 全精度梯度（使用 Straight-Through Estimator, STE）
+       ｜
+       └── ∂Loss/∂W_fp32 ≈ ∂Loss/∂FakeQuant(W_fp32)  (STE 近似)</code></pre>
+        <p><strong>FakeQuant 算子</strong>的核心操作：</p>
+        <div class="formula-box"><code>W_{\text{fake}} = \text{round}\left( \frac{W}{\Delta} \right) \cdot \Delta</code></div>
+        <p>其中 <code>\Delta = \frac{\max(|W|)}{2^{N-1} - 1}</code> 是量化步长，<code>N</code> 是目标位宽（如 8 位）。<code>W_{\text{fake}}</code> 是量化和反量化后的结果，在训练中用于前向传播。</p>
+        <p><strong>STE（Straight-Through Estimator）</strong>：round 操作的导数为零（或不存在），无法进行反向传播。STE 将 round 操作的梯度近似为"直通"（即恒等映射）：</p>
+        <div class="formula-box"><code>\frac{\partial \mathcal{L}}{\partial W} \approx \frac{\partial \mathcal{L}}{\partial W_{\text{fake}}}</code></div>
+      </div>
+
+      <div class="sub-section">
+        <h4>QAT vs PTQ 对比</h4>
+        <table>
+          <thead><tr><th>维度</th><th>PTQ（训练后量化）</th><th>QAT（量化感知训练）</th></tr></thead>
+          <tbody>
+            <tr><td>是否需要训练</td><td>否</td><td>是</td></tr>
+            <tr><td>所需数据</td><td>少量校准数据（~1K samples）</td><td>训练数据（~10K+ samples）</td></tr>
+            <tr><td>计算成本</td><td>极低（几分钟）</td><td>中等（额外训练 10-20% 时间）</td></tr>
+            <tr><td>精度保留</td><td>通常较好（INT8 损失 &lt;1%）</td><td>更好（接近 FP16 精度）</td></tr>
+            <tr><td>适用极端量化</td><td>差（INT4 损失大）</td><td>好（INT4 可接近 FP16）</td></tr>
+            <tr><td>灵活性</td><td>固定量化方案</td><td>可优化 scale/zero_point</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>量化方法的压缩比</h4>
+        <table>
+          <thead><tr><th>精度</th><th>位数</th><th>内存节省（vs FP16）</th><th>推理加速（典型）</th><th>精度影响</th></tr></thead>
+          <tbody>
+            <tr><td>FP16</td><td>16</td><td>基线</td><td>基线</td><td>基线</td></tr>
+            <tr><td>FP8 (E4M3)</td><td>8</td><td>~50%</td><td>~1.5-2x</td><td>&lt;1% 损失</td></tr>
+            <tr><td>INT8</td><td>8</td><td>~50%</td><td>~1.5-2x</td><td>&lt;1% 损失</td></tr>
+            <tr><td>INT4 (AWQ/GPTQ)</td><td>4</td><td>~75%</td><td>~2-3x</td><td>1-3% 损失</td></tr>
+            <tr><td>INT4 + FP16 混合</td><td>4-16</td><td>灵活</td><td>~2x</td><td>可控</td></tr>
+            <tr><td>NF4 (QLoRA)</td><td>4</td><td>~75%</td><td>~1.5x</td><td>微调后接近基线</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.7.4 各压缩方法综合对比 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.7.4 各压缩方法综合对比</h3>
+        <span class="tag tag-blue">对比总结</span>
+      </div>
+      <table>
+        <thead><tr><th>压缩方法</th><th>压缩比</th><th>精度损失</th><th>训练成本</th><th>推理加速</th><th>硬件约束</th><th>适用场景</th></tr></thead>
+        <tbody>
+          <tr><td><strong>非结构化剪枝</strong></td><td>5-10x (90%)</td><td>2-5%</td><td>高（需微调）</td><td>弱（通用 GPU）</td><td>稀疏硬件/NVIDIA N:M</td><td>模型存储压缩</td></tr>
+          <tr><td><strong>结构化剪枝</strong></td><td>2-4x</td><td>1-3%</td><td>高（需微调）</td><td>好</td><td>无</td><td>延迟敏感场景</td></tr>
+          <tr><td><strong>Logit 蒸馏</strong></td><td>2-10x</td><td>0-2%</td><td>高（完整训练）</td><td>好（学生小模型）</td><td>无</td><td>部署小模型</td></tr>
+          <tr><td><strong>PTQ (INT8)</strong></td><td>2x</td><td>&lt;1%</td><td>极低</td><td>1.5-2x</td><td>INT8 Tensor Core</td><td>快速部署</td></tr>
+          <tr><td><strong>PTQ (INT4)</strong></td><td>4x</td><td>1-3%</td><td>低</td><td>2-3x</td><td>部分 GPU</td><td>大模型部署</td></tr>
+          <tr><td><strong>QAT (INT4)</strong></td><td>4x</td><td>&lt;1%</td><td>中</td><td>2-3x</td><td>部分 GPU</td><td>生产级部署</td></tr>
+          <tr><td><strong>AWQ/GPTQ</strong></td><td>4x</td><td>1-2%</td><td>低（微调 scale）</td><td>2-3x</td><td>部分 GPU</td><td>流行方案</td></tr>
+          <tr><td><strong>混合方法</strong></td><td>8-16x</td><td>2-5%</td><td>极高</td><td>3-5x</td><td>多种约束叠加</td><td>端侧部署</td></tr>
+        </tbody>
+      </table>
+      <p><strong>混合压缩</strong>（如剪枝 + 量化 + 蒸馏）可以叠加压缩收益，但精度损失也会叠加。典型的端侧部署方案是：先在超大模型上进行蒸馏得到中型教师，然后进行结构化剪枝和 INT4 量化，最终得到能在手机上运行的模型。</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 7.8 生产部署基础概念 -->
+    <!-- ============================================================ -->
+
+    <h2>7.8 生产部署基础概念</h2>
+
+    <!-- 7.8.1 vLLM 环境变量与配置体系 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.8.1 vLLM 环境变量与配置体系</h3>
+        <span class="tag tag-blue">vLLM 特性</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>核心启动参数</h4>
+        <p>vLLM 的服务化配置参数覆盖模型加载、推理调度、内存管理和分布式执行等各方面：</p>
+        <pre><code># vLLM 服务启动的完整配置示例
+python -m vllm.entrypoints.openai.api_server \
+    # 模型与精度
+    --model meta-llama/Llama-3.1-70B-Instruct \
+    --dtype bfloat16 \
+    --kv-cache-dtype fp8 \              # KV Cache 量化
+
+    # 内存管理
+    --gpu-memory-utilization 0.90 \      # GPU 显存利用率上限
+    --max-model-len 65536 \              # 最大序列长度
+    --max-num-seqs 256 \                 # 最大并发请求数
+
+    # 调度优化
+    --enable-chunked-prefill \           # 开启 Chunked Prefill
+    --enable-prefix-caching \            # 开启 Prefix Caching
+
+    # 分布式推理
+    --tensor-parallel-size 4 \           # 张量并行度
+    --pipeline-parallel-size 2 \         # 流水线并行度
+
+    # 性能调优
+    --block-size 16 \                    # KV Cache block 大小
+    --max-num-batched-tokens 4096 \      # 单批最大 token 数
+    --max-num-seqs 256 \
+
+    # 服务配置
+    --port 8000 \
+    --uvicorn-log-level info</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>关键配置参数详解</h4>
+        <table>
+          <thead><tr><th>参数</th><th>默认值</th><th>作用域</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>gpu-memory-utilization</code></td><td>0.90</td><td>内存</td><td>GPU 显存用于模型的百分比（含权重 + KV Cache）</td></tr>
+            <tr><td><code>max-model-len</code></td><td>（模型默认）</td><td>内存</td><td>最大序列长度，超出此长度的请求被拒绝</td></tr>
+            <tr><td><code>max-num-seqs</code></td><td>256</td><td>调度</td><td>batch 中的最大请求数</td></tr>
+            <tr><td><code>max-num-batched-tokens</code></td><td>2048</td><td>调度</td><td>Chunked Prefill 的单批最大 token 数</td></tr>
+            <tr><td><code>block-size</code></td><td>16</td><td>内存</td><td>PagedAttention 的 block token 数</td></tr>
+            <tr><td><code>enable-chunked-prefill</code></td><td>False</td><td>调度</td><td>是否启用 Chunked Prefill 混合调度</td></tr>
+            <tr><td><code>enable-prefix-caching</code></td><td>False</td><td>缓存</td><td>是否启用基于 block hash 的 Prefix Cache</td></tr>
+            <tr><td><code>tensor-parallel-size</code></td><td>1</td><td>分布式</td><td>张量并行 GPU 数量</td></tr>
+            <tr><td><code>pipeline-parallel-size</code></td><td>1</td><td>分布式</td><td>流水线并行 GPU 数量</td></tr>
+            <tr><td><code>kv-cache-dtype</code></td><td>auto</td><td>内存</td><td>KV Cache 精度（auto/FP8/FP8_E4M3）</td></tr>
+            <tr><td><code>quantization</code></td><td>None</td><td>精度</td><td>模型权重量化方法（awq/gptq/fp8）</td></tr>
+            <tr><td><code>max-loras</code></td><td>0</td><td>LoRA</td><td>同时加载的 LoRA 适配器数量</td></tr>
+            <tr><td><code>enable-lora</code></td><td>False</td><td>LoRA</td><td>是否启用 LoRA 支持</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 7.8.2 Kubernetes -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.8.2 Kubernetes 基础</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <p>Kubernetes（K8s）是容器编排平台，是 LLM 服务生产部署的事实标准。</p>
+
+      <div class="sub-section">
+        <h4>基本架构</h4>
+        <div class="mermaid-wrapper">
+          <pre class="mermaid">
+graph TD
+    subgraph Kubernetes_Cluster ["Kubernetes Cluster"]
+        subgraph Node1 ["Node 1"]
+            PodA["Pod: vLLM-A"]
+        end
+        subgraph Node2 ["Node 2"]
+            PodB["Pod: vLLM-B"]
+        end
+        subgraph Node3 ["Node 3"]
+            PodC["Pod: Router"]
+        end
+        Service["Service (负载均衡)"]
+    end
+    PodA --> Service
+    PodB --> Service
+    PodC --> Service</pre>
+        </div>
+      </div>
+
+      <div class="sub-section">
+        <h4>核心资源对象</h4>
+        <table>
+          <thead><tr><th>资源</th><th>作用</th><th>在 vLLM 部署中的用途</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Pod</strong></td><td>最小部署单元，包含一个或多个容器</td><td>每个 vLLM 实例运行在一个 Pod 中</td></tr>
+            <tr><td><strong>Service</strong></td><td>将一组 Pod 暴露为稳定的网络端点</td><td>对外暴露 vLLM 的 API endpoint</td></tr>
+            <tr><td><strong>Deployment</strong></td><td>声明式 Pod 管理，支持滚动更新</td><td>管理 vLLM Pod 的生命周期和版本</td></tr>
+            <tr><td><strong>Ingress</strong></td><td>外部 HTTP/S 流量到 Service 的路由</td><td>配置域名、TLS 终止、路径路由</td></tr>
+            <tr><td><strong>ConfigMap</strong></td><td>非机密性配置存储</td><td>存储 vLLM 的启动参数和配置</td></tr>
+            <tr><td><strong>Secret</strong></td><td>机密配置存储（API Key 等）</td><td>存储模型仓库的访问凭证</td></tr>
+            <tr><td><strong>HPA</strong></td><td>基于指标自动扩缩 Pod</td><td>根据请求队列长度自动扩缩 vLLM</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM Deployment YAML 示例</h4>
+        <pre><code>apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-llama-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vllm-llama
+  template:
+    metadata:
+      labels:
+        app: vllm-llama
+    spec:
+      containers:
+      - name: vllm
+        image: lmcache/vllm-openai:latest
+        command: ["python", "-m", "vllm.entrypoints.openai.api_server"]
+        args:
+          - "--model"
+          - "meta-llama/Llama-3.1-8B-Instruct"
+          - "--dtype"
+          - "bfloat16"
+          - "--gpu-memory-utilization"
+          - "0.90"
+          - "--max-num-seqs"
+          - "64"
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+            memory: "64Gi"
+            cpu: "10"
+          limits:
+            nvidia.com/gpu: 1
+            memory: "80Gi"
+            cpu: "16"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-service
+spec:
+  selector:
+    app: vllm-llama
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP</code></pre>
+      </div>
+    </div>
+
+    <!-- 7.8.3 自动扩缩容 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.8.3 自动扩缩容</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>HPA（Horizontal Pod Autoscaler）</h4>
+        <p>HPA 基于观察到的指标自动调整 Pod 副本数。在 vLLM 部署中，通常使用 KEDA（Kubernetes Event-driven Autoscaling）实现基于自定义指标（如请求队列长度）的更精确扩缩容。</p>
+        <p><strong>基于 KEDA 的 vLLM HPA 配置</strong>：</p>
+        <pre><code>apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-scaledobject
+spec:
+  scaleTargetRef:
+    name: vllm-llama-deployment
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus:9090
+      metricName: vllm_num_requests_waiting
+      query: |
+        sum(rate(vllm:num_requests_waiting_total[2m]))
+      threshold: "5"
+  advanced:
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 360  # 缩容冷却窗口（避免抖动）
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 30</code></pre>
+        <p><strong>扩缩容决策逻辑</strong>：</p>
+        <ul>
+          <li><strong>扩容条件</strong>：当等待队列长度 &gt; 5 且持续 &gt; 30 秒后触发扩容</li>
+          <li><strong>缩容条件</strong>：当等待队列长度保持 &lt; 3 且持续 &gt; 6 分钟后触发缩容</li>
+          <li><strong>冷却窗口</strong>：缩容冷却 360 秒，避免因请求波动频繁启停</li>
+        </ul>
+      </div>
+
+      <div class="sub-section">
+        <h4>VPA（Vertical Pod Autoscaler）</h4>
+        <p>VPA 调整 Pod 的资源请求（CPU/内存/GPU），而非副本数。针对 vLLM 场景：</p>
+        <pre><code>apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vllm-vpa
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: Deployment
+    name: vllm-llama-deployment
+  updatePolicy:
+    updateMode: "Off"  # 仅提供建议，不自动调整
+  resourcePolicy:
+    containerPolicies:
+    - containerName: "*"
+      controlledResources: ["memory", "cpu"]
+      controlledValues: RequestsAndLimits</code></pre>
+        <p><strong>GPU 扩缩容的特殊性</strong>：Kubernetes 中 GPU 是稀缺的"扩展资源"，HPA 无法基于 GPU 利用率直接扩缩。实际做法是：</p>
+        <ol>
+          <li>通过 Prometheus 采集 GPU 指标（DCGM Exporter）</li>
+          <li>根据请求队列长度间接推断 GPU 压力</li>
+          <li>使用 KEDA 的 prometheus trigger 实现 GPU 感知扩缩容</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 7.8.4 监控体系 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.8.4 监控体系</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>Prometheus 指标</h4>
+        <p>vLLM 暴露 Prometheus 格式的内置指标：</p>
+        <table>
+          <thead><tr><th>指标类别</th><th>指标名</th><th>类型</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>延迟</td><td><code>vllm:ttft_seconds</code></td><td>Histogram</td><td>首 token 延迟分布</td></tr>
+            <tr><td>延迟</td><td><code>vllm:tpot_seconds</code></td><td>Histogram</td><td>每 token 延迟分布</td></tr>
+            <tr><td>延迟</td><td><code>vllm:e2e_request_latency_seconds</code></td><td>Histogram</td><td>端到端请求延迟</td></tr>
+            <tr><td>吞吐</td><td><code>vllm:num_requests_total</code></td><td>Counter</td><td>总请求数</td></tr>
+            <tr><td>吞吐</td><td><code>vllm:num_prompt_tokens_total</code></td><td>Counter</td><td>总 prompt token 数</td></tr>
+            <tr><td>吞吐</td><td><code>vllm:num_generation_tokens_total</code></td><td>Counter</td><td>总生成 token 数</td></tr>
+            <tr><td>队列</td><td><code>vllm:num_requests_waiting</code></td><td>Gauge</td><td>等待队列长度</td></tr>
+            <tr><td>队列</td><td><code>vllm:num_requests_running</code></td><td>Gauge</td><td>运行中请求数</td></tr>
+            <tr><td>内存</td><td><code>vllm:gpu_cache_usage_perc</code></td><td>Gauge</td><td>KV Cache 使用率</td></tr>
+            <tr><td>内存</td><td><code>vllm:gpu_cache_size</code></td><td>Gauge</td><td>KV Cache 总容量</td></tr>
+          </tbody>
+        </table>
+        <p><strong>ServiceMonitor 配置</strong>（自动发现 vLLM 指标端点）：</p>
+        <pre><code>apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vllm-monitor
+spec:
+  selector:
+    matchLabels:
+      app: vllm-llama
+  endpoints:
+  - port: metrics
+    interval: 10s
+    path: /metrics</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>Grafana 面板</h4>
+        <p>Production Stack 提供预配置的 Grafana Dashboard，包含以下面板：</p>
+        <ol>
+          <li><strong>请求延迟分布</strong>：TTFT / TPOT / E2E 的 p50/p95/p99 曲线</li>
+          <li><strong>吞吐量监控</strong>：tokens/s、requests/s 的时间序列</li>
+          <li><strong>队列状态</strong>：等待/运行中请求数</li>
+          <li><strong>KV Cache 状态</strong>：Cache 使用率、block 分配情况</li>
+          <li><strong>GPU 资源</strong>：GPU 利用率、显存使用、温度</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>告警规则示例</h4>
+        <pre><code>groups:
+- name: vllm_alerts
+  rules:
+  - alert: HighTTFT
+    expr: histogram_quantile(0.95, rate(vllm:ttft_seconds_bucket[5m])) > 2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "TTFT 超过 2 秒 (p95)"
+
+  - alert: HighQueueDepth
+    expr: vllm:num_requests_waiting > 100
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "等待队列超过 100"
+
+  - alert: GPUMemoryPressure
+    expr: vllm:gpu_cache_usage_perc > 0.95
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "KV Cache 使用率超过 95%"</code></pre>
+      </div>
+    </div>
+
+    <!-- 7.8.5 负载均衡 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.8.5 负载均衡</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>路由策略</h4>
+        <table>
+          <thead><tr><th>策略</th><th>原理</th><th>优势</th><th>劣势</th><th>适用场景</th></tr></thead>
+          <tbody>
+            <tr><td><strong>轮询</strong></td><td>顺序分发到各实例</td><td>实现简单，负载理论上均衡</td><td>不考虑实例状态差异</td><td>无状态、缓存无关场景</td></tr>
+            <tr><td><strong>最少连接</strong></td><td>分发到活跃连接最少的实例</td><td>动态适应负载不均</td><td>仅考虑连接数</td><td>请求处理时间差异大的场景</td></tr>
+            <tr><td><strong>一致性哈希</strong></td><td>对请求 key 哈希后映射到实例</td><td>相同 key 路由到同一实例</td><td>节点变化时部分请求重路由</td><td>需要会话亲和性的场景</td></tr>
+            <tr><td><strong>GPU 感知路由</strong></td><td>综合 KV Cache、队列、利用率决策</td><td>最大化缓存命中率</td><td>需要复杂调度逻辑</td><td>生产级 LLM 部署</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>GPU 感知路由的调度决策流程</h4>
+        <p>Gateway API Inference Extension 的 EPP（Endpoint Picker）实现了智能路由：</p>
+        <pre><code>路由决策过滤器链：
+
+1. 关键性检查 (Criticality Check)
+   └── 关键请求 → 进入下一阶段
+   └── 非关键请求 → 直接判断是否有容量
+
+2. 低队列筛选 (Low Queuing Filter)
+   └── 筛选 queue &lt; 50 的实例
+
+3. LoRA 亲和性检查 (LoRA Affinity Check)
+   └── 筛选已加载所需 LoRA 的实例
+
+4. 最少队列筛选 (Least Queuing Filter)
+   └── 选择队列最短的实例
+
+5. 最少 KV Cache 筛选 (Least KV Cache Filter)
+   └── 选择 KV Cache 利用率最低的实例
+
+最终选择：经过所有筛选后的最优实例</code></pre>
+      </div>
+
+      <div class="sub-section">
+        <h4>vLLM Production Stack 的路由配置</h4>
+        <pre><code># Round-robin 路由
+routerSpec:
+  routingStrategy: "round-robin"
+
+# 会话亲和性路由（一致性哈希）
+routerSpec:
+  routingStrategy: "session"
+
+# Prefix-aware 路由（最大化 KV Cache 命中）
+routerSpec:
+  routingStrategy: "prefix-aware"
+
+# KV-aware 路由（按 KV Cache 压力分配）
+routerSpec:
+  routingStrategy: "kv-aware"</code></pre>
+      </div>
+    </div>
+
+    <!-- 7.8.6 灰度发布 -->
+    <div class="concept-card">
+      <div class="concept-title">
+        <h3>7.8.6 灰度发布</h3>
+        <span class="tag tag-blue">核心概念</span>
+      </div>
+
+      <div class="sub-section">
+        <h4>概念对比</h4>
+        <table>
+          <thead><tr><th>策略</th><th>原理</th><th>切换速度</th><th>回滚成本</th><th>资源消耗</th><th>适用场景</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Rolling Update</strong></td><td>逐个替换旧版本 Pod</td><td>慢（逐步）</td><td>低</td><td>极低（无额外资源）</td><td>日常更新</td></tr>
+            <tr><td><strong>Blue-Green</strong></td><td>同时运行新旧两套环境，一次性切换</td><td>瞬时</td><td>极低（切换回旧版）</td><td>高（双倍资源）</td><td>关键服务变更</td></tr>
+            <tr><td><strong>Canary</strong></td><td>新版接收小比例流量，逐步增加到 100%</td><td>渐进</td><td>低</td><td>低（少量额外 Pod）</td><td>重大更新、模型升级</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub-section">
+        <h4>Rolling Update（滚动更新）</h4>
+        <p>Kubernetes Deployment 原生支持：</p>
+        <pre><code>apiVersion: apps/v1
+kind: Deployment
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1           # 最多额外启动 1 个新 Pod
+      maxUnavailable: 0     # 滚动期间保证所有旧 Pod 可用
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: vllm:v2.0.0  # 更新为新版本镜像</code></pre>
+        <p><strong>更新流程</strong>：</p>
+        <ol>
+          <li>启动 1 个新版本 Pod（<code>vllm:v2.0.0</code>）</li>
+          <li>新 Pod ready 后，终止 1 个旧版本 Pod（<code>vllm:v1.0.0</code>）</li>
+          <li>重复直到所有 Pod 都更新为新版本</li>
+          <li>如果新版本异常（如 readiness probe 失败），自动暂停回滚</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>Blue-Green Deployment</h4>
+        <pre><code># Blue (旧版本) — 仍然服务的实例
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-blue
+spec:
+  replicas: 5
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: vllm:v1.0.0
+
+---
+# Green (新版本) — 部署但未接入流量
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-green
+spec:
+  replicas: 5
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: vllm:v2.0.0
+
+---
+# Service selector 指向 blue
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-service
+spec:
+  selector:
+    version: blue</code></pre>
+        <p><strong>切换流程</strong>：</p>
+        <ol>
+          <li>部署 Green 环境，进行集成测试和模型精度验证</li>
+          <li>验证通过后，更新 Service selector 指向 <code>version: green</code></li>
+          <li>流量瞬时切换到新版</li>
+          <li>保留 Blue 环境一段时间用于回滚</li>
+        </ol>
+      </div>
+
+      <div class="sub-section">
+        <h4>Canary Release（金丝雀发布）</h4>
+        <p>通过 Service Mesh（如 Istio）或网关配置流量权重：</p>
+        <pre><code># 使用 Istio VirtualService 实现金丝雀
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vllm-canary
+spec:
+  hosts:
+  - vllm.example.com
+  http:
+  - route:
+    - destination:
+        host: vllm-stable
+        subset: v1
+      weight: 90
+    - destination:
+        host: vllm-canary
+        subset: v2
+      weight: 10</code></pre>
+        <p><strong>渐进式流量迁移</strong>：</p>
+        <pre><code>Phase 1: 旧版 100%    → 没有流量进入金丝雀
+Phase 2: 旧版 90%     → 金丝雀承载 10% 流量（监控错误率和延迟）
+Phase 3: 旧版 50%     → 金丝雀承载 50%（扩大验证范围）
+Phase 4: 旧版 0%      → 全部流量到金丝雀（旧版下线）</code></pre>
+        <p><strong>模型升级的特殊考量</strong>：LLM 模型升级（如 LLaMA-3 8B → LLaMA-4 8B）的金丝雀发布需要：</p>
+        <ol>
+          <li>对齐评估：在金丝雀上运行 MMLU、HumanEval 等基准测试，确保新模型的推理质量不降级</li>
+          <li>性能监控：对比金丝雀和稳定版的 TTFT/TPOT/吞吐量，确保新模型不会降低服务性能</li>
+          <li>输入兼容性：检查新模型的 tokenizer 是否与旧版本兼容（vocab 变化可能导致 corruption）</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<div class="module-content">
+  <div class="module-nav">
+    <a href="section-7.html" class="module-nav-prev">
+    <div class="module-nav-label">← 上一模块</div>
+    <div class="module-nav-title">高级 AI（上）</div>
+  </a>
+    <a href="index.html" class="module-nav-next">
+    <div class="module-nav-label">返回目录 →</div>
+    <div class="module-nav-title">封面与导航</div>
+  </a>
+  </div>
+  
+  <div class="footer" style="margin-top:var(--space-8);padding:var(--space-6) 0;border-top:1px solid var(--border);text-align:center;color:var(--text-muted);font-size:0.8rem">
+    <p>模块 8: 高级 AI 相关概念（下） | vLLM & AI 推理核心概念全景解析</p>
+    <p style="margin-top:var(--space-2)">研究日期: 2026-05-15 | <a href="index.html">返回封面</a></p>
+  </div>
+</div>
+
+</body>
+</html>
