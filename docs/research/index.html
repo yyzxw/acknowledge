@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Research Reports</title>
+  <link href="./pagefind/pagefind-ui.css" rel="stylesheet">
   <style>
     :root {
       --bg-0: #060a12;
@@ -183,39 +184,52 @@
     }
     .nav-brand span { color: var(--cyan); }
 
-    /* Search */
-    .search-wrap {
+    /* Pagefind Search */
+    #search {
       margin-left: auto;
-      display: flex;
-      align-items: center;
       position: relative;
-    }
-    .search-icon {
-      position: absolute;
-      left: 12px;
-      color: var(--muted);
-      pointer-events: none;
-    }
-    .search-input {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px 12px 8px 36px;
-      color: var(--text);
-      font-size: 0.9rem;
+      --pagefind-ui-scale: 0.75;
+      --pagefind-ui-primary: #23d7ff;
+      --pagefind-ui-text: #c9d9ea;
+      --pagefind-ui-background: rgba(13, 25, 43, 0.95);
+      --pagefind-ui-border: rgba(135, 163, 199, 0.3);
+      --pagefind-ui-tag: rgba(35, 215, 255, 0.1);
+      --pagefind-ui-border-width: 1px;
+      --pagefind-ui-border-radius: 8px;
       width: 200px;
-      outline: none;
-      transition: all 0.2s ease;
+      transition: width 0.2s ease;
     }
-    .search-input:focus {
-      border-color: var(--cyan);
-      background: rgba(35, 215, 255, 0.08);
+    #search:focus-within {
       width: 260px;
     }
-    .search-input::placeholder { color: var(--muted); }
-
-    /* Search Results Dropdown */
-    .search-dropdown {
+    #search .pagefind-ui__search-input {
+      height: 38px;
+      font-size: 14px;
+      font-weight: 400;
+      padding: 0 36px 0 34px;
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      outline: none;
+    }
+    #search .pagefind-ui__search-input:focus {
+      border-color: var(--cyan);
+      background: rgba(35, 215, 255, 0.08);
+    }
+    #search .pagefind-ui__search-input::placeholder {
+      color: var(--muted);
+      opacity: 1;
+    }
+    #search .pagefind-ui__form::before {
+      background-color: var(--muted);
+      width: 16px;
+      height: 16px;
+      top: 50%;
+      left: 11px;
+      transform: translateY(-50%);
+      opacity: 1;
+    }
+    #search .pagefind-ui__drawer {
       position: absolute;
       top: calc(100% + 8px);
       right: 0;
@@ -226,52 +240,62 @@
       border: 1px solid var(--line-strong);
       border-radius: 12px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-      display: none;
-      z-index: 200;
+      padding: 0 16px;
+      flex-wrap: nowrap;
+      flex-direction: column;
     }
-    .search-dropdown.active { display: block; }
-    .search-result {
-      display: block;
-      padding: 14px 16px;
+    #search .pagefind-ui__results-area {
+      min-width: 100%;
+      margin-top: 0;
+    }
+    #search .pagefind-ui__result {
+      padding: 12px 0;
+      border-top: 1px solid var(--line);
+    }
+    #search .pagefind-ui__result:last-of-type {
       border-bottom: 1px solid var(--line);
-      text-decoration: none;
-      color: inherit;
-      transition: background 0.15s ease;
     }
-    .search-result:last-child { border-bottom: none; }
-    .search-result:hover { background: rgba(35, 215, 255, 0.06); }
-    .search-result-title {
+    #search .pagefind-ui__result-title {
       font-size: 0.95rem;
       font-weight: 600;
-      color: var(--text);
-      margin-bottom: 4px;
     }
-    .search-result-excerpt {
+    #search .pagefind-ui__result-excerpt {
       font-size: 0.8rem;
       color: var(--muted);
       line-height: 1.5;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
     }
-    .search-result-excerpt mark {
-      background: rgba(35, 215, 255, 0.2);
-      color: var(--cyan);
-      border-radius: 2px;
-      padding: 0 2px;
+    #search .pagefind-ui__result-link {
+      color: var(--text) !important;
     }
-    .search-empty {
-      padding: 24px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 0.9rem;
+    #search .pagefind-ui__result-link:hover {
+      color: var(--cyan) !important;
+      text-decoration: none !important;
     }
-    .search-hint {
-      padding: 20px;
-      text-align: center;
-      color: var(--muted);
+    #search .pagefind-ui__message {
       font-size: 0.85rem;
+      padding: 16px 0;
+      color: var(--muted);
+    }
+    #search .pagefind-ui__button {
+      height: 36px;
+      font-size: 0.85rem;
+      margin-top: 16px;
+      margin-bottom: 16px;
+      background: transparent;
+      color: var(--cyan);
+      border-color: var(--line);
+    }
+    #search .pagefind-ui__button:hover {
+      border-color: var(--cyan);
+      background: rgba(35, 215, 255, 0.08);
+    }
+    #search .pagefind-ui__search-clear {
+      height: 34px;
+      top: 2px;
+      right: 2px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
     }
   </style>
 </head>
@@ -280,13 +304,7 @@
 <nav>
   <div class="nav-inner">
     <a href="../" class="nav-brand">Acknowledge</a>
-    <div class="search-wrap">
-      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <input type="text" class="search-input" placeholder="搜索文档..." id="searchInput" autocomplete="off">
-      <div class="search-dropdown" id="searchDropdown">
-        <div class="search-hint">输入关键词搜索...</div>
-      </div>
-    </div>
+    <div id="search"></div>
   </div>
 </nav>
 
@@ -421,143 +439,35 @@
 	  </div>
 </main>
 
+<script src="./pagefind/pagefind-ui.js" type="text/javascript"></script>
 <script>
-  // Simple in-memory search index
-  const searchData = [
-    {
-      title: "DeepSeek V4 深度调研报告",
-      url: "./deepseek-v4-report.html",
-      excerpt: "全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势。",
-      tags: ["MoE 架构", "模型评测", "成本分析"]
-    },
-    {
-      title: "Kcover 技术调研报告",
-      url: "./kcover-report.html",
-      excerpt: "Kcover 项目技术架构分析、核心组件解读与实践指南。",
-      tags: ["技术架构", "组件分析"]
-    },
-    {
-      title: "vLLM Semantic Router 深度研究报告",
-      url: "./semantic-router-research.html",
-      excerpt: "系统级智能路由器，信号驱动决策引擎，10+ 种模型选择算法，面向云、数据中心和边缘环境。",
-      tags: ["LLM 路由", "信号驱动", "架构分析"]
-    },
-    {
-      title: "llm-d 开源组织深度研究报告",
-      url: "./llm-d-report.html",
-      excerpt: "Kubernetes 分布式 LLM 推理服务编排平台，17 个仓库协同工作，P/D 分解、KV 缓存感知调度等核心能力解析。",
-      tags: ["Kubernetes", "推理编排", "分布式"]
-    },
-    {
-      title: "vLLM 运行参数完全指南",
-      url: "./vllm-parameters-guide.html",
-      excerpt: "单节点推理参数、多机分布式策略、LMCache 集成、推测解码、Prometheus 指标监控，以及十一种典型场景配置推荐。",
-      tags: ["vLLM", "推理参数", "分布式", "LMCache"]
-    },
-    {
-      title: "vLLM-Omni 深度研究报告：使用方法完全指南",
-      url: "./vllm-omni-research.html",
-      excerpt: "解耦多模态推理框架全解析 —— 安装配置、核心 API、CLI 命令、OpenAI 兼容 API、扩散模型、多阶段 LLM 部署与调优。",
-      tags: ["多模态", "vLLM", "扩散模型", "Qwen-Omni", "分布式"]
-    },
-    {
-      title: "分布式通信原语与 vLLM 并行策略",
-      url: "./distributed-comm-primitives.html",
-      excerpt: "深入理解 AllReduce、AllToAll、Broadcast 等 6 大分布式通信原语，以及 TP/DP/PP/EP 并行策略的通信量与选型。",
-      tags: ["分布式", "通信原语", "vLLM", "并行策略", "AllReduce"]
-    },
-    {
-      title: "云原生可观测项目深度研究",
-      url: "./cloud-native-observability.html",
-      excerpt: "覆盖 12 个核心开源项目（ELK、Grafana、Prometheus、Fluent Bit、OpenTelemetry 等）的深度对比分析，含 ES Query DSL、PromQL、LogQL 完整语法入门。",
-      tags: ["可观测性", "ELK", "Prometheus", "OpenTelemetry", "Grafana"]
-    },
-    {
-      title: "vLLM &amp; AI 推理核心概念全景解析",
-      url: "./vllm-concepts-deep-dive/",
-      excerpt: "从 GPU 架构到生产部署，从 Prefill/Decode 到 AI Agent，系统梳理 160+ 个 AI/LLM 推理领域核心概念，共 8 个模块。",
-      tags: ["vLLM", "推理引擎", "分布式", "AI Agent", "GPU 架构"]
-    },
-    {
-      title: "Kustomize 详解",
-      url: "./kustomize-report.html",
-      excerpt: "Kubernetes 原生声明式配置管理工具，Base + Overlay 架构、Patches 技术、与 Helm 深度对比，以及多环境部署实战指南。",
-      tags: ["Kubernetes", "Kustomize", "配置管理", "Helm"]
-    },
-  ];
-
-  const searchInput = document.getElementById('searchInput');
-  const searchDropdown = document.getElementById('searchDropdown');
-  let debounceTimer;
-
-  function highlight(text, query) {
-    if (!query || !text) return text;
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    return text.replace(regex, '<mark>$1</mark>');
-  }
-
-  function search(query) {
-    const q = query.toLowerCase();
-    return searchData.filter(item =>
-      item.title.toLowerCase().includes(q) ||
-      item.excerpt.toLowerCase().includes(q) ||
-      item.tags.some(tag => tag.toLowerCase().includes(q))
-    );
-  }
-
-  searchInput.addEventListener('input', function() {
-    clearTimeout(debounceTimer);
-    const query = this.value.trim();
-
-    if (query.length < 1) {
-      searchDropdown.classList.remove('active');
-      return;
-    }
-
-    debounceTimer = setTimeout(() => {
-      const results = search(query);
-
-      if (results.length === 0) {
-        searchDropdown.innerHTML = '<div class="search-empty">未找到相关结果</div>';
-        searchDropdown.classList.add('active');
-        return;
+  window.addEventListener('DOMContentLoaded', function() {
+    new PagefindUI({
+      element: "#search",
+      bundlePath: "./pagefind",
+      showSubResults: true,
+      translations: {
+        placeholder: "搜索文档...",
+        zero_results: "未找到相关结果",
+        many_results: "找到 [COUNT] 个结果",
+        one_result: "找到 1 个结果",
+        search_label: "搜索",
+        clear: "清除"
       }
+    });
 
-      searchDropdown.innerHTML = results.map(r => `
-        <a class="search-result" href="${r.url}">
-          <div class="search-result-title">${highlight(r.title, query)}</div>
-          <div class="search-result-excerpt">${highlight(r.excerpt, query)}</div>
-        </a>
-
-t    <a class="card blue" href="./vllm-concepts-deep-dive/">
-t      <span class="card-tag blue">Guide</span>
-t      <h2>vLLM &amp; AI 推理核心概念全景解析</h2>
-t      <p>从 GPU 架构到生产部署，从 Prefill/Decode 到 AI Agent，系统梳理 160+ 个 AI/LLM 推理领域核心概念，共 8 个模块。</p>
-t      <div class="card-meta">
-t        <span class="pill">vLLM</span>
-t        <span class="pill">推理引擎</span>
-t        <span class="pill">分布式</span>
-t        <span class="pill">AI Agent</span>
-t        <span class="pill">GPU 架构</span>
-t      </div>
-t    </a>
-      `).join('');
-      searchDropdown.classList.add('active');
-    }, 100);
-  });
-
-  document.addEventListener('click', function(e) {
-    if (!e.target.closest('.search-wrap')) {
-      searchDropdown.classList.remove('active');
-    }
-  });
-
-  searchInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      searchDropdown.classList.remove('active');
-      searchInput.blur();
-    }
+    // Close search drawer when clicking outside
+    document.addEventListener('click', function(e) {
+      const searchEl = document.getElementById('search');
+      if (!searchEl.contains(e.target)) {
+        const input = searchEl.querySelector('.pagefind-ui__search-input');
+        if (input) input.blur();
+        const drawer = searchEl.querySelector('.pagefind-ui__drawer');
+        if (drawer) drawer.classList.add('pagefind-ui__hidden');
+      }
+    });
   });
 </script>
+
 </body>
 </html>
