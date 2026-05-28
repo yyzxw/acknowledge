@@ -284,6 +284,21 @@ var searchTexts = {};
 var reportUrls = [];
 var loaded = 0;
 
+var fallbackUrls = [
+  'cloud-native-observability.html',
+  'deepseek-v4-report.html',
+  'distributed-comm-primitives.html',
+  'istio-deep-learning.html',
+  'kcover-report.html',
+  'kustomize-report.html',
+  'llm-d-report.html',
+  'lmcache-deep-research.html',
+  'mooncake-deep-research.html',
+  'semantic-router-research.html',
+  'vllm-omni-research.html',
+  'vllm-parameters-guide.html'
+];
+
 document.addEventListener('DOMContentLoaded', function () {
   fetch('./').then(function (r) { return r.text(); }).then(function (html) {
     parseDirListing(html);
@@ -291,11 +306,13 @@ document.addEventListener('DOMContentLoaded', function () {
     // Directory listing not available (e.g. GitHub Pages), use GitHub API
     fetch('https://api.github.com/repos/yyzxw/acknowledge/contents/docs/research').then(function (r) { return r.json(); }).then(function (files) {
       if (!Array.isArray(files)) throw new Error('not a directory');
-      reportUrls = files.filter(function (f) { return f.type === 'file' && f.name.endsWith('.html') && f.name !== 'index.html'; }).map(function (f) { return f.name; }).sort();
+      reportUrls = files.filter(function (f) { return f.type === 'file' && f.name.endsWith('.html') && f.name !== 'index.html' && f.name !== 'list.html'; }).map(function (f) { return f.name; }).sort();
       if (reportUrls.length === 0) throw new Error('no reports');
       loadReports();
     }).catch(function () {
-      document.getElementById('report-grid').innerHTML = '<div class="loading">无法加载报告列表</div>';
+      // GitHub API also failed, use static fallback
+      reportUrls = fallbackUrls.slice();
+      loadReports();
     });
   });
 });
