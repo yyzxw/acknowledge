@@ -6,10 +6,13 @@
     "docs:dev": "npm run docs:manifest && vitepress dev docs",
     "docs:manifest": "node scripts/sync-research-manifest.mjs",
     "docs:build": "npm run docs:manifest && vitepress build docs && node scripts/build-search-index.mjs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "deploy": "npm run docs:build && wrangler deploy",
+    "preview": "npm run docs:build && wrangler dev"
   },
   "devDependencies": {
     "pagefind": "^1.5.2",
-    "vitepress": "^1.6.4"
+    "vitepress": "^1.6.4",
+    "wrangler": "^4.95.0"
   }
 }
