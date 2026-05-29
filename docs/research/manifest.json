@@ -1,0 +1,213 @@
+{
+  "items": [
+    {
+      "title": "Istio 深度学习：技术架构、实现原理与生产实践分析报告",
+      "description": "Istio 服务网格深度技术调研报告，涵盖底层实现原理（Sidecar 注入、Envoy xDS、mTLS、流量拦截）、使用方法（流量管理、安全策略、可观测性）、Ambient Mesh 新架构与生态对比。",
+      "tags": [
+        "Istio",
+        "Service Mesh",
+        "Envoy",
+        "Kubernetes",
+        "服务网格",
+        "Sidecar",
+        "Ambient Mesh",
+        "mTLS",
+        "xDS",
+        "流量管理",
+        "云原生"
+      ],
+      "category": "Cloud Native",
+      "type": "html",
+      "date": "2026-05-28",
+      "href": "/research/istio-deep-learning.html",
+      "sourcePath": "istio-deep-learning.html"
+    },
+    {
+      "title": "LMCache 项目深度研究报告",
+      "description": "LLM 推理缓存加速框架深度分析 — L1/L2 分层架构、缓存策略、分布式机制、性能优化、TTLLock、多推理引擎支持",
+      "tags": [
+        "LMCache",
+        "KV Cache",
+        "LLM推理",
+        "vLLM",
+        "缓存加速",
+        "分布式存储",
+        "CUDA",
+        "GPU"
+      ],
+      "category": "深度研究",
+      "type": "html",
+      "date": "2026-05-18",
+      "href": "/research/lmcache-deep-research.html",
+      "sourcePath": "lmcache-deep-research.html"
+    },
+    {
+      "title": "vLLM & AI 推理核心概念全景解析",
+      "description": "从 GPU 架构到生产部署，从 Prefill/Decode 到 AI Agent，系统梳理 160+ 个 AI/LLM 推理领域核心概念，共 8 个模块。",
+      "tags": [
+        "vLLM",
+        "推理引擎",
+        "分布式",
+        "AI Agent",
+        "GPU 架构"
+      ],
+      "category": "Guide",
+      "type": "html",
+      "date": "2026-05-15",
+      "href": "/research/vllm-concepts-deep-dive/index.html",
+      "sourcePath": "vllm-concepts-deep-dive/index.html"
+    },
+    {
+      "title": "llm-d 开源组织深度研究报告",
+      "description": "Kubernetes 分布式 LLM 推理服务编排平台，17 个仓库协同工作，P/D 分解、KV 缓存感知调度等核心能力解析。",
+      "tags": [
+        "Kubernetes",
+        "推理编排",
+        "分布式"
+      ],
+      "category": "Research",
+      "type": "html",
+      "date": "2026-04-25",
+      "href": "/research/llm-d-report.html",
+      "sourcePath": "llm-d-report.html"
+    },
+    {
+      "title": "Kcover 技术调研报告",
+      "description": "Kcover 项目技术架构分析、核心组件解读与实践指南。",
+      "tags": [
+        "技术架构",
+        "组件分析"
+      ],
+      "category": "Report",
+      "type": "html",
+      "date": "2026-04-24",
+      "href": "/research/kcover-report.html",
+      "sourcePath": "kcover-report.html"
+    },
+    {
+      "title": "分布式通信原语与 vLLM 并行策略",
+      "description": "深入理解 AllReduce、AllToAll、Broadcast 等 6 大分布式通信原语，以及 Tensor Parallelism、Data Parallelism、Pipeline Parallelism、Expert Parallelism 的通信量与选型策略。",
+      "tags": [
+        "分布式",
+        "通信原语",
+        "vLLM",
+        "并行策略",
+        "AllReduce"
+      ],
+      "category": "Guide",
+      "type": "html",
+      "date": "",
+      "href": "/research/distributed-comm-primitives.html",
+      "sourcePath": "distributed-comm-primitives.html"
+    },
+    {
+      "title": "云原生可观测项目深度研究",
+      "description": "覆盖 12 个核心开源项目（ELK、Grafana、Prometheus、Fluent Bit、OpenTelemetry 等）的深度对比分析，含 ES Query DSL、PromQL、LogQL 完整语法入门。",
+      "tags": [
+        "可观测性",
+        "ELK",
+        "Prometheus",
+        "OpenTelemetry",
+        "Grafana"
+      ],
+      "category": "Research",
+      "type": "html",
+      "date": "",
+      "href": "/research/cloud-native-observability.html",
+      "sourcePath": "cloud-native-observability.html"
+    },
+    {
+      "title": "DeepSeek V4 深度调研报告",
+      "description": "全面解析 DeepSeek V4 的技术创新、MoE 架构、MLA 注意力机制、产品矩阵与性价比优势。",
+      "tags": [
+        "MoE 架构",
+        "模型评测",
+        "成本分析"
+      ],
+      "category": "Research",
+      "type": "html",
+      "date": "",
+      "href": "/research/deepseek-v4-report.html",
+      "sourcePath": "deepseek-v4-report.html"
+    },
+    {
+      "title": "Kustomize 详解",
+      "description": "Kubernetes 原生声明式配置管理工具，Base + Overlay 架构、Patches 技术、与 Helm 深度对比，以及多环境部署实战指南。",
+      "tags": [
+        "Kubernetes",
+        "Kustomize",
+        "配置管理",
+        "Helm"
+      ],
+      "category": "Guide",
+      "type": "html",
+      "date": "",
+      "href": "/research/kustomize-report.html",
+      "sourcePath": "kustomize-report.html"
+    },
+    {
+      "title": "Mooncake 深度研究报告",
+      "description": "Moonshot AI 的 KVCache-centric 分离式推理架构 — Transfer Engine、分布式存储、全局调度、14+ 传输协议、FAST 2025 Best Paper",
+      "tags": [
+        "Mooncake",
+        "KVCache",
+        "PD分离",
+        "RDMA",
+        "Transfer Engine",
+        "vLLM",
+        "SGLang",
+        "分布式推理"
+      ],
+      "category": "深度研究",
+      "type": "html",
+      "date": "",
+      "href": "/research/mooncake-deep-research.html",
+      "sourcePath": "mooncake-deep-research.html"
+    },
+    {
+      "title": "vLLM 运行参数完全指南",
+      "description": "单节点推理参数、多机分布式策略、LMCache 集成、推测解码、Prometheus 指标监控，以及十一种典型场景配置推荐。",
+      "tags": [
+        "vLLM",
+        "推理参数",
+        "分布式",
+        "LMCache"
+      ],
+      "category": "Guide",
+      "type": "html",
+      "date": "",
+      "href": "/research/vllm-parameters-guide.html",
+      "sourcePath": "vllm-parameters-guide.html"
+    },
+    {
+      "title": "vLLM Semantic Router 深度研究报告",
+      "description": "系统级智能路由器，信号驱动决策引擎，10+ 种模型选择算法，面向云、数据中心和边缘环境。",
+      "tags": [
+        "LLM 路由",
+        "信号驱动",
+        "架构分析"
+      ],
+      "category": "Research",
+      "type": "html",
+      "date": "",
+      "href": "/research/semantic-router-research.html",
+      "sourcePath": "semantic-router-research.html"
+    },
+    {
+      "title": "vLLM-Omni 深度研究：使用方法完全指南",
+      "description": "解耦多模态推理框架全解析 —— 安装配置、核心 API、CLI 命令、OpenAI 兼容 API、扩散模型、多阶段 LLM 部署与调优。",
+      "tags": [
+        "多模态",
+        "vLLM",
+        "扩散模型",
+        "Qwen-Omni",
+        "分布式"
+      ],
+      "category": "Research",
+      "type": "html",
+      "date": "",
+      "href": "/research/vllm-omni-research.html",
+      "sourcePath": "vllm-omni-research.html"
+    }
+  ]
+}

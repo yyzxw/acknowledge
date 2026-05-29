@@ -1,0 +1,1993 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mooncake 深度研究报告 - 分布式 KV Cache 存储与传输系统</title>
+<meta name="page-title" content="Mooncake 深度研究报告">
+<meta name="description" content="Moonshot AI 的 KVCache-centric 分离式推理架构 — Transfer Engine、分布式存储、全局调度、14+ 传输协议、FAST 2025 Best Paper">
+<meta name="keywords" content="Mooncake,KVCache,PD分离,RDMA,Transfer Engine,vLLM,SGLang,分布式推理">
+<meta name="page-category" content="深度研究">
+<meta name="page-color" content="purple">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #16213e;
+  --bg-card: #1e1e36;
+  --bg-code: #0d1117;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-blue: #3b82f6;
+  --accent-blue-light: #60a5fa;
+  --accent-blue-dark: #2563eb;
+  --accent-red: #ef4444;
+  --accent-green: #10b981;
+  --accent-orange: #f59e0b;
+  --accent-purple: #8b5cf6;
+  --accent-cyan: #06b6d4;
+  --border-color: #2d2d4a;
+  --border-subtle: #1e1e36;
+  --sidebar-width: 280px;
+  --header-height: 64px;
+  --font-serif: 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Noto Sans SC', Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Source Code Pro', 'Fira Code', monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.75;
+  min-height: 100vh;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--sidebar-width);
+  height: 100vh;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  z-index: 100;
+  padding: 24px 0;
+  transition: transform 0.3s ease;
+}
+
+.sidebar-header {
+  padding: 0 20px 20px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.sidebar-logo {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent-blue-light);
+  letter-spacing: 0.02em;
+}
+
+.sidebar-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.toc-list {
+  list-style: none;
+  padding: 0 12px;
+}
+
+.toc-item {
+  margin-bottom: 2px;
+}
+
+.toc-link {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  line-height: 1.5;
+}
+
+.toc-link:hover {
+  color: var(--text-primary);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.toc-link.active {
+  color: var(--accent-blue-light);
+  background: rgba(59, 130, 246, 0.12);
+  font-weight: 500;
+}
+
+.toc-number {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-blue);
+  min-width: 28px;
+  flex-shrink: 0;
+}
+
+.toc-sub {
+  padding-left: 20px;
+}
+
+.toc-sub .toc-link {
+  font-size: 0.8rem;
+  padding: 5px 12px;
+  color: var(--text-muted);
+}
+
+.toc-sub .toc-number {
+  color: var(--text-muted);
+}
+
+/* ===== Main Content ===== */
+.main-content {
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+}
+
+/* ===== Cover ===== */
+.cover {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 60px 40px;
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #0f1629 30%, #1a1040 70%, var(--bg-primary) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.cover::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at 30% 50%, rgba(59, 130, 246, 0.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 50%, rgba(139, 92, 246, 0.04) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.cover-content {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+}
+
+.cover-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border: 1px solid var(--accent-blue);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--accent-blue-light);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+}
+
+.cover h1 {
+  font-family: var(--font-serif);
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+}
+
+.cover h1 span {
+  background: linear-gradient(135deg, var(--accent-blue-light), var(--accent-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cover-subtitle {
+  font-size: 1.15rem;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-bottom: 40px;
+}
+
+.cover-meta {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.cover-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cover-meta-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+}
+
+/* ===== Sections ===== */
+.section {
+  padding: 80px 48px;
+  max-width: 960px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.section-header {
+  margin-bottom: 48px;
+}
+
+.section-number {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--accent-blue);
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.section h2 {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.section h3 {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 40px 0 20px;
+  line-height: 1.4;
+}
+
+.section h4 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 32px 0 16px;
+}
+
+p {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+p strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ===== Lists ===== */
+ul, ol {
+  margin: 0 0 20px 24px;
+  color: var(--text-secondary);
+}
+
+li {
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
+li strong {
+  color: var(--text-primary);
+}
+
+/* ===== Code ===== */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--bg-code);
+  color: var(--accent-blue-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin: 20px 0 24px;
+  overflow-x: auto;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: inherit;
+}
+
+/* Syntax highlight tokens */
+.code-keyword { color: var(--accent-purple); }
+.code-type { color: var(--accent-cyan); }
+.code-string { color: var(--accent-green); }
+.code-comment { color: var(--text-muted); font-style: italic; }
+.code-number { color: var(--accent-orange); }
+.code-field { color: var(--accent-blue-light); }
+
+/* ===== Tables ===== */
+.table-wrapper {
+  overflow-x: auto;
+  margin: 24px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+thead {
+  background: var(--bg-tertiary);
+}
+
+th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--border-color);
+  white-space: nowrap;
+}
+
+td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover td {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.table-check { color: var(--accent-green); font-weight: 600; }
+.table-cross { color: var(--text-muted); }
+.table-partial { color: var(--accent-orange); font-weight: 600; }
+
+/* ===== Blockquote ===== */
+blockquote {
+  border-left: 3px solid var(--accent-blue);
+  padding: 16px 20px;
+  margin: 24px 0;
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+blockquote p {
+  margin-bottom: 0;
+}
+
+/* ===== Callout boxes ===== */
+.callout {
+  padding: 20px 24px;
+  border-radius: 8px;
+  margin: 24px 0;
+  border: 1px solid;
+}
+
+.callout-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.callout p { margin-bottom: 0; font-size: 0.9rem; }
+
+.callout-insight {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.callout-insight .callout-title { color: var(--accent-blue-light); }
+
+.callout-warning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.callout-warning .callout-title { color: var(--accent-orange); }
+
+.callout-success {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.callout-success .callout-title { color: var(--accent-green); }
+
+.callout-danger {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.callout-danger .callout-title { color: var(--accent-red); }
+
+/* ===== Citation ===== */
+.cite {
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  color: var(--accent-blue);
+  vertical-align: super;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.2s;
+}
+
+.cite:hover {
+  color: var(--accent-blue-light);
+  text-decoration: underline;
+}
+
+/* ===== Metric cards ===== */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.metric-card:hover {
+  border-color: var(--accent-blue);
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent-blue-light);
+  line-height: 1.2;
+}
+
+.metric-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ===== Mermaid ===== */
+.mermaid-container {
+  margin: 32px 0;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.mermaid-container .mermaid {
+  display: flex;
+  justify-content: center;
+}
+
+.mermaid-title {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+/* ===== Timeline ===== */
+.timeline {
+  position: relative;
+  margin: 32px 0;
+  padding-left: 32px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-color);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 24px;
+  padding-left: 16px;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -28px;
+  top: 8px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 2px solid var(--bg-primary);
+}
+
+.timeline-date {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent-blue);
+  margin-bottom: 4px;
+}
+
+.timeline-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.timeline-text strong {
+  color: var(--text-primary);
+}
+
+/* ===== Comparison cards ===== */
+.comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+
+.comparison-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 24px;
+}
+
+.comparison-card h4 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.comparison-card ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.comparison-card li {
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+/* ===== Scenario cards ===== */
+.scenario-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+
+.scenario-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 24px;
+  border-top: 3px solid var(--accent-blue);
+}
+
+.scenario-card.danger { border-top-color: var(--accent-red); }
+.scenario-card.success { border-top-color: var(--accent-green); }
+
+.scenario-card h4 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.scenario-card p {
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+.scenario-card ul {
+  font-size: 0.85rem;
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* ===== References ===== */
+.references-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.references-list li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.ref-number {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent-blue);
+  min-width: 28px;
+  flex-shrink: 0;
+}
+
+.ref-title {
+  color: var(--text-secondary);
+}
+
+.ref-url {
+  color: var(--accent-cyan);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.ref-url:hover {
+  text-decoration: underline;
+}
+
+.ref-type {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent-blue-light);
+  white-space: nowrap;
+}
+
+/* ===== Footer ===== */
+.report-footer {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ===== Mobile hamburger ===== */
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 90;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .sidebar-toggle { display: flex; }
+
+  .sidebar {
+    transform: translateX(-100%);
+    z-index: 150;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+
+  .section {
+    padding: 48px 20px;
+  }
+
+  .cover h1 {
+    font-size: 2rem;
+  }
+
+  .cover-subtitle {
+    font-size: 1rem;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .comparison-grid,
+  .scenario-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cover-meta {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ===== Print ===== */
+@media print {
+  .sidebar, .sidebar-toggle, .sidebar-overlay { display: none !important; }
+  .main-content { margin-left: 0; }
+  .cover { min-height: auto; padding: 40px; }
+  .section { padding: 24px 0; }
+  body { background: #fff; color: #1a1a2e; }
+  p, li, td { color: #333; }
+}
+</style>
+</head>
+<body>
+
+<!-- Mobile Toggle -->
+<button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Sidebar -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">Mooncake Research</div>
+    <div class="sidebar-subtitle">Deep Research Report</div>
+  </div>
+  <ul class="toc-list">
+    <li class="toc-item"><a class="toc-link" href="#cover"><span class="toc-number">00</span>封面</a></li>
+    <li class="toc-item"><a class="toc-link" href="#overview"><span class="toc-number">01</span>项目概述</a></li>
+    <li class="toc-item"><a class="toc-link" href="#architecture"><span class="toc-number">02</span>整体架构</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#arch-overview"><span class="toc-number">2.1</span>四层架构设计</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#arch-diagram"><span class="toc-number">2.2</span>架构图</a></li>
+    <li class="toc-item"><a class="toc-link" href="#transfer-engine"><span class="toc-number">03</span>Transfer Engine</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#te-protocols"><span class="toc-number">3.1</span>协议支持</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#te-performance"><span class="toc-number">3.2</span>性能数据</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#te-tent"><span class="toc-number">3.3</span>TENT 下一代</a></li>
+    <li class="toc-item"><a class="toc-link" href="#mooncake-store"><span class="toc-number">04</span>Mooncake Store</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#store-replica"><span class="toc-number">4.1</span>多副本机制</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#store-allocation"><span class="toc-number">4.2</span>分配与淘汰</a></li>
+    <li class="toc-item"><a class="toc-link" href="#scheduler"><span class="toc-number">05</span>调度器设计</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#scheduler-cache"><span class="toc-number">5.1</span>Cache-aware 调度</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#scheduler-slo"><span class="toc-number">5.2</span>SLO 感知调度</a></li>
+    <li class="toc-item"><a class="toc-link" href="#ecosystem"><span class="toc-number">06</span>生态集成</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#eco-vllm"><span class="toc-number">6.1</span>vLLM 集成</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#eco-sglang"><span class="toc-number">6.2</span>SGLang 集成</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#eco-others"><span class="toc-number">6.3</span>其他框架</a></li>
+    <li class="toc-item"><a class="toc-link" href="#production"><span class="toc-number">07</span>生产实践</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#prod-kimi"><span class="toc-number">7.1</span>Kimi K2 部署</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#prod-cloud"><span class="toc-number">7.2</span>云厂商实践</a></li>
+    <li class="toc-item"><a class="toc-link" href="#competition"><span class="toc-number">08</span>竞争格局</a></li>
+    <li class="toc-item"><a class="toc-link" href="#insights"><span class="toc-number">09</span>横纵洞察</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#insight-history"><span class="toc-number">9.1</span>历史塑造</a></li>
+    <li class="toc-item toc-sub"><a class="toc-link" href="#insight-scenarios"><span class="toc-number">9.2</span>未来剧本</a></li>
+    <li class="toc-item"><a class="toc-link" href="#conclusion"><span class="toc-number">10</span>总结与展望</a></li>
+    <li class="toc-item"><a class="toc-link" href="#references"><span class="toc-number">11</span>参考来源</a></li>
+  </ul>
+</nav>
+
+<!-- Main Content -->
+<main class="main-content">
+
+<!-- ===== Cover ===== -->
+<section class="cover" id="cover">
+  <div class="cover-content">
+    <div class="cover-badge">Deep Research Report</div>
+    <h1>Mooncake<br><span>分布式 KV Cache 存储与传输系统</span></h1>
+    <p class="cover-subtitle">
+      以 KVCache 为中心的分离式架构深度研究报告 -- 覆盖架构设计、传输引擎、分布式存储、调度策略、生态集成与生产实践的全景分析
+    </p>
+    <div class="cover-meta">
+      <div class="cover-meta-item"><div class="cover-meta-dot"></div>基于 59 个来源、78 条证据</div>
+      <div class="cover-meta-item"><div class="cover-meta-dot"></div>数据截止 2026 年 5 月 18 日</div>
+      <div class="cover-meta-item"><div class="cover-meta-dot"></div>FAST'25 Best Paper Award</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 1. 项目概述 ===== -->
+<section class="section" id="overview">
+  <div class="section-header">
+    <div class="section-number">01</div>
+    <h2>项目概述与定位</h2>
+  </div>
+
+  <p>Mooncake 是 <strong>Moonshot AI（Kimi）</strong>开发的 LLM 推理服务平台，其核心创新在于提出了<strong>"以 KVCache 为中心的分离式架构"</strong>（KVCache-centric disaggregated architecture）。这一架构不仅将 prefill（预填充）和 decode（解码）阶段分离到不同集群，更关键的是将 GPU 集群中大量闲置的 CPU、DRAM、SSD 和 RDMA 资源整合为一个统一的分布式 KVCache 池。<a class="cite" href="#ref-1">[1]</a><a class="cite" href="#ref-2">[2]</a></p>
+
+  <p>2025 年 2 月，该论文在 <strong>USENIX FAST 2025</strong> 会议上获得 <strong>Erik Riedel Best Paper Award</strong>，标志着学术界对其技术贡献的认可。<a class="cite" href="#ref-11">[11]</a> 2026 年 2 月，Mooncake 正式加入 <strong>PyTorch 生态系统</strong>，成为 PyTorch 官方推荐的 KVCache 基础设施。<a class="cite" href="#ref-7">[7]</a></p>
+
+  <div class="callout callout-insight">
+    <div class="callout-title">核心问题</div>
+    <p>在大模型推理服务中，KVCache 的存储和传输已成为制约吞吐量和延迟的瓶颈。传统的单体推理架构将 prefill 和 decode 耦合在同一 GPU 上，导致 GPU 计算资源利用率低下。Mooncake 通过分离式架构，将 KVCache 从"计算的附属品"提升为"一等公民"。</p>
+  </div>
+
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-value">1000 亿+</div>
+      <div class="metric-label">每日处理 Token 数</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">5358</div>
+      <div class="metric-label">GitHub Stars</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">100+</div>
+      <div class="metric-label">社区贡献者</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">9 家</div>
+      <div class="metric-label">支持的加速器厂商</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 2. 整体架构 ===== -->
+<section class="section" id="architecture">
+  <div class="section-header">
+    <div class="section-number">02</div>
+    <h2>整体架构分析</h2>
+  </div>
+
+  <h3 id="arch-overview">四层架构设计</h3>
+  <p>Mooncake 的架构由四个核心组件构成，形成一个层次化的系统：<a class="cite" href="#ref-1">[1]</a><a class="cite" href="#ref-6">[6]</a></p>
+
+  <div class="comparison-grid">
+    <div class="comparison-card">
+      <h4 style="color: var(--accent-cyan);">Transfer Engine（传输层）</h4>
+      <p style="font-size:0.9rem;">底层数据传输层，提供统一的批量数据传输接口。屏蔽底层网络协议差异，使上层组件无需关心数据是通过 RDMA、TCP 还是 CXL 传输的。</p>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color: var(--accent-blue);">Mooncake Store（存储层）</h4>
+      <p style="font-size:0.9rem;">分布式 KVCache 存储引擎，所有 KVCache 以分页块形式存储在分布式缓存池中，块大小通常为 16-512 个 token，支持多副本和去重。</p>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color: var(--accent-orange);">Conductor（调度层）</h4>
+      <p style="font-size:0.9rem;">全局调度器，维护全局前缀树，计算请求与节点缓存的重叠分数，通过结合实时节点负载的成本函数选择最优节点。</p>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color: var(--accent-green);">P2P Store（去中心化存储）</h4>
+      <p style="font-size:0.9rem;">基于 Transfer Engine 构建的去中心化存储系统，专注于集群节点间临时对象（如 checkpoint 文件）的共享，使用 etcd 存储全局元数据。</p>
+    </div>
+  </div>
+
+  <h3 id="arch-diagram">架构图</h3>
+  <div class="mermaid-container">
+    <div class="mermaid-title">Mooncake 整体架构 -- 四层结构</div>
+    <div class="mermaid">
+graph TB
+    subgraph APP["应用层 Application Layer"]
+        V["vLLM Connector"]
+        S["SGLang HiCache"]
+        T["TensorRT-LLM Backend"]
+        LM["LMCache Connector"]
+        LD["LMDeploy Backend"]
+    end
+
+    subgraph SCHED["调度层 Scheduling Layer"]
+        C["Conductor 全局调度器"]
+        C1["Cache-aware Prefill Scheduler"]
+        C2["Load-balance Decode Scheduler"]
+        C3["SLO-aware Early Rejection"]
+        C --> C1
+        C --> C2
+        C --> C3
+    end
+
+    subgraph STORE["存储层 Storage Layer"]
+        MS["Mooncake Store"]
+        MS1["MasterService 元数据管理"]
+        MS2["ReplicaManager 副本管理"]
+        MS3["AllocationStrategy 分配策略"]
+        MS --> MS1
+        MS --> MS2
+        MS --> MS3
+        P2P["P2P Store"]
+        P2P1["etcd Metadata"]
+        P2P --> P2P1
+    end
+
+    subgraph TRANS["传输层 Transport Layer"]
+        TE["Transfer Engine"]
+        MT["MultiTransport 多协议调度"]
+        TD["Topology Discovery 拓扑发现"]
+        TE --> MT
+        TE --> TD
+        RDMA["RDMA InfiniBand/RoCE"]
+        TCP["TCP/IP"]
+        NVME["NVMe-oF"]
+        CXL["CXL/Shared Memory"]
+        NVL["NVLink"]
+        NAT["国产硬件适配器"]
+        MT --> RDMA
+        MT --> TCP
+        MT --> NVME
+        MT --> CXL
+        MT --> NVL
+        MT --> NAT
+    end
+
+    APP -.->|请求调度| SCHED
+    SCHED ==>|KVCache 读写| STORE
+    STORE ==>|数据传输| TRANS
+    APP ==>|直接 KVCache 访问| STORE
+
+    style APP fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style SCHED fill:#3d2e5c,stroke:#8b5cf6,color:#e2e8f0
+    style STORE fill:#1a3a4a,stroke:#06b6d4,color:#e2e8f0
+    style TRANS fill:#1a2e1a,stroke:#10b981,color:#e2e8f0
+    style V fill:#2a4a3a,stroke:#10b981,color:#e2e8f0
+    style S fill:#2a4a3a,stroke:#10b981,color:#e2e8f0
+    style T fill:#2a4a3a,stroke:#10b981,color:#e2e8f0
+    style LM fill:#2a4a3a,stroke:#10b981,color:#e2e8f0
+    style LD fill:#2a4a3a,stroke:#10b981,color:#e2e8f0
+    </div>
+  </div>
+
+  <p>Transfer Engine 的 API 设计简洁而强大：<code>installTransport</code> 安装协议、<code>openSegment</code> 打开远程内存段、<code>registerLocalMemory</code> 注册本地内存、<code>submitTransfer</code> 提交批量传输请求。<a class="cite" href="#ref-6">[6]</a></p>
+
+  <pre><code><span class="code-type">TransferRequest</span> {
+    <span class="code-field">OpCode</span>: <span class="code-keyword">READ</span> | <span class="code-keyword">WRITE</span>
+    <span class="code-field">source</span>: <span class="code-type">void*</span>
+    <span class="code-field">target_id</span>: <span class="code-type">SegmentID</span>
+    <span class="code-field">target_offset</span>: <span class="code-type">uint64_t</span>
+    <span class="code-field">length</span>: <span class="code-type">size_t</span>
+}</code></pre>
+</section>
+
+<!-- ===== 3. Transfer Engine ===== -->
+<section class="section" id="transfer-engine">
+  <div class="section-header">
+    <div class="section-number">03</div>
+    <h2>Transfer Engine：统一传输层</h2>
+  </div>
+
+  <p>Transfer Engine 是 Mooncake 最核心的基础设施组件，其设计哲学是<strong>"一次编写，到处传输"</strong>。通过 <code>MultiTransport</code> 类实现了协议无关的传输抽象，传输选择基于目标段的协议元数据自动完成。<a class="cite" href="#ref-6">[6]</a><a class="cite" href="#ref-13">[13]</a></p>
+
+  <h3 id="te-protocols">协议支持矩阵</h3>
+  <p>Transfer Engine 支持 <strong>14 种以上</strong>传输协议，覆盖从高性能数据中心到边缘设备的各种场景：<a class="cite" href="#ref-6">[6]</a></p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>功能特性</th>
+          <th>RDMA</th>
+          <th>TCP</th>
+          <th>NVMe-oF</th>
+          <th>CXL</th>
+          <th>NVLink</th>
+          <th>EFA</th>
+          <th>Ascend</th>
+          <th>HIP</th>
+          <th>MACA</th>
+          <th>Barex</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>零拷贝传输</strong></td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+        </tr>
+        <tr>
+          <td><strong>多 NIC 聚合</strong></td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+        </tr>
+        <tr>
+          <td><strong>拓扑感知</strong></td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+        </tr>
+        <tr>
+          <td><strong>故障切换</strong></td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+        </tr>
+        <tr>
+          <td><strong>GPU Direct</strong></td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+        </tr>
+        <tr>
+          <td><strong>跨节点</strong></td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-cross">&#10007;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+          <td class="table-check">&#10003;</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="te-performance">性能数据</h3>
+
+  <p><strong>拓扑感知路径选择</strong>是 Transfer Engine 的关键优化。它通过扫描 <code>/sys/devices/system/node</code> 发现 NUMA 节点，结合 <code>cudaDeviceGetPCIBusId</code> 获取 GPU 的 PCI 总线 ID，计算 PCI 距离和 NUMA 节点亲和度，选择距离最近的 HCA 设备。<a class="cite" href="#ref-1">[1]</a></p>
+
+  <p><strong>零拷贝传输</strong>通过 GPUDirect RDMA，数据可以直接从 GPU 内存传输到远程 GPU 内存，无需经过 CPU 中转。vLLM 博客数据显示，MooncakeTransferEngineConnector 使用 RDMA 仅需约 14 ms（TCP 约 810 ms），加速比达 <strong>58x</strong>。<a class="cite" href="#ref-8">[8]</a></p>
+
+  <div class="mermaid-container">
+    <div class="mermaid-title">Transfer Engine 性能对比 -- 多 NIC 带宽聚合</div>
+    <div class="mermaid">
+xychart-beta
+    title "Transfer Engine vs TCP 带宽对比 (40GB 数据传输)"
+    x-axis ["4x200G RoCE", "8x400G RoCE"]
+    y-axis "带宽 (GB/s)" 0 --> 200
+    bar [87, 190]
+    bar [36, 41]
+    </div>
+    <p style="text-align:center;font-size:0.8rem;color:var(--text-muted);margin-top:8px;">蓝色: Transfer Engine (RDMA) | 灰色: TCP | 40GB 传输测试（等效 LLaMA3-70B 128k KVCache）<a class="cite" href="#ref-1">[1]</a></p>
+  </div>
+
+  <div class="callout callout-success">
+    <div class="callout-title">关键性能指标</div>
+    <p>在 8x400 Gbps RoCE 网络上实现 <strong>190 GB/s</strong> 的聚合带宽（TCP 约 41 GB/s，<strong>4.6x 提升</strong>）。事件驱动完成机制通过 Slice 结构实现，使用 <code>memory_order_release/acquire</code> 保证跨线程可见性。</p>
+  </div>
+
+  <h3 id="te-tent">TENT：下一代传输引擎</h3>
+  <p>TENT（Transfer Engine NEXT）是 Mooncake TE 的下一代演进，2026 年 4 月发表于 FAISys 2025 会议。TENT 的核心创新是<strong>声明式切片喷射调度器</strong>，替代 Mooncake TE 的静态条带化策略。<a class="cite" href="#ref-4">[4]</a></p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>指标</th>
+          <th>TENT vs Mooncake TE</th>
+          <th>TENT vs NIXL</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>读吞吐量</td><td style="color:var(--accent-green);font-weight:600;">+32.9%</td><td style="color:var(--accent-green);font-weight:600;">一致优于</td></tr>
+        <tr><td>写吞吐量</td><td style="color:var(--accent-green);font-weight:600;">+33.7%</td><td style="color:var(--accent-green);font-weight:600;">一致优于</td></tr>
+        <tr><td>P99 延迟</td><td style="color:var(--accent-green);font-weight:600;">降至 27.6%</td><td style="color:var(--accent-green);font-weight:600;">一致优于</td></tr>
+        <tr><td>LLM Serving 吞吐</td><td colspan="2" style="color:var(--accent-green);font-weight:600;">SGLang 吞吐量提升 1.36x，P90 TTFT 降低 26%</td></tr>
+        <tr><td>权重更新</td><td colspan="2" style="color:var(--accent-green);font-weight:600;">加速 19.7%~26.1%</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== 4. Mooncake Store ===== -->
+<section class="section" id="mooncake-store">
+  <div class="section-header">
+    <div class="section-number">04</div>
+    <h2>Mooncake Store：分布式 KVCache 引擎</h2>
+  </div>
+
+  <p>Mooncake Store 的架构设计围绕三个核心目标：<strong>高可用、高性能和易扩展</strong>。<a class="cite" href="#ref-6">[6]</a><a class="cite" href="#ref-18">[18]</a></p>
+
+  <h3 id="store-replica">多副本机制</h3>
+  <p><code>ReplicateConfig</code> 结构支持配置副本数量、软硬 pin 策略、首选 segment 等参数。三种副本类型覆盖不同存储层级：</p>
+
+  <div class="comparison-grid">
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-blue);">MEMORY 副本</h4>
+      <p style="font-size:0.9rem;">内存副本，通过 <code>AllocatedBuffer</code> 管理，访问速度最快，适用于热数据。</p>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-green);">DISK 副本</h4>
+      <p style="font-size:0.9rem;">磁盘副本，支持 FilePerKey、Bucket、OffsetAllocator 三种后端，适用于温数据。</p>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-purple);">LOCAL_DISK 副本</h4>
+      <p style="font-size:0.9rem;">本地磁盘副本，client_id + transport_endpoint 标识，适用于冷数据。</p>
+    </div>
+  </div>
+
+  <div class="mermaid-container">
+    <div class="mermaid-title">Mooncake Store 副本管理流程</div>
+    <div class="mermaid">
+flowchart TD
+    A([开始]) --> B[PutStart 请求]
+    B --> C{Key 是否存在?}
+    C -->|是| D[返回错误]
+    C -->|否| E[分配副本空间]
+    E --> E1[MEMORY: AllocatedBuffer]
+    E --> E2[DISK: 文件路径]
+    E --> E3[LOCAL_DISK: client_id]
+    E1 & E2 & E3 --> F[设置状态: INITIALIZED]
+    F --> G[客户端写入数据]
+    G --> H[PutEnd 请求]
+    H --> I[设置状态: COMPLETE]
+    I --> J[更新元数据]
+    J --> K([结束])
+
+    style A fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style K fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style B fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style D fill:#3d1a1a,stroke:#ef4444,color:#e2e8f0
+    style C fill:#3d3a1a,stroke:#f59e0b,color:#e2e8f0
+    style E fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style F fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style G fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style H fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style I fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style J fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    </div>
+  </div>
+
+  <h3 id="store-allocation">分配策略与淘汰机制</h3>
+  <p><strong>分配策略</strong>：<code>RandomAllocationStrategy</code> 保证不同副本在不同 segment 上；<code>FreeRatioFirstAllocationStrategy</code> 采样 2N 个候选 segment，按空闲率排序选最优。Best-effort 语义确保当请求数量的副本无法满足时，尽可能多地分配。<a class="cite" href="#ref-6">[6]</a></p>
+
+  <p><strong>淘汰策略</strong>实现为 near-LRU：<code>BatchEvict</code> 方法有两轮淘汰，第一轮只淘汰无 soft pin 的对象，第二轮在必要时淘汰 soft pinned 的对象。</p>
+
+  <p><strong>元数据管理</strong>支持多种后端：etcd、Redis、K8s Lease、HTTP 元数据服务器。MasterService 采用 <strong>1024 个分片</strong>的元数据存储，使用 SharedMutex 实现读写分离。<a class="cite" href="#ref-6">[6]</a></p>
+
+  <p><strong>高可用机制</strong>包括：etcd 作为 HA 后端、Snapshot/Restore 机制（fork 子进程序列化）、Hot Standby 状态机、分布式元数据分片、Client 心跳监控。</p>
+
+  <div class="callout callout-insight">
+    <div class="callout-title">ObjectDataType 分类</div>
+    <p>Mooncake Store 支持按数据类型存储：KVCACHE、TENSOR、WEIGHT、SAMPLE、ACTIVATION、GRADIENT、OPTIMIZER_STATE、METADATA、GENERAL，为未来类型感知策略奠定基础。</p>
+  </div>
+</section>
+
+<!-- ===== 5. 调度器设计 ===== -->
+<section class="section" id="scheduler">
+  <div class="section-header">
+    <div class="section-number">05</div>
+    <h2>Conductor：全局调度器设计</h2>
+  </div>
+
+  <p>Conductor 的核心职责是在<strong>最大化有效吞吐量的同时满足延迟相关的 SLO</strong>。与传统基于请求数量的负载均衡不同，Mooncake 的调度考虑了更多维度。<a class="cite" href="#ref-6">[6]</a><a class="cite" href="#ref-1">[1]</a></p>
+
+  <h3 id="scheduler-cache">Cache-aware Prefill 调度</h3>
+  <p>Conductor 维护一个<strong>全局前缀树（global prefix tree）</strong>，计算请求与节点缓存的重叠分数。调度决策不仅考虑负载，还考虑：</p>
+  <ul>
+    <li><strong>前缀缓存命中长度</strong>：优先将请求路由到具有更长前缀缓存的 prefill 实例</li>
+    <li><strong>可复用 KVCache 块分布</strong>：考虑 KVCache 块在集群中的分布</li>
+    <li><strong>排队时间</strong>：结合前缀缓存带来的 prefill 时间和本地排队时间</li>
+  </ul>
+
+  <p>Load-balance Decode 调度使用以下负载评分公式：</p>
+  <pre><code><span class="code-field">load_score</span> = <span class="code-field">current_batch_size</span> + <span class="code-number">k</span> * <span class="code-field">waiting_queue_length</span></code></pre>
+
+  <h3 id="scheduler-slo">SLO 感知调度与早期拒绝</h3>
+  <p>定义 <code>l_ttft</code> 和 <code>l_tbt</code> 分别为 TTFT（Time To First Token）和 TBT（Time Between Tokens）的 SLO 约束，通过比较实例上预测的最大 TTFT/TBT 与 SLO 约束来确定负载。<a class="cite" href="#ref-1">[1]</a></p>
+
+  <div class="mermaid-container">
+    <div class="mermaid-title">Conductor 调度决策流程</div>
+    <div class="mermaid">
+flowchart TD
+    A[请求到达] --> B[提取请求特征]
+    B --> B1[前缀 hash]
+    B --> B2[上下文长度]
+    B --> B3[预估输出长度]
+    B1 & B2 & B3 --> C[查询全局前缀树]
+    C --> D[计算各 prefill 实例重叠分数]
+    D --> E[计算成本函数]
+    E --> F[选择最优 prefill 实例]
+    F --> G[预测 decode 负载]
+    G --> G1[系统级预测]
+    G --> G2[请求级预测]
+    G1 & G2 --> H{SLO 检查}
+    H -->|TTFT & TBT 满足| I[接受请求]
+    H -->|SLO 违规| J[早期拒绝]
+    I --> K[执行 prefill]
+    K --> L[流式传输 KVCache]
+    L --> M[执行 decode]
+    M --> N[返回结果]
+
+    style A fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style H fill:#3d3a1a,stroke:#f59e0b,color:#e2e8f0
+    style I fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style J fill:#3d1a1a,stroke:#ef4444,color:#e2e8f0
+    </div>
+  </div>
+
+  <p><strong>预测式早期拒绝策略</strong>解决过载场景下的负载波动问题。核心思想是预测 prefill 阶段完成后的 decode 负载，据此决定是否接受请求。这包括请求级预测（预测每个请求的未知输出长度）和系统级预测（预测未来时间段的整体系统负载）。</p>
+
+  <div class="callout callout-warning">
+    <div class="callout-title">开源状态</div>
+    <p>Conductor 目前以 RFC 形式存在于 GitHub Issues（#977），尚未完全开源。这一决策可能是出于商业竞争的考虑，但限制了社区的贡献和验证。<a class="cite" href="#ref-6">[6]</a></p>
+  </div>
+</section>
+
+<!-- ===== 6. 生态集成 ===== -->
+<section class="section" id="ecosystem">
+  <div class="section-header">
+    <div class="section-number">06</div>
+    <h2>生态集成分析</h2>
+  </div>
+
+  <p>Mooncake 的生态集成策略是<strong>"深度嵌入，而非浅层对接"</strong>。它不是简单地提供一个传输 API，而是与各框架的核心机制深度耦合。<a class="cite" href="#ref-7">[7]</a></p>
+
+  <h3 id="eco-vllm">vLLM 集成</h3>
+  <p>vLLM 集成经历了三个阶段：<a class="cite" href="#ref-8">[8]</a><a class="cite" href="#ref-12">[12]</a><a class="cite" href="#ref-14">[14]</a></p>
+  <ol>
+    <li><strong>MooncakeConnector（PD 分离传输层）</strong>：实现 vLLM 的 <code>KVConnectorBase_V1</code> 接口，采用 ZMQ 侧信道协调 prefill/decode 两端的 KV 传输</li>
+    <li><strong>vLLM V1 Proxy Server（xPyD 分离代理）</strong>：实现 FastAPI 代理层，支持多个 prefill 实例和多个 decode 实例的 round-robin 调度</li>
+    <li><strong>Mooncake Store 作为分布式 KV 池</strong>：2026 年 5 月最新进展，从点对点传输升级为分布式 KV 池</li>
+  </ol>
+
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-value" style="color:var(--accent-green);">3.8x</div>
+      <div class="metric-label">吞吐量提升</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" style="color:var(--accent-green);">46x</div>
+      <div class="metric-label">TTFT 降低</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value" style="color:var(--accent-green);">8.6x</div>
+      <div class="metric-label">端到端延迟降低</div>
+    </div>
+  </div>
+
+  <h3 id="eco-sglang">SGLang 集成</h3>
+  <p>SGLang 集成同样深入：<a class="cite" href="#ref-9">[9]</a><a class="cite" href="#ref-25">[25]</a></p>
+
+  <div class="mermaid-container">
+    <div class="mermaid-title">SGLang HiCache 三级缓存架构</div>
+    <div class="mermaid">
+graph LR
+    subgraph L1["L1: GPU HBM"]
+        G1["RadixTree"]
+        G2["访问延迟: ~us"]
+        G3["容量: 十GB级"]
+    end
+    subgraph L2["L2: Host DRAM"]
+        H1["HiRadixTree 页表"]
+        H2["访问延迟: ~100us"]
+        H3["容量: 百GB级"]
+    end
+    subgraph L3["L3: Mooncake Store"]
+        M1["分布式存储"]
+        M2["访问延迟: ~ms"]
+        M3["容量: TB级"]
+    end
+
+    L1 -->|溢出| L2
+    L2 -->|溢出| L3
+
+    style L1 fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style L2 fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style L3 fill:#2d1a4a,stroke:#8b5cf6,color:#e2e8f0
+    </div>
+  </div>
+
+  <ul>
+    <li><strong>HiCache 三级缓存</strong>：GPU HBM（L1）、Host DRAM（L2）、Mooncake Store（L3）</li>
+    <li><strong>EPD（Encode-Prefill-Decode）分离</strong>：将多模态编码器从语言模型节点解耦，利用 RDMA 引擎进行大型多模态 embedding 的零拷贝传输</li>
+    <li><strong>Elastic Expert Parallelism</strong>：容错的专家并行推理</li>
+  </ul>
+
+  <p>蚂蚁集团实测：DeepSeek-R1-671B 模型在 PD 分离部署下，缓存命中平均 TTFT 降低 <strong>84%</strong>。SGLang 官方测试 HiCache 实现 <strong>6x 吞吐提升</strong>和 <strong>80% TTFT 降低</strong>。<a class="cite" href="#ref-9">[9]</a></p>
+
+  <h3 id="eco-others">其他框架集成</h3>
+
+  <div class="mermaid-container">
+    <div class="mermaid-title">Mooncake 生态集成关系图</div>
+    <div class="mermaid">
+graph TB
+    MC["Mooncake<br/>Transfer Engine + Store"]
+
+    V["vLLM<br/>KV Connector + Store"]
+    SG["SGLang<br/>HiCache + EPD"]
+    TRT["TensorRT-LLM<br/>KVCache 传输后端"]
+    LMC["LMCache<br/>远程后端"]
+    LMD["LMDeploy<br/>PD 分离后端"]
+    XLL["xLLM<br/>混合 KV 管理"]
+
+    NIXL["NIXL<br/>后端插件"]
+    FlexKV["FlexKV<br/>分布式 KV 复用"]
+
+    NVIDIA["NVIDIA CUDA"]
+    AMD["AMD ROCm"]
+    ASC["华为 Ascend"]
+    HW["其他国产硬件"]
+
+    MK["Moonshot AI"]
+    ALI["阿里云"]
+    ANT["蚂蚁集团"]
+    JD["京东"]
+    TX["腾讯"]
+    MT["美团"]
+
+    MC --- V
+    MC --- SG
+    MC --- TRT
+    MC --- LMC
+    MC --- LMD
+    MC --- XLL
+
+    NIXL -.->|后端插件| MC
+    FlexKV -.->|传输依赖| MC
+
+    NVIDIA -.-> MC
+    AMD -.-> MC
+    ASC -.-> MC
+    HW -.-> MC
+
+    MK ==>|开发| MC
+    ALI ==>|采用| MC
+    ANT ==>|采用| MC
+    JD ==>|采用| MC
+    TX ==>|采用| MC
+    MT ==>|采用| MC
+
+    style MC fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0,stroke-width:3px
+    style V fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style SG fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style TRT fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style LMC fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style LMD fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style XLL fill:#1a3a2a,stroke:#10b981,color:#e2e8f0
+    style NIXL fill:#1a2e3a,stroke:#06b6d4,color:#e2e8f0
+    style FlexKV fill:#1a2e3a,stroke:#06b6d4,color:#e2e8f0
+    style NVIDIA fill:#3d3a1a,stroke:#f59e0b,color:#e2e8f0
+    style AMD fill:#3d3a1a,stroke:#f59e0b,color:#e2e8f0
+    style ASC fill:#3d3a1a,stroke:#f59e0b,color:#e2e8f0
+    style HW fill:#3d3a1a,stroke:#f59e0b,color:#e2e8f0
+    style MK fill:#2d1a4a,stroke:#8b5cf6,color:#e2e8f0
+    style ALI fill:#2d1a4a,stroke:#8b5cf6,color:#e2e8f0
+    style ANT fill:#2d1a4a,stroke:#8b5cf6,color:#e2e8f0
+    style JD fill:#2d1a4a,stroke:#8b5cf6,color:#e2e8f0
+    style TX fill:#2d1a4a,stroke:#8b5cf6,color:#e2e8f0
+    style MT fill:#2d1a4a,stroke:#8b5cf6,color:#e2e8f0
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr><th>框架</th><th>集成方式</th><th>集成时间</th><th>关键特性</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>TensorRT-LLM</strong></td><td>KVCache 传输后端</td><td>2024-12</td><td>PD 分离推理</td></tr>
+        <tr><td><strong>LMCache</strong></td><td>MooncakeStoreConnector</td><td>2025-05</td><td>远程存储后端</td></tr>
+        <tr><td><strong>LMDeploy</strong></td><td>PD 分离后端</td><td>2025-06</td><td>PD 分离推理</td></tr>
+        <tr><td><strong>xLLM</strong>（京东）</td><td>混合 KV 管理</td><td>2025-08</td><td>基于 Mooncake 构建</td></tr>
+        <tr><td><strong>NIXL</strong></td><td>后端插件</td><td>2025-05</td><td>TE 作为传输后端</td></tr>
+        <tr><td><strong>FlexKV</strong>（腾讯+NVIDIA）</td><td>传输依赖</td><td>2026-01</td><td>分布式 KV 复用</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <blockquote>
+    <p>"Mooncake adds a vital layer of memory virtualization to the open-source AI stack." -- PyTorch 官方评价<a class="cite" href="#ref-7">[7]</a></p>
+  </blockquote>
+</section>
+
+<!-- ===== 7. 生产实践 ===== -->
+<section class="section" id="production">
+  <div class="section-header">
+    <div class="section-number">07</div>
+    <h2>应用场景与生产实践</h2>
+  </div>
+
+  <h3 id="prod-kimi">Kimi K2 大规模部署</h3>
+  <p>Kimi K2 是 Moonshot AI 的约 <strong>1T 参数 MoE 模型</strong>，采用 384 个专家（每 token 激活 8 个），支持 128K token 上下文窗口。Mooncake 支持 Kimi K2 在 128 块 H200 GPU 上的 PD 分离部署和大规模专家并行。<a class="cite" href="#ref-10">[10]</a><a class="cite" href="#ref-25">[25]</a></p>
+
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-value">224k</div>
+      <div class="metric-label">tokens/sec 预填充吞吐</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">288k</div>
+      <div class="metric-label">tokens/sec 解码吞吐</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">7x</div>
+      <div class="metric-label">权重传输加速（53s -> 7.2s）</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">128</div>
+      <div class="metric-label">H200 GPU 集群</div>
+    </div>
+  </div>
+
+  <p>在强化学习训练场景中，Mooncake TransferEngine 实现基于 RDMA 的 P2P 权重更新：利用源端 CPU 引擎副本和 P2P RDMA 传输，将 1T 参数 Kimi-K2 的权重传输时间从 53 秒加速到 7.2 秒。代价仅为每个训练 rank 额外一个推理引擎副本（32G CPU 内存）。<a class="cite" href="#ref-25">[25]</a></p>
+
+  <h3 id="prod-cloud">云厂商实践</h3>
+
+  <div class="comparison-grid">
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-orange);">Cloudflare</h4>
+      <p style="font-size:0.9rem;">使用 Mooncake Transfer Engine 和 Store，利用 RDMA 协议实现 GPU 机器间直接内存传输，消除了集群内会话感知路由需求，实现更均匀的负载均衡。<a class="cite" href="#ref-7">[7]</a></p>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-purple);">阿里云 RBG</h4>
+      <p style="font-size:0.9rem;">将 Mooncake 与 SGLang RBG 结合，构建云原生 LLM 推理平台。<a class="cite" href="#ref-15">[15]</a></p>
+    </div>
+  </div>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr><th>配置</th><th>平均 TTFT</th><th>TTFT 变化</th><th>吞吐量 (tok/s)</th><th>吞吐变化</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>GPU Only 基线</td><td>5.91s</td><td>--</td><td>6576.85</td><td>--</td></tr>
+        <tr><td>+L2 DRAM</td><td>3.77s</td><td style="color:var(--accent-green);">-36.2%</td><td>10054.21</td><td style="color:var(--accent-green);">+52.89%</td></tr>
+        <tr><td>+L3 Mooncake</td><td>2.58s</td><td style="color:var(--accent-green);">-56.3%</td><td>15022.80</td><td style="color:var(--accent-green);">+49.41%</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:0.8rem;color:var(--text-muted);padding:8px 16px;">Qwen3-235B 多轮对话场景 <a class="cite" href="#ref-15">[15]</a></p>
+  </div>
+
+  <div class="callout callout-success">
+    <div class="callout-title">行业采用者</div>
+    <p>Mooncake 的采用者包括：Moonshot AI、阿里巴巴云、蚂蚁集团、京东、腾讯、美团、趋境科技、LightSeek Foundation。<a class="cite" href="#ref-7">[7]</a></p>
+  </div>
+</section>
+
+<!-- ===== 8. 竞争格局 ===== -->
+<section class="section" id="competition">
+  <div class="section-header">
+    <div class="section-number">08</div>
+    <h2>竞争格局分析</h2>
+  </div>
+
+  <p>Mooncake 的竞品主要来自三个方向，每个方向代表了不同的技术路线和生态策略。<a class="cite" href="#ref-13">[13]</a></p>
+
+  <div class="comparison-grid">
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-green);">NVIDIA 生态</h4>
+      <ul>
+        <li><strong>NCCL</strong>：集合通信模式不适合 P2P KV 传输，存在性能差和大故障域问题</li>
+        <strong>NIXL</strong>：基于 UCX，支持 AMD GPU，但功能相对有限</li>
+        <li><strong>策略</strong>：通过 TensorRT-LLM 和 NIXL 构建封闭生态</li>
+      </ul>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-cyan);">学术项目</h4>
+      <ul>
+        <li><strong>vLLM P2P 传输</strong>：针对特定场景的优化</li>
+        <li><strong>SGLang RadixAttention</strong>：单点优化到系统化</li>
+        <li><strong>差异</strong>：从单点优化到系统化，而 Mooncake 从一开始就是系统化设计</li>
+      </ul>
+    </div>
+    <div class="comparison-card">
+      <h4 style="color:var(--accent-purple);">云厂商方案</h4>
+      <ul>
+        <li><strong>阿里云 RBG</strong>：基于云基础设施的方案</li>
+        <li><strong>AWS 推理服务</strong>：与云服务深度集成</li>
+        <li><strong>劣势</strong>：绑定特定云平台，Mooncake 的跨平台特性使其可以在任何环境中部署</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-insight">
+    <div class="callout-title">本质差异</div>
+    <p>Mooncake 是<strong>"从 KVCache 出发"</strong>的架构设计，而竞品大多是"从计算出发"的优化。这种出发点的不同，决定了它们在 KVCache 管理上的深度和广度。</p>
+  </div>
+</section>
+
+<!-- ===== 9. 横纵洞察 ===== -->
+<section class="section" id="insights">
+  <div class="section-header">
+    <div class="section-number">09</div>
+    <h2>横纵交汇洞察（五问分析）</h2>
+  </div>
+
+  <h3 id="insight-history">历史如何塑造了当下的竞争位置？</h3>
+  <p>Mooncake 的诞生源于 Moonshot AI 在 Kimi 推理服务中遇到的真实痛点。2024 年 6 月，当大多数团队还在优化单机推理效率时，Moonshot AI 已经意识到 KVCache 的存储和传输将成为大规模推理的瓶颈。这一早期洞察使 Mooncake 在 KVCache-centric 架构上建立了先发优势。<a class="cite" href="#ref-2">[2]</a></p>
+
+  <p>与学术驱动的项目不同，Mooncake 从一开始就是为生产环境设计的。它在 Moonshot AI 的数千节点集群上经过了实战检验，处理超过 1000 亿 token/天的生产负载。这种<strong>"从生产中来，到生产中去"</strong>的路径，使 Mooncake 在可靠性、性能和易用性上具有天然优势。</p>
+
+  <p><strong>当前优势的历史根源</strong>可以追溯到 2024 年 7 月的技术报告发布。在这个时间点，Moonshot AI 做出了两个关键决策：(1) 将 KVCache 提升为一等公民；(2) 选择开放生态路线。这两个决策的组合效应是：Mooncake 既有了核心技术的深度，又有了生态集成的广度。</p>
+
+  <p><strong>当前劣势的历史根源</strong>是 Moonshot AI 在开源策略上的保守。Conductor 调度器尚未完全开源，部分传输协议的性能数据未公开。这种策略在保护商业秘密的同时，也限制了社区的深度参与。</p>
+
+  <h3 id="insight-scenarios">未来三个剧本</h3>
+
+  <div class="scenario-cards">
+    <div class="scenario-card success">
+      <h4>最可能的剧本：成为事实标准</h4>
+      <p>Mooncake 有望成为 KVCache 基础设施的事实标准，类似于 Kubernetes 在容器编排领域的地位。</p>
+      <ul>
+        <li>PyTorch Ecosystem 成员身份</li>
+        <li>8 家行业采用者</li>
+        <li>16 个里程碑的路线图</li>
+        <li>TENT V1.1 计划 2026 Q2 发布</li>
+      </ul>
+    </div>
+    <div class="scenario-card danger">
+      <h4>最危险的剧本：被封闭生态取代</h4>
+      <p>如果云厂商推出深度集成的 KVCache 解决方案并与其云服务绑定，Mooncake 的跨平台优势可能被削弱。</p>
+      <ul>
+        <li>云厂商的资源和市场影响力</li>
+        <li>用户对云服务的依赖性</li>
+        <li>Mooncake 在云环境中的性能优化空间</li>
+      </ul>
+    </div>
+    <div class="scenario-card">
+      <h4>最乐观的剧本：推动标准化</h4>
+      <p>Mooncake 有可能推动 KVCache 管理的标准化，建立开放的 KVCache 互操作协议，实现"一次生成，到处复用"。</p>
+      <ul>
+        <li>广泛的硬件支持（9 家加速器厂商）</li>
+        <li>多框架集成</li>
+        <li>PyTorch Ecosystem 的标准化推动</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 10. 总结与展望 ===== -->
+<section class="section" id="conclusion">
+  <div class="section-header">
+    <div class="section-number">10</div>
+    <h2>总结与展望</h2>
+  </div>
+
+  <h3>核心优势</h3>
+  <ol>
+    <li><strong>架构创新性</strong>：KVCache-centric 分离式架构将 KVCache 从"计算的附属品"提升为"一等公民"</li>
+    <li><strong>传输性能</strong>：Transfer Engine 在 8x400 Gbps RoCE 网络上实现 190 GB/s 聚合带宽，比 TCP 快 4.6x</li>
+    <li><strong>生态广度</strong>：与 vLLM、SGLang、TensorRT-LLM、LMCache、LMDeploy 等主流框架深度集成</li>
+    <li><strong>硬件覆盖</strong>：支持 9 家加速器厂商和 6 种网络 Fabric，是真正的跨平台方案</li>
+    <li><strong>生产验证</strong>：在 Moonshot AI 的数千节点集群上经过实战检验，每日处理超过 1000 亿 token</li>
+    <li><strong>社区活跃</strong>：GitHub 5358 stars，100+ 贡献者，PyTorch Ecosystem 成员</li>
+  </ol>
+
+  <h3>主要局限</h3>
+  <ol>
+    <li><strong>Conductor 未完全开源</strong>：全局调度器是核心组件，但目前以 RFC 形式存在</li>
+    <li><strong>独立基准测试缺乏</strong>：性能数据主要来自官方论文和文档</li>
+    <li><strong>超大规模集群数据有限</strong>：在万卡以上的集群中，调度性能和稳定性数据有限</li>
+    <li><strong>国产硬件性能数据不完整</strong>：部分传输协议的具体性能数据未公开</li>
+  </ol>
+
+  <h3>技术演进方向</h3>
+  <ul>
+    <li><strong>TENT V1.1</strong>（计划 2026 Q2 发布）：引入声明式切片喷射调度器，进一步提升传输性能<a class="cite" href="#ref-4">[4]</a></li>
+    <li><strong>跨数据中心推理</strong>：PrfaaS 论文提出 Prefill-as-a-Service 概念，实现 54% 更高服务吞吐量，P90 TTFT 降低 64%<a class="cite" href="#ref-5">[5]</a></li>
+    <li><strong>Store V3 演进</strong>：更高效的存储后端和淘汰策略，ObjectDataType 分类为类型感知策略奠定基础</li>
+    <li><strong>RL 训练支持</strong>：Mooncake RL 模块的出现，表明 Mooncake 正在向训练场景扩展</li>
+    <li><strong>专家并行支持</strong>：Mooncake EP 模块提供集合通信后端和专家并行内核</li>
+  </ul>
+
+  <div class="callout callout-success">
+    <div class="callout-title">行业影响</div>
+    <p>Mooncake 的成功实践正在改变 LLM 推理的架构范式。从"以计算为中心"到"以 KVCache 为中心"的转变，不仅是技术层面的创新，更是思维方式的变革。随着 LLM 模型规模的持续增长和推理需求的爆发式增长，KVCache 管理将成为越来越关键的基础设施。</p>
+  </div>
+</section>
+
+<!-- ===== 11. 参考来源 ===== -->
+<section class="section" id="references">
+  <div class="section-header">
+    <div class="section-number">11</div>
+    <h2>参考来源</h2>
+  </div>
+
+  <ol class="references-list">
+    <li id="ref-1">
+      <span class="ref-number">[1]</span>
+      <div>
+        <div class="ref-title">Mooncake: Trading More Storage for Less Computation -- FAST'25 Best Paper</div>
+        <a class="ref-url" href="https://www.usenix.org/conference/fast25/presentation/qin" target="_blank">usenix.org/conference/fast25/presentation/qin</a>
+        <span class="ref-type">conference_paper</span>
+      </div>
+    </li>
+    <li id="ref-2">
+      <span class="ref-number">[2]</span>
+      <div>
+        <div class="ref-title">Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving (arXiv)</div>
+        <a class="ref-url" href="https://arxiv.org/abs/2407.00079" target="_blank">arxiv.org/abs/2407.00079</a>
+        <span class="ref-type">preprint</span>
+      </div>
+    </li>
+    <li id="ref-3">
+      <span class="ref-number">[3]</span>
+      <div>
+        <div class="ref-title">Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving (ACM TOS)</div>
+        <a class="ref-url" href="https://doi.org/10.1145/3773772" target="_blank">doi.org/10.1145/3773772</a>
+        <span class="ref-type">journal_paper</span>
+      </div>
+    </li>
+    <li id="ref-4">
+      <span class="ref-number">[4]</span>
+      <div>
+        <div class="ref-title">TENT: A Declarative Slice Spraying Engine for Performant and Resilient Data Movement</div>
+        <a class="ref-url" href="https://arxiv.org/abs/2604.00368" target="_blank">arxiv.org/abs/2604.00368</a>
+        <span class="ref-type">preprint</span>
+      </div>
+    </li>
+    <li id="ref-5">
+      <span class="ref-number">[5]</span>
+      <div>
+        <div class="ref-title">Prefill-as-a-Service: KVCache of Next-Generation Models Could Go Cross-Datacenter</div>
+        <a class="ref-url" href="https://arxiv.org/abs/2604.15039" target="_blank">arxiv.org/abs/2604.15039</a>
+        <span class="ref-type">preprint</span>
+      </div>
+    </li>
+    <li id="ref-6">
+      <span class="ref-number">[6]</span>
+      <div>
+        <div class="ref-title">Mooncake GitHub Repository (kvcache-ai/Mooncake)</div>
+        <a class="ref-url" href="https://github.com/kvcache-ai/Mooncake" target="_blank">github.com/kvcache-ai/Mooncake</a>
+        <span class="ref-type">code_repo</span>
+      </div>
+    </li>
+    <li id="ref-7">
+      <span class="ref-number">[7]</span>
+      <div>
+        <div class="ref-title">Mooncake Joins PyTorch Ecosystem -- PyTorch Official Blog</div>
+        <a class="ref-url" href="https://pytorch.org/blog/mooncake-joins-pytorch-ecosystem/" target="_blank">pytorch.org/blog/mooncake-joins-pytorch-ecosystem</a>
+        <span class="ref-type">blog</span>
+      </div>
+    </li>
+    <li id="ref-8">
+      <span class="ref-number">[8]</span>
+      <div>
+        <div class="ref-title">Serving Agentic Workloads at Scale with vLLM x Mooncake</div>
+        <a class="ref-url" href="https://vllm.ai/blog/mooncake-store" target="_blank">vllm.ai/blog/mooncake-store</a>
+        <span class="ref-type">blog</span>
+      </div>
+    </li>
+    <li id="ref-9">
+      <span class="ref-number">[9]</span>
+      <div>
+        <div class="ref-title">SGLang HiCache: Fast Hierarchical KV Caching -- LMSYS Blog</div>
+        <a class="ref-url" href="https://lmsys.org/blog/2025-09-10-sglang-hicache/" target="_blank">lmsys.org/blog/2025-09-10-sglang-hicache</a>
+        <span class="ref-type">blog</span>
+      </div>
+    </li>
+    <li id="ref-10">
+      <span class="ref-number">[10]</span>
+      <div>
+        <div class="ref-title">Kimi K2 Large-Scale Expert Parallelism Deployment -- LMSYS Blog</div>
+        <a class="ref-url" href="https://lmsys.org/blog/2025-07-20-k2-large-scale-ep/" target="_blank">lmsys.org/blog/2025-07-20-k2-large-scale-ep</a>
+        <span class="ref-type">blog</span>
+      </div>
+    </li>
+    <li id="ref-11">
+      <span class="ref-number">[11]</span>
+      <div>
+        <div class="ref-title">Tsinghua University: Best Paper Award at FAST 2025</div>
+        <a class="ref-url" href="https://www.tsinghua.edu.cn/en/info/1245/14138.htm" target="_blank">tsinghua.edu.cn</a>
+        <span class="ref-type">news</span>
+      </div>
+    </li>
+    <li id="ref-12">
+      <span class="ref-number">[12]</span>
+      <div>
+        <div class="ref-title">vLLM RFC: Implement disaggregated prefilling using Mooncake</div>
+        <a class="ref-url" href="https://github.com/vllm-project/vllm/issues/10727" target="_blank">github.com/vllm-project/vllm/issues/10727</a>
+        <span class="ref-type">issue</span>
+      </div>
+    </li>
+    <li id="ref-13">
+      <span class="ref-number">[13]</span>
+      <div>
+        <div class="ref-title">Everything You Want to Know about KV Cache Transfer Engine (UCCL)</div>
+        <a class="ref-url" href="https://uccl-project.github.io/posts/kv-transfer-engine/" target="_blank">uccl-project.github.io</a>
+        <span class="ref-type">blog</span>
+      </div>
+    </li>
+    <li id="ref-14">
+      <span class="ref-number">[14]</span>
+      <div>
+        <div class="ref-title">vLLM-Omni MooncakeTransferEngineConnector Documentation</div>
+        <a class="ref-url" href="https://docs.vllm.ai/projects/vllm-omni/en/latest/design/feature/omni_connectors/mooncake_transfer_engine_connector/" target="_blank">docs.vllm.ai</a>
+        <span class="ref-type">documentation</span>
+      </div>
+    </li>
+    <li id="ref-15">
+      <span class="ref-number">[15]</span>
+      <div>
+        <div class="ref-title">Alibaba Cloud: Production-Grade Cloud-Native LLM Inference with SGLang RBG + Mooncake</div>
+        <a class="ref-url" href="https://www.alibabacloud.com/blog/building-a-production-grade-cloud-native-large-model-inference-platform-with-sglang-rbg" target="_blank">alibabacloud.com</a>
+        <span class="ref-type">blog</span>
+      </div>
+    </li>
+    <li id="ref-16">
+      <span class="ref-number">[16]</span>
+      <div>
+        <div class="ref-title">Mooncake Project Overall Roadmap (GitHub Issue #1883)</div>
+        <a class="ref-url" href="https://github.com/kvcache-ai/Mooncake/issues/1883" target="_blank">github.com/kvcache-ai/Mooncake/issues/1883</a>
+        <span class="ref-type">issue</span>
+      </div>
+    </li>
+    <li id="ref-17">
+      <span class="ref-number">[17]</span>
+      <div>
+        <div class="ref-title">Mooncake Transfer Engine NEXT (TENT) Roadmap</div>
+        <a class="ref-url" href="https://github.com/kvcache-ai/Mooncake/issues/1058" target="_blank">github.com/kvcache-ai/Mooncake/issues/1058</a>
+        <span class="ref-type">issue</span>
+      </div>
+    </li>
+    <li id="ref-18">
+      <span class="ref-number">[18]</span>
+      <div>
+        <div class="ref-title">Mooncake Official Documentation</div>
+        <a class="ref-url" href="https://kvcache-ai.github.io/Mooncake/" target="_blank">kvcache-ai.github.io/Mooncake</a>
+        <span class="ref-type">documentation</span>
+      </div>
+    </li>
+    <li id="ref-19">
+      <span class="ref-number">[19]</span>
+      <div>
+        <div class="ref-title">FAST'25 Paper PDF (Mooncake)</div>
+        <a class="ref-url" href="https://www.usenix.org/system/files/fast25-qin.pdf" target="_blank">usenix.org/system/files/fast25-qin.pdf</a>
+        <span class="ref-type">conference_paper</span>
+      </div>
+    </li>
+    <li id="ref-20">
+      <span class="ref-number">[20]</span>
+      <div>
+        <div class="ref-title">ACM TOS Paper PDF (Mooncake)</div>
+        <a class="ref-url" href="https://madsys.cs.tsinghua.edu.cn/publication/mooncake-a-kvcache-centric-disaggregated-architecture-for-llm-serving/ToS2025-Qin.pdf" target="_blank">madsys.cs.tsinghua.edu.cn</a>
+        <span class="ref-type">journal_paper</span>
+      </div>
+    </li>
+    <li id="ref-21">
+      <span class="ref-number">[21]</span>
+      <div>
+        <div class="ref-title">FlexKV: Distributed KV Store (Tencent + NVIDIA) with Mooncake Support</div>
+        <a class="ref-url" href="https://github.com/taco-project/FlexKV" target="_blank">github.com/taco-project/FlexKV</a>
+        <span class="ref-type">code_repo</span>
+      </div>
+    </li>
+    <li id="ref-22">
+      <span class="ref-number">[22]</span>
+      <div>
+        <div class="ref-title">TensorRT-LLM Mooncake Integration</div>
+        <a class="ref-url" href="https://github.com/NVIDIA/TensorRT-LLM/tree/main/cpp/tensorrt_llm/executor/cache_transmission/mooncake_utils" target="_blank">github.com/NVIDIA/TensorRT-LLM</a>
+        <span class="ref-type">code_repo</span>
+      </div>
+    </li>
+    <li id="ref-23">
+      <span class="ref-number">[23]</span>
+      <div>
+        <div class="ref-title">NIXL Mooncake Transfer Engine Plugin</div>
+        <a class="ref-url" href="https://github.com/ai-dynamo/nixl/blob/main/src/plugins/mooncake/README.md" target="_blank">github.com/ai-dynamo/nixl</a>
+        <span class="ref-type">code_repo</span>
+      </div>
+    </li>
+    <li id="ref-24">
+      <span class="ref-number">[24]</span>
+      <div>
+        <div class="ref-title">USENIX FAST 2025 Paper Listing (Cool Papers)</div>
+        <a class="ref-url" href="https://papers.cool/venue/USENIX-Fast.2025" target="_blank">papers.cool</a>
+        <span class="ref-type">aggregator</span>
+      </div>
+    </li>
+    <li id="ref-25">
+      <span class="ref-number">[25]</span>
+      <div>
+        <div class="ref-title">SGLang RDMA P2P Weight Transfer with Mooncake TransferEngine</div>
+        <a class="ref-url" href="https://lmsys.org/blog/2026-04-29-p2p-update/" target="_blank">lmsys.org/blog/2026-04-29-p2p-update</a>
+        <span class="ref-type">blog</span>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<!-- Footer -->
+<footer class="report-footer">
+  <p>Mooncake 深度研究报告 | 基于 59 个来源、78 条证据的深度分析 | 数据截止 2026 年 5 月 18 日</p>
+  <p style="margin-top:8px;">本报告由 AI 辅助生成，内容基于公开资料和源码分析</p>
+</footer>
+
+</main>
+
+<!-- Scripts -->
+<script>
+// Mermaid config
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#1e3a5f',
+    primaryTextColor: '#e2e8f0',
+    primaryBorderColor: '#3b82f6',
+    lineColor: '#4a5568',
+    secondaryColor: '#1a3a2a',
+    tertiaryColor: '#2d1a4a',
+    background: '#1e1e36',
+    mainBkg: '#1e1e36',
+    nodeBorder: '#3b82f6',
+    clusterBkg: '#16213e',
+    clusterBorder: '#2d2d4a',
+    titleColor: '#e2e8f0',
+    edgeLabelBackground: '#1e1e36',
+    fontFamily: 'Noto Sans SC, Inter, sans-serif',
+    fontSize: '13px'
+  },
+  flowchart: {
+    curve: 'basis',
+    padding: 16,
+    htmlLabels: true
+  },
+  xychart: {
+    xAxis: { labelFontSize: 12 },
+    yAxis: { labelFontSize: 12 }
+  }
+});
+
+// Sidebar toggle (mobile)
+const toggle = document.getElementById('sidebarToggle');
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sidebarOverlay');
+
+toggle.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('open');
+});
+
+overlay.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('open');
+});
+
+// Active TOC highlighting
+const tocLinks = document.querySelectorAll('.toc-link');
+const sections = document.querySelectorAll('.section, .cover');
+
+const observerOptions = {
+  root: null,
+  rootMargin: '-20% 0px -60% 0px',
+  threshold: 0
+};
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      tocLinks.forEach(link => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, observerOptions);
+
+sections.forEach(section => observer.observe(section));
+
+// Smooth scroll for TOC links
+tocLinks.forEach(link => {
+  link.addEventListener('click', (e) => {
+    // Close sidebar on mobile
+    if (window.innerWidth <= 768) {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    }
+  });
+});
+</script>
+
+</body>
+</html>

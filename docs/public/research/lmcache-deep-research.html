@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LMCache 项目深度研究报告</title>
+<meta name="page-title" content="LMCache 项目深度研究报告">
+<meta name="description" content="LLM 推理缓存加速框架深度分析 — L1/L2 分层架构、缓存策略、分布式机制、性能优化、TTLLock、多推理引擎支持">
+<meta name="keywords" content="LMCache,KV Cache,LLM推理,vLLM,缓存加速,分布式存储,CUDA,GPU">
+<meta name="page-category" content="深度研究">
+<meta name="page-color" content="blue">
+<style>
+  :root {
+    --blue-900: #1e3a5f;
+    --blue-700: #2563eb;
+    --blue-500: #3b82f6;
+    --blue-100: #dbeafe;
+    --green-600: #059669;
+    --green-100: #d1fae5;
+    --orange-500: #f59e0b;
+    --orange-100: #fef3c7;
+    --purple-600: #7c3aed;
+    --purple-100: #ede9fe;
+    --red-500: #ef4444;
+    --red-100: #fee2e2;
+    --gray-900: #111827;
+    --gray-700: #374151;
+    --gray-500: #6b7280;
+    --gray-300: #d1d5db;
+    --gray-100: #f3f4f6;
+    --white: #ffffff;
+    --shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+    color: var(--gray-900);
+    background: var(--gray-100);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  .hero {
+    background: linear-gradient(135deg, var(--blue-900) 0%, #0f172a 100%);
+    color: var(--white);
+    padding: 80px 0 60px;
+    text-align: center;
+  }
+  .hero h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+  .hero .subtitle { font-size: 1.2rem; color: var(--blue-100); margin-bottom: 32px; }
+  .hero .meta { display: flex; gap: 32px; justify-content: center; flex-wrap: wrap; }
+  .hero .meta-item { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; color: var(--gray-300); }
+  .hero .meta-item strong { color: var(--white); }
+
+  /* Navigation */
+  .toc {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 32px;
+    margin: -40px auto 40px;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    z-index: 10;
+  }
+  .toc h2 { font-size: 1.3rem; margin-bottom: 16px; color: var(--blue-900); }
+  .toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .toc a {
+    color: var(--blue-700);
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    display: block;
+    transition: background 0.15s;
+    font-size: 0.95rem;
+  }
+  .toc a:hover { background: var(--blue-100); }
+
+  /* Section */
+  .section {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 40px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow);
+  }
+  .section h2 {
+    font-size: 1.6rem;
+    color: var(--blue-900);
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--blue-100);
+  }
+  .section h3 {
+    font-size: 1.2rem;
+    color: var(--gray-900);
+    margin: 28px 0 12px;
+  }
+  .section h4 {
+    font-size: 1.05rem;
+    color: var(--gray-700);
+    margin: 20px 0 8px;
+  }
+  .section p { margin-bottom: 12px; }
+  .section ul, .section ol { margin: 8px 0 16px 24px; }
+  .section li { margin-bottom: 6px; }
+
+  /* Cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin: 20px 0; }
+  .card {
+    border: 1px solid var(--gray-300);
+    border-radius: 8px;
+    padding: 20px;
+    transition: box-shadow 0.2s;
+  }
+  .card:hover { box-shadow: var(--shadow-lg); }
+  .card .card-title { font-weight: 600; color: var(--blue-900); margin-bottom: 8px; font-size: 1.05rem; }
+  .card .card-desc { color: var(--gray-700); font-size: 0.9rem; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--gray-300);
+  }
+  th {
+    background: var(--blue-900);
+    color: var(--white);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tr:nth-child(even) { background: var(--gray-100); }
+  tr:hover { background: var(--blue-100); }
+
+  /* Code blocks */
+  pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 16px 0;
+  }
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  p code, li code {
+    background: var(--blue-100);
+    color: var(--blue-700);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+
+  /* Tags */
+  .tag {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  .tag-blue { background: var(--blue-100); color: var(--blue-700); }
+  .tag-green { background: var(--green-100); color: var(--green-600); }
+  .tag-orange { background: var(--orange-100); color: var(--orange-500); }
+  .tag-purple { background: var(--purple-100); color: var(--purple-600); }
+  .tag-red { background: var(--red-100); color: var(--red-500); }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin: 24px 0; }
+  .stat-card {
+    text-align: center;
+    padding: 24px 16px;
+    border-radius: 8px;
+    background: var(--gray-100);
+  }
+  .stat-card .stat-value { font-size: 2rem; font-weight: 700; color: var(--blue-700); }
+  .stat-card .stat-label { font-size: 0.85rem; color: var(--gray-500); margin-top: 4px; }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    background: var(--gray-100);
+    border-radius: 8px;
+    padding: 32px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+  .arch-layers { display: flex; flex-direction: column; gap: 12px; max-width: 800px; margin: 0 auto; }
+  .arch-layer {
+    padding: 16px 24px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 600;
+    position: relative;
+  }
+  .arch-layer .layer-desc { font-weight: 400; font-size: 0.85rem; margin-top: 4px; opacity: 0.8; }
+  .arch-arrow {
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 1.2rem;
+  }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .flow-step {
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .flow-arrow { color: var(--gray-500); font-size: 1.2rem; }
+
+  /* Highlights */
+  .highlight-box {
+    border-left: 4px solid var(--blue-500);
+    background: var(--blue-100);
+    padding: 16px 20px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+  }
+  .highlight-box.warn {
+    border-left-color: var(--orange-500);
+    background: var(--orange-100);
+  }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 32px; margin: 24px 0; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--blue-500);
+  }
+  .timeline-item {
+    position: relative;
+    margin-bottom: 24px;
+    padding-left: 24px;
+  }
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -28px;
+    top: 6px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--blue-500);
+    border: 2px solid var(--white);
+  }
+  .timeline-item .tl-date { font-size: 0.85rem; color: var(--gray-500); font-weight: 600; }
+  .timeline-item .tl-title { font-weight: 600; color: var(--gray-900); }
+  .timeline-item .tl-desc { font-size: 0.9rem; color: var(--gray-700); }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--gray-500);
+    font-size: 0.85rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 1.8rem; }
+    .section { padding: 24px; }
+    .card-grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="container">
+    <h1>LMCache 项目深度研究报告</h1>
+    <p class="subtitle">LLM 推理缓存加速框架 — 架构分析与技术深度解读</p>
+    <div class="meta">
+      <div class="meta-item"><strong>版本</strong> v0.4.5</div>
+      <div class="meta-item"><strong>License</strong> Apache-2.0</div>
+      <div class="meta-item"><strong>发起方</strong> Tensormesh</div>
+      <div class="meta-item"><strong>日期</strong> 2026-05-18</div>
+    </div>
+  </div>
+</header>
+
+<!-- TOC -->
+<nav class="toc container">
+  <h2>目录</h2>
+  <div class="toc-grid">
+    <a href="#overview">1. 项目概述与市场定位</a>
+    <a href="#architecture">2. 核心架构深度解析</a>
+    <a href="#cache-policy">3. 缓存策略与驱逐机制</a>
+    <a href="#distributed">4. 分布式与多进程架构</a>
+    <a href="#performance">5. 性能优化技术矩阵</a>
+    <a href="#reliability">6. 可靠性与容错设计</a>
+    <a href="#ecosystem">7. 扩展性与生态系统</a>
+    <a href="#highlights">8. 技术亮点总结</a>
+    <a href="#limitations">9. 已知局限与改进空间</a>
+    <a href="#future">10. 未来演进方向</a>
+    <a href="#config">11. 配置参数详解</a>
+    <a href="#mooncake">12. LMCache 与 Mooncake</a>
+  </div>
+</nav>
+
+<main class="container">
+
+<!-- Section 1: Overview -->
+<section id="overview" class="section">
+  <h2>1. 项目概述与市场定位</h2>
+
+  <p>LMCache 是一个面向 LLM 推理场景的 KV Cache 加速框架，通过在 GPU/CPU/磁盘/远程存储各层缓存 KV Cache 来降低首 token 延迟 (TTFT) 并提升吞吐量。它不是一个独立的推理引擎，而是作为 vLLM、SGLang、TensorRT-LLM 等推理引擎的扩展层存在，专注于解决长上下文场景下 KV Cache 重复计算的性能瓶颈。</p>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-value">3-10x</div>
+      <div class="stat-label">延迟节省</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">1826</div>
+      <div class="stat-label">Commits</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">10</div>
+      <div class="stat-label">维护者</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">4</div>
+      <div class="stat-label">学术论文</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">21</div>
+      <div class="stat-label">CI 工作流</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">80+</div>
+      <div class="stat-label">配置参数</div>
+    </div>
+  </div>
+
+  <h3>市场定位</h3>
+  <p>LMCache 定位于 LLM 推理基础设施层，填补了推理引擎与存储系统之间的空白。其核心价值主张体现在三个维度：</p>
+  <ul>
+    <li><strong>延迟优化</strong>：与 vLLM 结合可实现 3-10 倍延迟节省，对交互式对话、RAG、多轮 QA 等场景至关重要</li>
+    <li><strong>成本降低</strong>：通过复用已计算的 KV Cache 减少 GPU 计算周期，直接降低推理成本</li>
+    <li><strong>多租户隔离</strong>：IsolatedLRU + QuotaManager 实现 per-tenant 配额管理，满足生产环境多用户共享需求</li>
+  </ul>
+
+  <h3>采用情况</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">云服务商</div>
+      <div class="card-desc">Google Cloud、CoreWeave、GMI Cloud 等</div>
+    </div>
+    <div class="card">
+      <div class="card-title">存储基础设施</div>
+      <div class="card-desc">Redis、Weka、PliOps 等</div>
+    </div>
+    <div class="card">
+      <div class="card-title">学术支撑</div>
+      <div class="card-desc">CacheGen (SIGCOMM 2024)、CacheBlend (EuroSys 2025) 等 4 篇论文</div>
+    </div>
+    <div class="card">
+      <div class="card-title">维护团队</div>
+      <div class="card-desc">UChicago、IBM、ByteDance、Tencent、Samsung</div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Architecture -->
+<section id="architecture" class="section">
+  <h2>2. 核心架构深度解析</h2>
+
+  <h3>2.1 分层缓存架构</h3>
+  <p>LMCache 采用 L1/L2 分层缓存架构，将数据访问热度与存储成本进行权衡：</p>
+
+  <div class="arch-diagram">
+    <div class="arch-layers">
+      <div class="arch-layer" style="background: #1e40af; color: white;">
+        GPU KV Cache
+        <div class="layer-desc">CUDA kernel 直接操作，9 种 GPU 格式支持</div>
+      </div>
+      <div class="arch-arrow">↕ GPUConnector (batched_from_gpu / batched_to_gpu)</div>
+      <div class="arch-layer" style="background: #2563eb; color: white;">
+        L1: CPU Pinned Memory
+        <div class="layer-desc">默认 5GB，TTLLock 保护，LRU/LFU/FIFO/MRU 策略</div>
+      </div>
+      <div class="arch-arrow">↕ StoreController (异步复制) / PrefetchController (预取加载)</div>
+      <div class="arch-layer" style="background: #60a5fa; color: white;">
+        L2: Local Disk
+        <div class="layer-desc">NVMe/SSD，按 GPU 分片避免争用</div>
+      </div>
+      <div class="arch-arrow">↕ RemoteBackend / L2Adapter</div>
+      <div class="arch-layer" style="background: #93c5fd; color: var(--gray-900);">
+        L3: Remote Storage
+        <div class="layer-desc">Redis / S3 / NIXL / Mooncake / CXL / DAX</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>2.2 核心模块关系</h3>
+  <pre><code>Integration Layer (vllm_v1_adapter, sglang_adapter, tensorrt_adapter)
+    │
+    ▼
+LMCacheManager (lmcache/v1/manager.py)
+    │
+    ▼
+LMCacheEngine (cache_engine.py, 2089 行)  ← 中央协调器
+    ├──→ TokenDatabase (token_database.py)      ← 键生成 (前缀哈希)
+    ├──→ GPUConnectorInterface (gpu_connector/) ← GPU 数据传输
+    ├──→ StorageManager (storage_manager.py)    ← 后端编排
+    │       ├── LocalCPUBackend   ← L1 热缓存
+    │       ├── LocalDiskBackend  ← L2 磁盘缓存
+    │       ├── RemoteBackend     ← L3 远程缓存
+    │       ├── P2PBackend        ← P2P 传输
+    │       ├── PDBackend         ← 预填充-解码分离
+    │       ├── GdsBackend        ← GPU Direct Storage
+    │       └── MaruBackend       ← CXL 共享内存
+    ├──→ EventManager             ← 异步事件跟踪
+    ├──→ PinMonitor               ← 内存 pin 超时管理
+    └──→ HealthMonitor            ← 系统健康检查</code></pre>
+
+  <h3>2.3 数据流全景</h3>
+
+  <h4>Store 路径 (GPU KV → 缓存)</h4>
+  <div class="flow">
+    <span class="flow-step" style="background: var(--green-100); color: var(--green-600);">vLLM Adapter</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--green-100); color: var(--green-600);">TokenDatabase.process_tokens()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--green-100); color: var(--green-600);">StorageManager.allocate()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--green-100); color: var(--green-600);">GPUConnector.batched_from_gpu()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--green-100); color: var(--green-600);">StorageManager.batched_put()</span>
+  </div>
+
+  <h4>Retrieve 路径 (缓存 → GPU KV)</h4>
+  <div class="flow">
+    <span class="flow-step" style="background: var(--blue-100); color: var(--blue-700);">vLLM Adapter</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--blue-100); color: var(--blue-700);">TokenDatabase.process_tokens()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--blue-100); color: var(--blue-700);">StorageManager.batched_get()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--blue-100); color: var(--blue-700);">GPUConnector.batched_to_gpu()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--blue-100); color: var(--blue-700);">返回命中掩码</span>
+  </div>
+
+  <h4>Lookup 路径 (检查存在性)</h4>
+  <div class="flow">
+    <span class="flow-step" style="background: var(--orange-100); color: var(--orange-500);">vLLM Scheduler</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--orange-100); color: var(--orange-500);">LMCacheEngine.lookup()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--orange-100); color: var(--orange-500);">batched_contains()</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step" style="background: var(--orange-100); color: var(--orange-500);">返回连续前缀长度</span>
+  </div>
+
+  <div class="highlight-box">
+    <strong>逐层流式传输 (Layerwise)</strong>：<code>store_layer()</code> 和 <code>retrieve_layer()</code> 使用 Python 生成器交错数据传输和存储操作，减少峰值内存使用。对大模型（70B+）的 KV Cache（数十 GB）尤为重要。
+  </div>
+</section>
+
+<!-- Section 3: Cache Policy -->
+<section id="cache-policy" class="section">
+  <h2>3. 缓存策略与驱逐机制</h2>
+
+  <h3>3.1 传统策略对比</h3>
+  <table>
+    <thead>
+      <tr><th>策略</th><th>实现</th><th>时间复杂度</th><th>适用场景</th><th>特点</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="tag tag-blue">LRU</span></td><td>OrderedDict + move_to_end()</td><td>O(1)</td><td>时间局部性强</td><td>跟踪 chunk 重用时间戳</td></tr>
+      <tr><td><span class="tag tag-green">LFU</span></td><td>SortedDict 频率桶</td><td>O(log N)</td><td>频率局部性强</td><td>避免新数据饥饿</td></tr>
+      <tr><td><span class="tag tag-orange">FIFO</span></td><td>Python dict 插入顺序</td><td>O(1)</td><td>无明显局部性</td><td>最简单实现</td></tr>
+      <tr><td><span class="tag tag-purple">MRU</span></td><td>OrderedDict + reversed()</td><td>O(1)</td><td>特定访问模式</td><td>与 LRU 相反</td></tr>
+      <tr><td><span class="tag tag-red">IsolatedLRU</span></td><td>每租户独立 LRU</td><td>O(1)</td><td>多租户环境</td><td>配额管理</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.2 分布式驱逐策略</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">分布式 LRU</div>
+      <div class="card-desc">OrderedDict + 全局 threading.Lock，支持 key_eligible_filter 跳过锁定键</div>
+    </div>
+    <div class="card">
+      <div class="card-title">IsolatedLRU</div>
+      <div class="card-desc">每 cache_salt (每用户/租户) 独立 LRU 列表 + QuotaManager 配额管理</div>
+    </div>
+    <div class="card">
+      <div class="card-title">驱逐控制器</div>
+      <div class="card-desc">后台守护线程监控水位线，L1 每秒检查，L2 统一控制器支持全局和 per-salt 驱逐</div>
+    </div>
+  </div>
+
+  <h3>3.3 Pin 机制与生命周期管理</h3>
+  <div class="highlight-box">
+    <strong>驱逐条件</strong>：<code>can_evict = (ref_count == 0) AND (pin_count == 0)</code><br>
+    双重条件确保：正在被使用的对象不会被驱逐（ref_count 保护），关键数据不会被意外驱逐（pin 保护），超时机制防止永久锁定（PinMonitor）。
+  </div>
+</section>
+
+<!-- Section 4: Distributed -->
+<section id="distributed" class="section">
+  <h2>4. 分布式与多进程架构</h2>
+
+  <h3>4.1 对象生命周期状态机</h3>
+  <pre><code>None ──reserve_write()──→ write_locked ──finish_write()──→ ready
+                                                          │
+ready ──reserve_read()──→ read_locked(count=1) ───────────┘
+         │                        │
+         │                finish_read() → ready (or None if temporary)
+         │
+         └──reserve_write()──→ write_locked (覆盖写入)</code></pre>
+
+  <h3>4.2 四个后台控制器</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">StoreController</div>
+      <div class="card-desc">监听 L1 写完成事件，按 shape 分组后异步提交到 L2。不阻塞主路径。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">PrefetchController</div>
+      <div class="card-desc">接受预取请求，查找 + 锁定 + 加载三步操作。与 vLLM 调度器集成实现预测性预取。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">L1EvictionController</div>
+      <div class="card-desc">每秒监控 L1 内存使用，超过水位线触发驱逐。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">L2EvictionController</div>
+      <div class="card-desc">统一控制器，支持全局和 per-salt 驱逐。IsolatedLRU 模式下按 quota 驱逐。</div>
+    </div>
+  </div>
+
+  <h3>4.3 L2 适配器生态系统</h3>
+  <table>
+    <thead>
+      <tr><th>适配器</th><th>用途</th><th>延迟</th><th>持久性</th><th>适用场景</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="tag tag-blue">fs</span></td><td>本地文件系统</td><td>低 (μs)</td><td>是</td><td>最简单的 L2 实现</td></tr>
+      <tr><td><span class="tag tag-green">resp</span></td><td>Redis/Valkey</td><td>中 (ms)</td><td>可选</td><td>低延迟远程缓存</td></tr>
+      <tr><td><span class="tag tag-orange">s3</span></td><td>AWS S3</td><td>高 (10ms+)</td><td>是</td><td>持久化存储，成本低</td></tr>
+      <tr><td><span class="tag tag-purple">nixl_store</span></td><td>NIXL 分布式</td><td>低 (μs)</td><td>是</td><td>高性能分布式存储</td></tr>
+      <tr><td><span class="tag tag-blue">mooncake</span></td><td>Mooncake Store</td><td>低 (μs)</td><td>是</td><td>字节跳动内部存储</td></tr>
+      <tr><td><span class="tag tag-green">dax</span></td><td>DAX/CXL</td><td>极低 (ns)</td><td>是</td><td>持久内存，字节寻址</td></tr>
+      <tr><td><span class="tag tag-red">raw_block</span></td><td>原生块存储</td><td>极低 (μs)</td><td>是</td><td>Rust 实现，最高性能</td></tr>
+      <tr><td><span class="tag tag-purple">plugin</span></td><td>自定义插件</td><td>可变</td><td>可变</td><td>用户自定义后端</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Section 5: Performance -->
+<section id="performance" class="section">
+  <h2>5. 性能优化技术矩阵</h2>
+
+  <table>
+    <thead>
+      <tr><th>优化类别</th><th>技术</th><th>实现位置</th><th>效果</th></tr>
+    </thead>
+    <tbody>
+      <tr><td rowspan="3"><span class="tag tag-blue">GPU 传输</span></td><td>CUDA kernel 批量 KV 传输</td><td>csrc/mem_kernels.cuh</td><td>9 种 GPU 格式支持</td></tr>
+      <tr><td>异步 memcpy</td><td>csrc/mem_kernels.cuh</td><td>IO 与计算重叠</td></tr>
+      <tr><td>CacheGen GPU 压缩</td><td>csrc/</td><td>避免 CPU-GPU 传输</td></tr>
+      <tr><td rowspan="3"><span class="tag tag-green">内存管理</span></td><td>NUMA 感知分配</td><td>memory_management.py</td><td>减少跨 NUMA 延迟</td></tr>
+      <tr><td>分页分配器</td><td>memory_management.py</td><td>减少内存碎片</td></tr>
+      <tr><td>固定 CPU 内存</td><td>local_cpu_backend.py</td><td>避免页面换出</td></tr>
+      <tr><td rowspan="3"><span class="tag tag-orange">并发控制</span></td><td>TTLLock 原子锁</td><td>csrc/storage_manager/ttl_lock.h</td><td>崩溃安全，微秒延迟</td></tr>
+      <tr><td>AffinityThreadPool</td><td>multiprocess/affinity_pool.py</td><td>消除 GPU 传输锁</td></tr>
+      <tr><td>事件驱动 IO</td><td>distributed/</td><td>避免忙等待</td></tr>
+      <tr><td rowspan="3"><span class="tag tag-purple">压缩</span></td><td>FP8 量化</td><td>distributed/serde/fp8.py</td><td>4x 存储缩减</td></tr>
+      <tr><td>CacheGen 算术编码</td><td>csrc/</td><td>高压缩比</td></tr>
+      <tr><td>KiVi KV 压缩</td><td>serde/</td><td>可插拔压缩</td></tr>
+      <tr><td rowspan="3"><span class="tag tag-red">IO 优化</span></td><td>逐层流式传输</td><td>cache_engine.py</td><td>减少峰值内存</td></tr>
+      <tr><td>批量操作</td><td>storage_manager.py</td><td>减少调用开销</td></tr>
+      <tr><td>异步 Serde</td><td>multiprocess/</td><td>序列化与主路径分离</td></tr>
+    </tbody>
+  </table>
+
+  <h3>TTLLock 性能基准</h3>
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-value">100K</div>
+      <div class="stat-label">锁对象</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">10K+</div>
+      <div class="stat-label">ops/sec</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">μs</div>
+      <div class="stat-label">P50/P95/P99 延迟</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">300s</div>
+      <div class="stat-label">默认 TTL</div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 6: Reliability -->
+<section id="reliability" class="section">
+  <h2>6. 可靠性与容错设计</h2>
+
+  <h3>6.1 TTLLock 机制</h3>
+  <p>C++ 原子锁 + TTL 防止崩溃进程永久锁。<code>std::atomic&lt;int64_t&gt;</code> 计数器使用 <code>memory_order_seq_cst</code>，TTL 机制确保锁持有者崩溃时自动过期。</p>
+
+  <h3>6.2 健康监控与降级</h3>
+  <table>
+    <thead>
+      <tr><th>策略</th><th>行为</th><th>适用场景</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="tag tag-green">RECOMPUTE</span></td><td>跳过缓存，直接计算</td><td>缓存不可用时</td></tr>
+      <tr><td><span class="tag tag-blue">LOCAL_CPU</span></td><td>回退到本地 CPU 缓存</td><td>L2 不可用时</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.3 可观测性</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">EventBus</div>
+      <div class="card-desc">统一 pub/sub 分发器，最大队列 10K，限速丢弃</div>
+    </div>
+    <div class="card">
+      <div class="card-title">OpenTelemetry</div>
+      <div class="card-desc">L1 内存使用、L1 使用率、in-flight L2 存储等指标</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tracing</div>
+      <div class="card-desc">@enable_tracing() 装饰器实现函数级追踪</div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 7: Ecosystem -->
+<section id="ecosystem" class="section">
+  <h2>7. 扩展性与生态系统</h2>
+
+  <h3>7.1 多推理引擎支持</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">vLLM V2/V3</div>
+      <div class="card-desc">VLLMPagedMemGPUConnectorV2/V3，实现 KVConnectorBase_V1 接口</div>
+    </div>
+    <div class="card">
+      <div class="card-title">SGLang</div>
+      <div class="card-desc">SGLangGPUConnector，适配 SGLang 的 KV Cache 格式</div>
+    </div>
+    <div class="card">
+      <div class="card-title">TensorRT-LLM</div>
+      <div class="card-desc">TRTLLMGPUConnector，支持 MLA 和 MHA 变体</div>
+    </div>
+  </div>
+
+  <h3>7.2 多硬件平台</h3>
+  <table>
+    <thead>
+      <tr><th>平台</th><th>构建标志</th><th>依赖</th><th>状态</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>CUDA 12.9/13</td><td>默认</td><td>cupy, nixl</td><td><span class="tag tag-green">稳定</span></td></tr>
+      <tr><td>ROCm (HIP)</td><td>BUILD_WITH_HIP=1</td><td>ROCm 工具链</td><td><span class="tag tag-green">稳定</span></td></tr>
+      <tr><td>Intel XPU (SYCL)</td><td>BUILD_WITH_SYCL=1</td><td>Intel oneAPI</td><td><span class="tag tag-orange">实验性</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <strong>平台抽象</strong>：pre-commit hook 禁止直接使用 <code>torch.cuda/xpu/hpu</code>，强制使用 <code>torch_dev</code>/<code>torch_device_type</code>，保证代码可移植性。
+  </div>
+
+  <h3>7.3 插件系统</h3>
+  <ul>
+    <li><strong>运行时插件启动器</strong>：启动 .py 和 .sh 插件作为子进程，atexit 清理</li>
+    <li><strong>存储后端插件</strong>：StoragePluginInterface 通过配置加载，支持热插拔</li>
+    <li><strong>L2 适配器工厂</strong>：注册式懒加载，添加新后端只需实现接口并注册</li>
+    <li><strong>Serde 工厂</strong>：register_serde_factory() 支持自定义压缩算法</li>
+  </ul>
+</section>
+
+<!-- Section 8: Highlights -->
+<section id="highlights" class="section">
+  <h2>8. 技术亮点总结</h2>
+
+  <div class="card-grid">
+    <div class="card" style="border-left: 4px solid var(--blue-500);">
+      <div class="card-title">精密的 L1/L2 分层架构</div>
+      <div class="card-desc">L1 固定 CPU 内存提供最低延迟，L2 多种后端提供可扩展存储。事件驱动 IO 实现非阻塞访问。</div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--red-500);">
+      <div class="card-title">C++ TTLLock 防崩溃永久锁</div>
+      <div class="card-desc">std::atomic + TTL 机制，进程崩溃时自动释放锁。100K 锁对象下 10K+ ops/sec。</div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--green-600);">
+      <div class="card-title">Per-Tenant 隔离与配额管理</div>
+      <div class="card-desc">IsolatedLRU 为每用户/租户维护独立 LRU 列表，QuotaManager 强制配额。</div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--purple-600);">
+      <div class="card-title">9 种 GPU 格式支持</div>
+      <div class="card-desc">覆盖 vLLM、SGLang、TRT-LLM 的 MLA 和 MHA 变体，统一缓存层。</div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--orange-500);">
+      <div class="card-title">AffinityThreadPool 消除 GPU 传输锁</div>
+      <div class="card-desc">按 affinity_key 路由，同一客户端总是命中同一 worker，消除锁需求。</div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--blue-700);">
+      <div class="card-title">事件驱动架构</div>
+      <div class="card-desc">select.poll() + eventfd，避免忙等待。跨平台抽象（Linux eventfd, macOS pipe）。</div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--green-600);">
+      <div class="card-title">逐层流式传输</div>
+      <div class="card-desc">Python 生成器交错数据传输和存储，减少峰值内存使用。</div>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--purple-600);">
+      <div class="card-title">学术与工程双重驱动</div>
+      <div class="card-desc">4 篇学术论文 + 1826 commits + 21 个 CI 工作流 + OpenSSF 认证。</div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 9: Limitations -->
+<section id="limitations" class="section">
+  <h2>9. 已知局限与改进空间</h2>
+
+  <h3>技术债务</h3>
+  <table>
+    <thead>
+      <tr><th>问题</th><th>影响</th><th>改进方向</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>LFU O(log N)</td><td>SortedDict 实现，理论上可优化到 O(1)</td><td>计数器 + 双向链表</td></tr>
+      <tr><td>单锁争用</td><td>L1Manager 单一全局锁，高并发瓶颈</td><td>分段锁或无锁数据结构</td></tr>
+      <tr><td>LRU Chunk Hash 限制</td><td>超过 12.5M 条目时清空时间戳字典</td><td>改进哈希表实现</td></tr>
+      <tr><td>Python GIL</td><td>AsyncSerdeProcessor 受 GIL 限制</td><td>GPU 加速原生异步 serde</td></tr>
+      <tr><td>懒分配器禁用</td><td>LazyMixedMemoryAllocator 暂不可用</td><td>修复稳定性问题</td></tr>
+    </tbody>
+  </table>
+
+  <h3>改进机会</h3>
+  <ol>
+    <li>热路径无锁数据结构</li>
+    <li>基于访问模式的自适应驱逐水位线</li>
+    <li>跨层一致性协议</li>
+    <li>ML 驱动的预测性预取策略</li>
+    <li>GPU 加速的原生异步 serde</li>
+  </ol>
+</section>
+
+<!-- Section 10: Future -->
+<section id="future" class="section">
+  <h2>10. 未来演进方向</h2>
+
+  <h3>架构演进</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">更细粒度的并发控制</div>
+      <div class="card-desc">从单锁演进为分段锁或无锁数据结构，支持更高并发</div>
+    </div>
+    <div class="card">
+      <div class="card-title">跨层一致性增强</div>
+      <div class="card-desc">引入写入确认机制、版本向量、因果一致性保证</div>
+    </div>
+    <div class="card">
+      <div class="card-title">多级缓存融合</div>
+      <div class="card-desc">统一缓存视图、自动热度迁移、跨层级预取优化</div>
+    </div>
+  </div>
+
+  <h3>功能演进</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">ML 驱动的缓存策略</div>
+      <div class="card-desc">基于历史访问的预取、自适应驱逐策略、个性化配置</div>
+    </div>
+    <div class="card">
+      <div class="card-title">更多压缩算法</div>
+      <div class="card-desc">混合精度压缩、基于注意力模式的压缩、稀疏 KV Cache 支持</div>
+    </div>
+    <div class="card">
+      <div class="card-title">多模态缓存扩展</div>
+      <div class="card-desc">图像/音频特征缓存、跨模态关联缓存</div>
+    </div>
+  </div>
+
+  <h3>项目演进时间线</h3>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="tl-date">2024-05-29</div>
+      <div class="tl-title">项目初始化</div>
+      <div class="tl-desc">Tensormesh 发起，创建缓存层</div>
+    </div>
+    <div class="timeline-item">
+      <div class="tl-date">2024-06-10</div>
+      <div class="tl-title">CacheGen 编码器实现</div>
+      <div class="tl-desc">KV 缓存压缩，后发表于 SIGCOMM 2024</div>
+    </div>
+    <div class="timeline-item">
+      <div class="tl-date">2024-09-03</div>
+      <div class="tl-title">v0.1.0-alpha 发布</div>
+      <div class="tl-desc">首个公开版本</div>
+    </div>
+    <div class="timeline-item">
+      <div class="tl-date">2025-04-22</div>
+      <div class="tl-title">v0.4.0: LMCache Controller V2</div>
+      <div class="tl-desc">控制器架构重大升级</div>
+    </div>
+    <div class="timeline-item">
+      <div class="tl-date">2025-05-28</div>
+      <div class="tl-title">v0.4.5: Weka Storage Backend</div>
+      <div class="tl-desc">新增 Weka 存储后端</div>
+    </div>
+    <div class="timeline-item">
+      <div class="tl-date">2026-05-14</div>
+      <div class="tl-title">最新: NIXL, SYCL/XPU, DeepSeek V4</div>
+      <div class="tl-desc">多硬件平台支持、最新模型适配</div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 11: Config -->
+<section id="config" class="section">
+  <h2>11. 配置参数详解</h2>
+
+  <p>LMCache 提供 80+ 配置参数，通过 YAML 文件、环境变量（<code>LMCACHE_</code> 前缀）或命令行覆盖三种方式配置。配置源优先级：YAML 文件 > 环境变量 > 命令行覆盖。</p>
+
+  <h3>11.1 配置文件示例</h3>
+  <pre><code># lmcache_config.yaml
+chunk_size: 256          # Token 分块大小
+local_cpu: true          # 启用 L1 CPU 缓存
+max_local_cpu_size: 5.0  # L1 最大内存 (GB)
+local_disk: "/mnt/nvme/lmcache"  # L2 本地磁盘路径
+max_local_disk_size: 100  # L2 最大磁盘 (GB)
+remote_url: "redis://localhost:6379"  # L3 远程存储
+cache_policy: "LRU"      # 缓存策略 (LRU/LFU/FIFO/MRU)
+use_layerwise: true      # 逐层流式传输
+enable_p2p: true         # P2P 缓存共享
+enable_pd: true          # 分离式预填充</code></pre>
+
+  <h3>11.2 核心配置参数</h3>
+  <table>
+    <thead>
+      <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>chunk_size</code></td><td>int</td><td>256</td><td>Token 分块大小，影响缓存粒度和前缀匹配效率</td></tr>
+      <tr><td><code>local_cpu</code></td><td>bool</td><td>true</td><td>是否启用 L1 CPU 缓存</td></tr>
+      <tr><td><code>max_local_cpu_size</code></td><td>float</td><td>5.0</td><td>L1 CPU 缓存最大内存 (GB)</td></tr>
+      <tr><td><code>local_disk</code></td><td>str</td><td>null</td><td>L2 本地磁盘路径，如 "/mnt/nvme/lmcache"</td></tr>
+      <tr><td><code>max_local_disk_size</code></td><td>float</td><td>0</td><td>L2 本地磁盘最大容量 (GB)</td></tr>
+      <tr><td><code>remote_url</code></td><td>str</td><td>null</td><td>远程存储 URL，如 "redis://host:port"</td></tr>
+      <tr><td><code>remote_serde</code></td><td>str</td><td>"naive"</td><td>远程序列化方式 (naive/fp8/cachegen)</td></tr>
+      <tr><td><code>cache_policy</code></td><td>str</td><td>"LRU"</td><td>缓存策略: LRU, LFU, FIFO, MRU</td></tr>
+      <tr><td><code>use_layerwise</code></td><td>bool</td><td>false</td><td>逐层流式传输，减少峰值内存</td></tr>
+      <tr><td><code>save_decode_cache</code></td><td>bool</td><td>false</td><td>是否缓存 decode 阶段的 KV</td></tr>
+      <tr><td><code>enable_blending</code></td><td>bool</td><td>false</td><td>启用混合检索模式</td></tr>
+      <tr><td><code>enable_p2p</code></td><td>bool</td><td>false</td><td>启用 P2P 缓存共享</td></tr>
+      <tr><td><code>enable_pd</code></td><td>bool</td><td>false</td><td>启用分离式预填充 (Prefill-Decode)</td></tr>
+      <tr><td><code>pd_role</code></td><td>str</td><td>null</td><td>PD 角色: "prefill" 或 "decode"</td></tr>
+      <tr><td><code>enable_controller</code></td><td>bool</td><td>false</td><td>启用 LMCache Controller</td></tr>
+      <tr><td><code>numa_mode</code></td><td>str</td><td>null</td><td>NUMA 感知模式</td></tr>
+      <tr><td><code>lookup_timeout_ms</code></td><td>int</td><td>3000</td><td>查找超时 (毫秒)</td></tr>
+      <tr><td><code>min_retrieve_tokens</code></td><td>int</td><td>0</td><td>最小检索 token 数，低于此值跳过检索</td></tr>
+      <tr><td><code>extra_config</code></td><td>dict</td><td>null</td><td>扩展配置（用于 Mooncake 等插件）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>11.3 在 vLLM 中使用 LMCache</h3>
+
+  <h4>方式一：环境变量配置</h4>
+  <pre><code># 设置配置文件路径
+export LMCACHE_CONFIG_FILE="/path/to/lmcache_config.yaml"
+
+# 或通过环境变量覆盖
+export LMCACHE_CHUNK_SIZE=512
+export LMCACHE_MAX_LOCAL_CPU_SIZE=10.0
+export LMCACHE_REMOTE_URL="redis://localhost:6379"
+
+# 启动 vLLM
+vllm serve meta-llama/Llama-3.1-8B-Instruct</code></pre>
+
+  <h4>方式二：vLLM 集成配置</h4>
+  <pre><code># vLLM 启动时自动加载 LMCache
+# LMCache 通过 KVConnectorBase_V1 接口集成到 vLLM 调度器
+# 无需修改 vLLM 代码，只需设置环境变量
+
+# 1. 基础配置 (仅 L1 CPU 缓存)
+export LMCACHE_CONFIG_FILE="lmcache_basic.yaml"
+# lmcache_basic.yaml:
+#   chunk_size: 256
+#   local_cpu: true
+#   max_local_cpu_size: 5.0
+
+# 2. 带远程存储的配置
+export LMCACHE_CONFIG_FILE="lmcache_remote.yaml"
+# lmcache_remote.yaml:
+#   chunk_size: 256
+#   local_cpu: true
+#   max_local_cpu_size: 5.0
+#   remote_url: "redis://localhost:6379"
+
+# 3. 分离式预填充配置 (Prefill 节点)
+export LMCACHE_CONFIG_FILE="lmcache_prefill.yaml"
+# lmcache_prefill.yaml:
+#   enable_pd: true
+#   pd_role: "prefill"
+#   pd_peer_host: "decode-node-ip"
+#   pd_peer_init_port: [5555]
+#   pd_peer_alloc_port: [5556]
+
+# 4. 分离式预填充配置 (Decode 节点)
+export LMCACHE_CONFIG_FILE="lmcache_decode.yaml"
+# lmcache_decode.yaml:
+#   enable_pd: true
+#   pd_role: "decode"
+#   pd_peer_host: "prefill-node-ip"
+#   pd_peer_init_port: [5555]
+#   pd_peer_alloc_port: [5556]</code></pre>
+
+  <h4>方式三：分离式预填充完整示例</h4>
+  <pre><code># 终端 1: 启动 Prefill 节点
+CUDA_VISIBLE_DEVICES=0 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+  --port 8100 \
+  --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_producer"}'
+
+# 终端 2: 启动 Decode 节点
+CUDA_VISIBLE_DEVICES=1 vllm serve meta-llama/Llama-3.1-8B-Instruct \
+  --port 8200 \
+  --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_consumer"}'
+
+# 终端 3: 启动代理服务器
+python disagg_proxy_server.py --host 0.0.0.0 --port 9000</code></pre>
+
+  <div class="highlight-box">
+    <strong>vLLM 集成原理</strong>：LMCache 实现 vLLM 的 <code>KVConnectorBase_V1</code> 接口，通过 <code>get_num_new_matched_tokens()</code> 告知调度器缓存命中数，<code>start_load_kv()</code> 启动异步检索，<code>save_kv_layer()</code> 逐层卸载 KV Cache。整个过程对 vLLM 透明，无需修改推理引擎代码。
+  </div>
+</section>
+
+<!-- Section 12: Mooncake -->
+<section id="mooncake" class="section">
+  <h2>12. LMCache 与 Mooncake 的关系</h2>
+
+  <h3>12.1 项目定位对比</h3>
+  <p>LMCache 和 Mooncake 是 LLM 推理缓存领域的两个重要项目，定位互补而非竞争：</p>
+
+  <table>
+    <thead>
+      <tr><th>维度</th><th>LMCache</th><th>Mooncake</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>发起方</strong></td><td>Tensormesh (UChicago 团队)</td><td>Moonshot AI (Kimi)</td></tr>
+      <tr><td><strong>核心定位</strong></td><td>推理引擎缓存扩展层</td><td>KVCache-centric 分离式推理平台</td></tr>
+      <tr><td><strong>架构重心</strong></td><td>多层缓存管理 (L1/L2/L3)</td><td>分布式传输引擎 + 全局调度</td></tr>
+      <tr><td><strong>核心组件</strong></td><td>CacheEngine + StorageManager</td><td>Transfer Engine + Mooncake Store + Conductor</td></tr>
+      <tr><td><strong>传输层</strong></td><td>CUDA kernel + eventfd</td><td>Transfer Engine (14+ 协议, RDMA/TCP/CXL)</td></tr>
+      <tr><td><strong>学术论文</strong></td><td>CacheGen (SIGCOMM), CacheBlend (EuroSys)</td><td>Mooncake (FAST 2025 Best Paper)</td></tr>
+      <tr><td><strong>生产规模</strong></td><td>Google Cloud, CoreWeave 等</td><td>Kimi 日处理 100B+ token, 数千节点</td></tr>
+    </tbody>
+  </table>
+
+  <h3>12.2 集成方式</h3>
+  <p>LMCache 通过 <strong>MooncakeStoreConnector</strong> 将 Mooncake Store 作为远程存储后端集成。这意味着：</p>
+  <ul>
+    <li><strong>Mooncake Store 是 LMCache 的 L3 后端之一</strong>：与 Redis、S3、NIXL 并列，作为可选的远程存储</li>
+    <li><strong>LMCache 利用 Mooncake 的分布式 KVCache 池</strong>：通过 Mooncake 的 RDMA 传输能力实现高性能远程缓存访问</li>
+    <li><strong>两者共享 KV Cache 概念</strong>：都使用分块 + 哈希键的方式管理 KV Cache</li>
+  </ul>
+
+  <h3>12.3 集成架构</h3>
+  <pre><code>vLLM / SGLang / TRT-LLM
+    │
+    ▼
+LMCache (缓存管理层)
+    ├── L1: LocalCPUBackend (进程内 CPU 缓存)
+    ├── L2: LocalDiskBackend (本地磁盘)
+    └── L3: RemoteBackend
+            ├── Redis / Valkey
+            ├── AWS S3
+            ├── NIXL Store
+            └── Mooncake Store ← 通过 MooncakeStoreConnector
+                    │
+                    ▼
+            Mooncake Transfer Engine (RDMA/TCP/CXL 传输)
+                    │
+                    ▼
+            分布式 KVCache 池 (多节点 DRAM/SSD)</code></pre>
+
+  <h3>12.4 MooncakeStoreConnector 实现细节</h3>
+  <p>LMCache 的 <code>mooncakestore_connector.py</code> 实现了与 Mooncake Store 的集成：</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">零拷贝传输</div>
+      <div class="card-desc">通过 <code>put_from()</code>/<code>batch_get_into()</code> 直接操作内存指针，避免数据拷贝。CPU buffer 注册到 Mooncake 实现 RDMA 零拷贝。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">NUMA 感知</div>
+      <div class="card-desc">检测 GPU-NUMA 映射，调用 <code>bind_to_numa_node()</code> 绑定到正确 NUMA 节点，减少跨 NUMA 访问延迟。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">批量操作</div>
+      <div class="card-desc">支持 <code>batched_get()</code> 和 <code>batched_put()</code>，单次 RPC 传输多个 chunk，减少网络往返。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">多副本配置</div>
+      <div class="card-desc">通过 <code>ReplicateConfig</code> 配置副本数量和首选 segment，支持 <code>prefer_local_alloc</code> 优先本地分配。</div>
+    </div>
+  </div>
+
+  <h3>12.5 配置 LMCache 使用 Mooncake</h3>
+  <pre><code># lmcache_config.yaml
+chunk_size: 256
+local_cpu: true
+max_local_cpu_size: 5.0
+
+# 方式一: 通过 MOONCAKE_CONFIG_PATH 环境变量
+# export MOONCAKE_CONFIG_PATH="/path/to/mooncake_config.json"
+
+# 方式二: 通过 extra_config 直接配置
+extra_config:
+  # Mooncake setup 参数 (mooncake_ 前缀会自动去除)
+  mooncake_local_hostname: "node-1"
+  mooncake_metadata_server: "etcd://localhost:2379"
+  mooncake_global_segment_size: "3355443200"  # 3.2GB
+  mooncake_local_buffer_size: "1073741824"    # 1GB
+  mooncake_protocol: "rdma"                   # 或 "tcp"
+  mooncake_device_name: "mlx5_0"
+  # LMCache 专用参数
+  transfer_timeout: 5
+  prefer_local_alloc: true</code></pre>
+
+  <h3>12.6 Mooncake 的独特优势</h3>
+  <p>相比其他远程后端（Redis、S3），Mooncake 提供了独特的优势：</p>
+  <ul>
+    <li><strong>RDMA 零拷贝</strong>：通过 GPUDirect RDMA 实现 GPU-远程内存直接传输，TCP 810ms vs RDMA 14ms（58x 加速）</li>
+    <li><strong>拓扑感知</strong>：自动发现 NUMA 拓扑，选择最近的 HCA 设备，避免跨 NUMA 传输</li>
+    <li><strong>多 NIC 聚合</strong>：8x400Gbps RoCE 网络上实现 190 GB/s 聚合带宽</li>
+    <li><strong>分布式 KVCache 池</strong>：将集群中闲置的 CPU/DRAM/SSD 整合为统一存储池</li>
+    <li><strong>Cache-aware 调度</strong>：全局前缀树 + 重叠评分，将请求路由到具有最长前缀缓存的节点</li>
+  </ul>
+
+  <h3>12.7 在 SGLang 中的三级缓存</h3>
+  <p>SGLang 的 HiCache 实现了与 Mooncake 深度集成的三级缓存架构：</p>
+  <pre><code>L1: GPU HBM     ← 最快，容量最小 (显存)
+L2: Host DRAM   ← 中速，容量中等 (LMCache L1)
+L3: Mooncake Store ← 分布式，容量最大 (LMCache L3)</code></pre>
+  <p>实测效果：6x 吞吐提升、80% TTFT 降低。蚂蚁集团 DeepSeek-R1-671B 部署中，缓存命中 TTFT 降低 84%。</p>
+</section>
+
+<!-- Section 13: vLLM KV Connectors -->
+<section id="vllm-connectors" class="section">
+  <h2>13. vLLM 中的 KV Connector 对比</h2>
+
+  <h3>13.1 Connector 全景</h3>
+  <p>vLLM 通过 <code>KVConnectorBase_V1</code> 接口抽象 KV Cache 传输。当前注册了以下 connector（见 <code>factory.py</code>）：</p>
+
+  <table>
+    <thead>
+      <tr><th>Connector</th><th>来源</th><th>传输方式</th><th>适用场景</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>LMCacheConnectorV1</code></td><td>lmcache 包</td><td>CUDA kernel + eventfd</td><td>单实例多级缓存 (L1/L2/L3)</td></tr>
+      <tr><td><code>LMCacheMPConnector</code></td><td>lmcache 包</td><td>ZMQ + 共享内存</td><td>多实例共享 LMCache 缓存池</td></tr>
+      <tr><td><code>MooncakeConnector</code></td><td>vLLM 内置</td><td>Transfer Engine (RDMA/TCP)</td><td>P2P 分离式 Prefill/Decode</td></tr>
+      <tr><td><code>MooncakeStoreConnector</code></td><td>vLLM 内置</td><td>MooncakeDistributedStore</td><td>共享 KVCache 池 + 前缀去重</td></tr>
+      <tr><td><code>NixlConnector</code></td><td>vLLM 内置</td><td>NIXL (UCX/RDMA)</td><td>高性能 P2P 传输</td></tr>
+      <tr><td><code>MultiConnector</code></td><td>vLLM 内置</td><td>组合多个 connector</td><td>多层级/多后端策略</td></tr>
+      <tr><td><code>FlexKVConnectorV1</code></td><td>vLLM 内置</td><td>FlexKV</td><td>灵活 KV 管理</td></tr>
+    </tbody>
+  </table>
+
+  <h3>13.2 LMCache 系列 Connector 详解</h3>
+
+  <h4>LMCacheConnectorV1 — 单进程模式</h4>
+  <p>这是 LMCache 的标准 connector，适用于单个 vLLM 实例配合 LMCache 使用的场景。</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">工作原理</div>
+      <div class="card-desc">内部委托给 <code>LMCacheConnectorV1Impl</code>，通过 LMCache 的 CacheEngine 管理多级缓存。支持 <code>use_layerwise</code> 模式逐层异步传输 KV Cache。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">缓存层级</div>
+      <div class="card-desc">L1 (CPU pinned memory, 默认 5GB) → L2 (本地磁盘) → L3 (远程: Redis/S3/NIXL/Mooncake Store)。自动管理数据在层级间的流动。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">前缀缓存</div>
+      <div class="card-desc">基于 TokenDatabase 的前缀哈希匹配，支持 chunk 级别的缓存命中。与 vLLM 的 APC (Automatic Prefix Caching) 协同工作。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">CUDA Graph</div>
+      <div class="card-desc">启用 <code>use_layerwise</code> 时需要 PIECEWISE CUDA Graph 模式，因为逐层异步同步无法被完整 CUDA Graph 捕获。</div>
+    </div>
+  </div>
+
+  <h4>LMCacheMPConnector — 多进程模式</h4>
+  <p>多进程版本的 LMCache connector，适用于多个 vLLM 实例共享同一个 LMCache 缓存池的场景。</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">架构差异</div>
+      <div class="card-desc">LMCache 引擎运行在独立进程中，通过 ZMQ 消息队列与 vLLM 的 Scheduler 和 Worker 通信。支持多个 vLLM 实例连接同一个 LMCache 服务器。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">状态机</div>
+      <div class="card-desc">请求经历 PREFETCHING → WAITING_FOR_LOAD → READY 三个状态。Lookup 和 Retrieve 分离，支持异步加载与计算重叠。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">MLA 支持</div>
+      <div class="card-desc">对 DeepSeek MLA 模型做特殊处理：排除 TP 对 KV Cache 的影响（MLA 中 TP 不改变 KV Cache），只在 PP group 的第一个 rank 保存。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">APC 协同</div>
+      <div class="card-desc">精确处理 vLLM APC 命中和 LMCache 命中的边界对齐，避免跨流数据竞争。使用 <code>skip_first_n_tokens</code> 跳过 APC 共享块。</div>
+    </div>
+  </div>
+
+  <h3>13.3 Mooncake 系列 Connector 详解</h3>
+
+  <h4>MooncakeConnector — P2P 直传模式</h4>
+  <p>用于 Disaggregated Prefill/Decode 场景，Prefill 实例直接将 KV Cache 推送到 Decode 实例。</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">传输机制</div>
+      <div class="card-desc">使用 Mooncake Transfer Engine 的 <code>batch_transfer_sync_write()</code>，Prefill 端主动推送到 Decode 端。支持 RDMA 和 TCP 协议。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">异构 TP</div>
+      <div class="card-desc">支持 Prefill 和 Decode 使用不同的 TP size。自动计算 TP ratio，处理 replicated cache 和分片映射。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">协调机制</div>
+      <div class="card-desc">Bootstrap Server 负责 worker 注册和发现。ZMQ DEALER/ROUTER 模式处理异步传输请求。支持超时和中止。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">KV Cache 布局</div>
+      <div class="card-desc">强制设置 KV Cache 布局为 HND（非 MLA 模型），确保异构 TP 传输安全。MLA 模型不改变布局。</div>
+    </div>
+  </div>
+
+  <h4>MooncakeStoreConnector — 共享存储池模式</h4>
+  <p>使用 MooncakeDistributedStore 作为共享 KV Cache 池，支持前缀缓存去重。</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">与 MooncakeConnector 的区别</div>
+      <div class="card-desc">MooncakeConnector 是 P2P 直传（Push 模式），MooncakeStoreConnector 是共享存储池（Read/Write 模式）。后者支持基于哈希的前缀去重。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">KV 事件</div>
+      <div class="card-desc">实现 <code>KVConnectorKVEvents</code> 接口，上报 BlockStored 事件，支持与 vLLM 的前缀缓存系统集成。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">跨层块</div>
+      <div class="card-desc">通过 <code>enable_cross_layers_blocks</code> 配置支持跨层 KV 块，优化内存使用。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">LMCache 集成</div>
+      <div class="card-desc">当 LMCache 使用 Mooncake Store 作为 L3 后端时，底层通过 <code>MooncakeStoreConnector</code>（LMCache 内部的）与 Mooncake Store 交互。</div>
+    </div>
+  </div>
+
+  <h3>13.4 如何选择 Connector</h3>
+  <p>根据部署场景选择合适的 connector：</p>
+
+  <table>
+    <thead>
+      <tr><th>场景</th><th>推荐 Connector</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>单实例 + 多级缓存</strong></td>
+        <td><code>LMCacheConnectorV1</code></td>
+        <td>单个 vLLM 实例，利用 CPU/磁盘/远程多级缓存减少重复计算。适合大多数场景。</td>
+      </tr>
+      <tr>
+        <td><strong>多实例共享缓存</strong></td>
+        <td><code>LMCacheMPConnector</code></td>
+        <td>多个 vLLM 实例共享 LMCache 缓存池。需要启动独立的 LMCache 服务器进程。</td>
+      </tr>
+      <tr>
+        <td><strong>P/D 分离 (简单)</strong></td>
+        <td><code>MooncakeConnector</code></td>
+        <td>Prefill 实例直接推送到 Decode 实例。需要 Mooncake Transfer Engine。适合小规模 P/D 分离。</td>
+      </tr>
+      <tr>
+        <td><strong>P/D 分离 + 前缀去重</strong></td>
+        <td><code>MooncakeStoreConnector</code></td>
+        <td>使用 Mooncake Store 共享池，支持跨请求前缀去重。需要 Mooncake Store 集群。</td>
+      </tr>
+      <tr>
+        <td><strong>多层级组合</strong></td>
+        <td><code>MultiConnector</code></td>
+        <td>组合多个 connector，如本地缓存 + 远程传输。适合复杂部署拓扑。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>13.5 能否组合使用？</h3>
+  <p><strong>可以</strong>，通过 <code>MultiConnector</code> 实现。MultiConnector 将多个 connector 串联，按优先级依次尝试：</p>
+  <ul>
+    <li><strong>LMCache + Mooncake Store</strong>：LMCacheConnectorV1 使用 Mooncake Store 作为 L3 后端（通过 LMCache 的 <code>remote_url</code> 配置）。这不是 MultiConnector，而是 LMCache 内部的后端选择。</li>
+    <li><strong>MultiConnector 组合</strong>：可以组合 LMCacheConnectorV1 + NixlConnector 等，实现本地缓存 + 高速 P2P 传输。</li>
+    <li><strong>MooncakeConnector vs LMCache</strong>：两者设计理念不同——MooncakeConnector 是 P2P Push，LMCache 是多级缓存管理。通常选择其一，而非组合。</li>
+  </ul>
+
+  <div class="highlight-box">
+    <strong>选择建议</strong>：如果你需要多级缓存（CPU → 磁盘 → 远程）和前缀缓存管理，选 LMCache 系列。如果你需要 P/D 分离且已有 Mooncake 基础设施，选 Mooncake 系列。两者可以共存于同一部署中（通过 MultiConnector），但通常选择一个即可满足需求。
+  </div>
+
+  <h3>13.6 使用前提与安装</h3>
+
+  <h4>LMCache Connector 前提</h4>
+  <pre><code># 安装 LMCache
+pip install lmcache
+
+# 或从源码安装
+git clone https://github.com/LMCache/LMCache.git
+cd LMCache && pip install -e .
+
+# vLLM 配置 (环境变量方式)
+export LMCACHE_CONFIG_FILE="/path/to/lmcache_config.yaml"
+
+# vLLM 启动示例 (LMCacheConnectorV1)
+vllm serve meta-llama/Llama-3-8B \
+  --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+
+# vLLM 启动示例 (LMCacheMPConnector)
+# 需要先启动 LMCache 服务器
+python -m lmcache.server --port 5555
+vllm serve meta-llama/Llama-3-8B \
+  --kv-transfer-config '{"kv_connector":"LMCacheMPConnector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.port":5555}}'</code></pre>
+
+  <h4>Mooncake Connector 前提</h4>
+  <pre><code># 安装 Mooncake Transfer Engine
+# 参考: https://github.com/kvcache-ai/Mooncake/blob/main/doc/en/build.md
+pip install mooncake  # 或从源码编译
+
+# vLLM 启动示例 (MooncakeConnector - P/D 分离)
+# Prefill 实例
+vllm serve meta-llama/Llama-3-8B \
+  --kv-transfer-config '{"kv_connector":"MooncakeConnector","kv_role":"kv_producer"}'
+
+# Decode 实例
+vllm serve meta-llama/Llama-3-8B \
+  --kv-transfer-config '{"kv_connector":"MooncakeConnector","kv_role":"kv_consumer"}'
+
+# vLLM 启动示例 (MooncakeStoreConnector - 共享存储池)
+vllm serve meta-llama/Llama-3-8B \
+  --kv-transfer-config '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both"}'</code></pre>
+
+  <h4>依赖对比</h4>
+  <table>
+    <thead>
+      <tr><th>Connector</th><th>Python 包</th><th>外部服务</th><th>硬件要求</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>LMCacheConnectorV1</code></td><td><code>lmcache</code></td><td>无（可选 Redis/S3）</td><td>无特殊要求</td></tr>
+      <tr><td><code>LMCacheMPConnector</code></td><td><code>lmcache</code></td><td>LMCache 服务器进程</td><td>无特殊要求</td></tr>
+      <tr><td><code>MooncakeConnector</code></td><td><code>mooncake</code></td><td>Bootstrap Server (内置)</td><td>推荐 RDMA 网络</td></tr>
+      <tr><td><code>MooncakeStoreConnector</code></td><td><code>mooncake</code></td><td>Mooncake Store 集群 + etcd</td><td>推荐 RDMA 网络</td></tr>
+    </tbody>
+  </table>
+
+  <h3>13.7 关键澄清：两层 Mooncake，三条独立路径</h3>
+  <p>一个容易引起困惑的问题：vLLM 有 <code>MooncakeStoreConnector</code>，LMCache 也有自己的 <code>MooncakestoreConnector</code>（注意大小写差异），它们冲突吗？答案是<strong>不冲突</strong>——它们是不同层的东西，走的是完全独立的路径。</p>
+
+  <h4>两个同名 Connector 的区别</h4>
+  <table>
+    <thead>
+      <tr><th>维度</th><th>vLLM 的 MooncakeStoreConnector</th><th>LMCache 的 MooncakestoreConnector</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>代码位置</strong></td><td><code>vllm/.../mooncake/store/connector.py</code></td><td><code>lmcache/.../connector/mooncakestore_connector.py</code></td></tr>
+      <tr><td><strong>层级</strong></td><td>vLLM KV Connector 层（推理引擎层）</td><td>LMCache StorageBackend 层（缓存管理层）</td></tr>
+      <tr><td><strong>角色</strong></td><td>vLLM 直接与 Mooncake Store 交互</td><td>LMCache 的 L3 远程后端适配器</td></tr>
+      <tr><td><strong>是否经过 LMCache</strong></td><td>否，绕过 LMCache</td><td>是，LMCache 内部组件</td></tr>
+      <tr><td><strong>类名</strong></td><td><code>MooncakeStoreConnector</code></td><td><code>MooncakestoreConnector</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>三条独立的 Mooncake 使用路径</h4>
+  <pre><code>路径 A: vLLM ──LMCacheConnectorV1──→ LMCache ──MooncakestoreConnector──→ Mooncake Store
+                                    (多级缓存管理)      (L3 远程后端)
+
+路径 B: vLLM ──MooncakeStoreConnector────────────────────────→ Mooncake Store
+                                    (直接访问，无 LMCache)
+
+路径 C: vLLM ──MooncakeConnector────────────────────────────→ 另一个 vLLM 实例
+                                    (P2P 直传，无 Store)</code></pre>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">路径 A: LMCache + Mooncake 后端</div>
+      <div class="card-desc">vLLM 通过 <code>LMCacheConnectorV1</code> 使用 LMCache。LMCache 管理多级缓存（L1 CPU → L2 磁盘 → L3 远程），其中 L3 选择 Mooncake Store 作为远程后端。LMCache 负责缓存策略（LRU/LFU）、chunk 管理、前缀哈希匹配等。Mooncake Store 只是 LMCache 的一个存储后端选项（与 Redis、S3 并列）。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">路径 B: 直接使用 Mooncake Store</div>
+      <div class="card-desc">vLLM 通过 <code>MooncakeStoreConnector</code> 直接与 Mooncake Store 交互，<strong>完全绕过 LMCache</strong>。适合已有 Mooncake Store 集群、不需要 LMCache 多级缓存管理的场景。功能较简单，没有 L1/L2 缓存层、没有 LRU 淘汰策略。</div>
+    </div>
+    <div class="card">
+      <div class="card-title">路径 C: P2P 直传</div>
+      <div class="card-desc">vLLM 通过 <code>MooncakeConnector</code> 在 Prefill 和 Decode 实例之间直接传输 KV Cache。不经过任何存储层，Prefill 端 Push 到 Decode 端。适合简单的 P/D 分离场景。</div>
+    </div>
+  </div>
+
+  <h4>选择哪条路径？</h4>
+  <table>
+    <thead>
+      <tr><th>需求</th><th>推荐路径</th><th>vLLM connector</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>多级缓存 + Mooncake 远程存储</td>
+        <td>路径 A</td>
+        <td><code>LMCacheConnectorV1</code>（LMCache 内部配 Mooncake 后端）</td>
+      </tr>
+      <tr>
+        <td>已有 Mooncake Store，不需要 LMCache</td>
+        <td>路径 B</td>
+        <td><code>MooncakeStoreConnector</code></td>
+      </tr>
+      <tr>
+        <td>P/D 分离，简单直传</td>
+        <td>路径 C</td>
+        <td><code>MooncakeConnector</code></td>
+      </tr>
+      <tr>
+        <td>多实例共享缓存 + Mooncake</td>
+        <td>路径 A (MP 模式)</td>
+        <td><code>LMCacheMPConnector</code>（LMCache 内部配 Mooncake 后端）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <strong>核心结论</strong>：vLLM 选择哪个 connector 决定了走哪条路径，它们<strong>互斥但不冲突</strong>——你只能选一个 connector，但选了之后 Mooncake 在不同层的角色是清晰分离的。路径 A 中 Mooncake 是 LMCache 的"下属存储"，路径 B 中 Mooncake 直接面对 vLLM，路径 C 中 Mooncake 只负责传输。
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <p>LMCache 项目深度研究报告 | 生成日期: 2026-05-18 | 更新: 2026-05-18 | 数据来源: 本地代码仓库 + 42 条证据</p>
+    <p style="margin-top: 8px;">项目地址: <a href="https://github.com/LMCache/LMCache" style="color: var(--blue-700);">github.com/LMCache/LMCache</a> | 文档: <a href="https://docs.lmcache.ai" style="color: var(--blue-700);">docs.lmcache.ai</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
